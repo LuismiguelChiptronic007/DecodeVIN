@@ -310,7 +310,7 @@ async function main() {
   btn.disabled = true;
   btnPlate.disabled = true;
 
-  const runVIN = () => {
+  const runVIN = async () => {
     const text = input.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
     if (text.length !== 17) {
       el("errors").innerHTML = `<div class="error">O Chassi deve ter exatamente 17 caracteres.</div>`;
@@ -336,7 +336,6 @@ async function main() {
     showReports("single", true);
     
     if (result.type !== "UNKNOWN") {
-
       addHistoryEntry(text);
       window.currentSingleResult = {
         tipo: result.type,
@@ -345,6 +344,42 @@ async function main() {
         result: result,
         ob: {} // Será preenchido se houver busca de placa
       };
+    }
+
+    // Chamada para a API externa (Render) para dados estendidos
+    try {
+      console.log("Chamando API Render para VIN:", text);
+      const apiRes = await fetch(`https://decodevin-1.onrender.com/decode/${text}`);
+      const apiData = await apiRes.json();
+      
+      if (apiData && apiData.Results && apiData.Results.length > 0) {
+        const ext = apiData.Results[0];
+        console.log("Dados da API Render recebidos:", ext);
+        
+        // Mapear campos relevantes da NHTSA para cards
+        const extFields = [
+          { label: "Fabricante (API)", value: ext.Manufacturer },
+          { label: "Modelo (API)", value: ext.Model },
+          { label: "Ano Modelo (API)", value: ext.ModelYear },
+          { label: "Tipo de Veículo", value: ext.VehicleType },
+          { label: "País de Origem", value: ext.PlantCountry },
+          { label: "Série", value: ext.Series }
+        ];
+
+        // Adicionar apenas campos que tenham valor
+        const cardsContainer = el("cards");
+        extFields.forEach(f => {
+          if (f.value && f.value !== "Not Applicable" && f.value !== "") {
+            cardsContainer.appendChild(card(f.label, f.value));
+            // Também adicionar ao currentSingleResult para relatórios
+            if (window.currentSingleResult && window.currentSingleResult.result) {
+              window.currentSingleResult.result.tokens.push({ key: f.label.toLowerCase().replace(/ /g, "_"), label: f.label, value: f.value });
+            }
+          }
+        });
+      }
+    } catch (err) {
+      console.error("Erro ao chamar API Render:", err);
     }
   };
 
@@ -504,31 +539,82 @@ async function main() {
     const pLines = gPlateInput.value.split("\n").map(l => l.trim()).filter(Boolean);
     
     const currentGroupResults = [];
+    const apiCalls = [];
 
     if (isCombined) {
       for (let i = 0; i < vLines.length; i++) {
         const vin = vLines[i].toUpperCase().replace(/[^A-Z0-9]/g, ""); 
         const plate = pLines[i].toUpperCase().replace(/[^A-Z0-9]/g, "");
         const res = decoder.decode(vin);
+        
+        const itemData = { tipo: 'COMBINADO', vin, placa: plate, fabricante: res.manufacturerName, result: res };
+        currentGroupResults.push(itemData);
+        
         const item = document.createElement("div"); item.className = "group-item";
         item.innerHTML = `<div class="code"><span style="color:var(--accent);font-size:10px;display:block">COMBINADO</span>${vin} / ${plate}</div>
                           <div class="info"><span>${res.manufacturerName || "Desconhecido"}</span><span style="color:var(--accent)">+ Placa</span></div>`;
         item.onclick = () => openModal(res, vin, false, plate);
         gResults.appendChild(item);
         addHistoryEntry(vin, plate);
-        currentGroupResults.push({ tipo: 'COMBINADO', vin, placa: plate, fabricante: res.manufacturerName, result: res });
+
+        // Preparar chamada API
+        if (vin.length === 17) {
+          apiCalls.push((async () => {
+            try {
+              const apiRes = await fetch(`https://decodevin-1.onrender.com/decode/${vin}`);
+              const apiData = await apiRes.json();
+              if (apiData && apiData.Results && apiData.Results.length > 0) {
+                const ext = apiData.Results[0];
+                const extFields = [
+                  { label: "Fabricante (API)", value: ext.Manufacturer },
+                  { label: "Modelo (API)", value: ext.Model },
+                  { label: "Ano Modelo (API)", value: ext.ModelYear }
+                ];
+                extFields.forEach(f => {
+                  if (f.value && f.value !== "Not Applicable" && f.value !== "") {
+                    itemData.result.tokens.push({ key: f.label.toLowerCase().replace(/ /g, "_"), label: f.label, value: f.value });
+                  }
+                });
+              }
+            } catch (e) { console.error("Erro API Grupo:", e); }
+          })());
+        }
       }
     } else {
       vLines.forEach(rawVin => {
         const vin = rawVin.toUpperCase().replace(/[^A-Z0-9]/g, "");
         const res = decoder.decode(vin);
+        const itemData = { tipo: 'VIN', vin, fabricante: res.manufacturerName, result: res };
+        currentGroupResults.push(itemData);
+
         const item = document.createElement("div"); item.className = "group-item";
         item.innerHTML = `<div class="code"><span style="color:var(--muted);font-size:10px;display:block">CHASSI</span>${vin}</div>
                           <div class="info"><span>${res.manufacturerName || "Desconhecido"}</span></div>`;
         item.onclick = () => openModal(res, vin);
         gResults.appendChild(item);
         addHistoryEntry(vin);
-        currentGroupResults.push({ tipo: 'VIN', vin, fabricante: res.manufacturerName, result: res });
+
+        if (vin.length === 17) {
+          apiCalls.push((async () => {
+            try {
+              const apiRes = await fetch(`https://decodevin-1.onrender.com/decode/${vin}`);
+              const apiData = await apiRes.json();
+              if (apiData && apiData.Results && apiData.Results.length > 0) {
+                const ext = apiData.Results[0];
+                const extFields = [
+                  { label: "Fabricante (API)", value: ext.Manufacturer },
+                  { label: "Modelo (API)", value: ext.Model },
+                  { label: "Ano Modelo (API)", value: ext.ModelYear }
+                ];
+                extFields.forEach(f => {
+                  if (f.value && f.value !== "Not Applicable" && f.value !== "") {
+                    itemData.result.tokens.push({ key: f.label.toLowerCase().replace(/ /g, "_"), label: f.label, value: f.value });
+                  }
+                });
+              }
+            } catch (e) { console.error("Erro API Grupo:", e); }
+          })());
+        }
       });
       pLines.forEach(rawPlate => {
         const plate = rawPlate.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -541,12 +627,16 @@ async function main() {
         currentGroupResults.push({ tipo: 'PLATE', placa: plate });
       });
     }
+    
+    // Aguardar todas as chamadas de API antes de liberar relatórios (opcional, mas bom para os dados)
+    if (apiCalls.length > 0) await Promise.all(apiCalls);
+    
     showReports("group", true);
     window.currentGroupResults = currentGroupResults;
   };
 
   // MODAL LOGIC
-  const openModal = (result, code, isPlate = false, linkedPlate = null) => {
+  const openModal = async (result, code, isPlate = false, linkedPlate = null) => {
     const mTitle = el("modalTitle"); const mSegs = el("modalSegments"); const mCards = el("modalCards");
     mTitle.textContent = linkedPlate ? `Análise Completa: ${code} + ${linkedPlate}` : (isPlate ? `Dados OB: ${code}` : `Detalhes: ${code}`);
     mSegs.innerHTML = ""; mCards.innerHTML = "";
@@ -648,6 +738,32 @@ async function main() {
       setSegments(result); setCards(result);
       document.getElementById = oldGet;
     }
+
+    // Chamada para a API externa (Render) para o Modal
+    if (!isPlate && code.length === 17) {
+      try {
+        const apiRes = await fetch(`https://decodevin-1.onrender.com/decode/${code}`);
+        const apiData = await apiRes.json();
+        if (apiData && apiData.Results && apiData.Results.length > 0) {
+          const ext = apiData.Results[0];
+          const extFields = [
+            { label: "Fabricante (API)", value: ext.Manufacturer },
+            { label: "Modelo (API)", value: ext.Model },
+            { label: "Ano Modelo (API)", value: ext.ModelYear },
+            { label: "Tipo de Veículo", value: ext.VehicleType },
+            { label: "País de Origem", value: ext.PlantCountry }
+          ];
+          extFields.forEach(f => {
+            if (f.value && f.value !== "Not Applicable" && f.value !== "") {
+              mCards.appendChild(card(f.label, f.value));
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Erro ao chamar API Render no Modal:", err);
+      }
+    }
+
     el("detailModal").style.display = "flex";
   };
 
