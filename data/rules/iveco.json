@@ -1,0 +1,53 @@
+{
+  "schema": "decodevin.rules/iveco/v1",
+  "manufacturer": "Iveco",
+  "nomenclatures": [
+    {
+      "id": "A2",
+      "title": "Chassis Iveco (1986+)",
+      "positions": [
+        {
+          "index": 1,
+          "label": "Região/País/Fabricante (WMI)",
+          "values": {
+            "93Z": "Iveco Brasil",
+            "ZC8": "Iveco Itália",
+            "ZCF": "Iveco Itália",
+            "ZCG": "Iveco Itália",
+            "8AI": "Iveco Argentina",
+            "8AJ": "Iveco Argentina",
+            "VHI": "Iveco Espanha",
+            "VF6": "Iveco França",
+            "LNV": "Iveco China",
+            "LNY": "Iveco China",
+            "LZZ": "Iveco China",
+            "XLR": "Iveco Rússia"
+          }
+        },
+        { "index": 2, "label": "Tipo de veículo", "note": "Motor, suspensão, versão, caixa de câmbio, distância entre-eixos (código)" },
+        {
+          "index": 3,
+          "label": "Ano Modelo (código)",
+          "mapping": {
+            "G": 1986, "H": 1987, "J": 1988, "K": 1989, "L": 1990, "M": 1991, "N": 1992, "P": 1993, "R": 1994, "S": 1995, "T": 1996, "V": 1997, "W": 1998, "X": 1999, "Y": 2000,
+            "1": 2001, "2": 2002, "3": 2003, "4": 2004, "5": 2005, "6": 2006, "7": 2007, "8": 2008, "9": 2009,
+            "A": 2010, "B": 2011, "C": 2012, "D": 2013, "E": 2014, "F": 2015, "G2": 2016, "H2": 2017, "J2": 2018, "K2": 2019, "L2": 2020, "M2": 2021, "N2": 2022, "P2": 2023, "R2": 2024, "S2": 2025, "T2": 2026, "V2": 2027, "W2": 2028, "X2": 2029, "Y2": 2030
+          }
+        },
+        {
+          "index": 4,
+          "label": "Local de fabricação",
+          "values": {
+            "8": "Sete Lagoas – Brasil",
+            "5": "Suzzana – Itália",
+            "2": "Bréscia – Itália",
+            "D": "Valladolid – Espanha",
+            "X": "Córdoba – Argentina",
+            "C": "Madri – Espanha"
+          }
+        },
+        { "index": 5, "label": "Sequência/ordem de produção" }
+      ]
+    }
+  ]
+}

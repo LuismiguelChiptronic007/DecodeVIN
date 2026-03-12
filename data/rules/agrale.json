@@ -1,0 +1,63 @@
+{
+  "schema": "decodevin.rules/agrale/v1",
+  "manufacturer": "Agrale",
+  "nomenclatures": [
+    {
+      "id": "A1",
+      "title": "Chassis Agrale (1971–1986)",
+      "positions": [
+        { "index": 1, "label": "Local de fabricação", "values": { "C": "Caxias do Sul-RS" } },
+        { "index": 2, "label": "Tipo de veículo", "note": "Códigos de tipo (01–22) conforme tabela histórica" },
+        { "index": 3, "label": "Sequência de produção" },
+        {
+          "index": 4,
+          "label": "Ano Modelo (código)",
+          "mapping": {
+            "1": 1971, "2": 1972, "3": 1973, "4": 1974, "5": 1975, "6": 1976, "7": 1977, "8": 1978, "9": 1979,
+            "A": 1980, "B": 1981, "C": 1982, "D": 1983, "E": 1984, "F": 1985, "G": 1986
+          }
+        },
+        {
+          "index": 5,
+          "label": "Mês (código)",
+          "mapping": {
+            "01": "Janeiro", "02": "Fevereiro", "03": "Março", "04": "Abril",
+            "05": "Maio", "06": "Junho", "07": "Julho", "08": "Agosto",
+            "09": "Setembro", "10": "Outubro", "11": "Novembro", "12": "Dezembro"
+          }
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "title": "Chassis Agrale (1986+)",
+      "positions": [
+        {
+          "index": 1,
+          "label": "Região/País/Fabricante (WMI)",
+          "values": { "9BY": "Agrale S.A. Caminhões", "9C5": "Agrale Caxias do Sul", "9BF": "Agrale (variação histórica)" }
+        },
+        { "index": 2, "label": "Tipo de veículo", "values": { "C": "Caminhão/Chassis" } },
+        { "index": 3, "label": "Modelo do chassi", "note": "Usado com a posição 4 para formar modelo/motor" },
+        { "index": 4, "label": "Motor", "note": "Combinado com a posição 3 para o modelo/motor" },
+        {
+          "index": 5,
+          "label": "Tipo de carroceria",
+          "values": { "1": "Sem cabina", "2": "Cabina simples", "3": "Cabina dupla", "4": "Nenhuma das anteriores" }
+        },
+        { "index": 6, "label": "Rodado/Entre-eixos", "note": "Código interno de rodado simples/duplo e distância entre-eixos" },
+        {
+          "index": 7,
+          "label": "Ano Modelo (código)",
+          "mapping": {
+            "1": 2001, "2": 2002, "3": 2003, "4": 2004, "5": 2005, "6": 2006, "7": 2007, "8": 2008, "9": 2009,
+            "A": 2010, "B": 2011, "C": 2012, "D": 2013, "E": 2014, "F": 2015, "G": 2016, "H": 2017, "J": 2018, "K": 2019,
+            "L": 2020, "M": 2021, "N": 2022, "P": 2023, "R": 2024, "S": 2025, "T": 2026, "V": 2027, "W": 2028, "X": 2029, "Y": 2030
+          }
+        },
+        { "index": 8, "label": "Local de fabricação", "values": { "C": "Caxias do Sul-RS" } },
+        { "index": 9, "label": "Sequência/ordem de produção" }
+      ]
+    }
+  ]
+}

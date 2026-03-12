@@ -1,0 +1,29 @@
+{
+  "schema": "decodevin.rules/scania/v1",
+  "manufacturer": "Scania",
+  "nomenclatures": [
+    {
+      "id": "VIN",
+      "title": "VIN Scania (estrutura e posições)",
+      "positions": [
+        { "index": 1, "label": "Região/País/Fabricante (WMI)", "note": "Ex.: YS2/YS3/YS4/YK1 (Suécia), 9BS (Brasil) etc." },
+        { "index": 2, "label": "País", "note": "Segundo caractere do VIN" },
+        { "index": 3, "label": "Fabricante", "note": "Terceiro caractere do VIN" },
+        {
+          "index": 4,
+          "label": "VDS — Descrição do veículo (4ª a 9ª)",
+          "note": "Inclui tipo de cabine (P, G, R, S, XT), aplicação, PBT, tipo de motor, configuração de eixos",
+          "values": {
+            "F250HB": "Urbano/Rodoviário • Piso Alto/Normal • Motor DC 9 109",
+            "F310HB": "Urbano/Rodoviário • Piso Alto • Motor DC 9 110",
+            "K400IB": "4x2 Rodoviário • Motor DC 13 113",
+            "K440IB": "4x2/6x2 Rodoviário • 3º eixo direcional (opção) • Motor DC 13 112"
+          }
+        },
+        { "index": 10, "label": "Ano Modelo", "mapping": { "A/Y": "1980–2000 • 2010–2030 (ambiguidade resolvida por contexto)", "1–9": "2001–2009" } },
+        { "index": 11, "label": "Planta de montagem", "note": "Frequentemente 2 ou 3 para unidades brasileiras" },
+        { "index": 12, "label": "VIS — Sequência (12ª a 17ª)", "note": "Número sequencial de produção" }
+      ]
+    }
+  ]
+}

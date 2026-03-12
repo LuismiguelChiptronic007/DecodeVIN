@@ -1,0 +1,103 @@
+{
+  "schema": "decodevin.rules/mercedes/v1",
+  "manufacturer": "Mercedes-Benz do Brasil",
+  "nomenclatures": [
+    {
+      "id": "LO",
+      "title": "Micro-ônibus/Miniônibus (LO)",
+      "positions": [
+        {
+          "index": 1,
+          "label": "Tipo de chassi",
+          "values": { "L": "Lastwagen (cabina semi-avançada)", "O": "Omnibus (ônibus)" }
+        },
+        { "index": 2, "label": "PBT admissível (t)" },
+        {
+          "index": 3,
+          "label": "Potência aproximada (cv)",
+          "mapping": { "08": 85, "12": 115, "14": 136, "15": 150, "16": 160 }
+        },
+        {
+          "index": 4,
+          "label": "Tipo de motor",
+          "values": { "D": "Diesel", "G": "Gás" }
+        },
+        {
+          "index": 5,
+          "label": "Distância entre-eixos (mm)",
+          "mapping": { "31": 3150, "37": 3700, "42": 4200, "45": 4500, "48": 4830, "51": 5170, "59": 5950, "60": 6050 }
+        }
+      ]
+    },
+    {
+      "id": "OF",
+      "title": "Ônibus Motor Dianteiro (OF)",
+      "positions": [
+        { "index": 1, "label": "Tipo de chassi", "values": { "OF": "Omnibus Front (motor dianteiro)", "OH": "Omnibus Heck (motor traseiro)" } },
+        { "index": 2, "label": "PBT admissível (t)" },
+        {
+          "index": 3,
+          "label": "Potência aproximada (cv)",
+          "mapping": { "17": 170, "18": 177, "21": 211, "22": 218, "30": 305 }
+        },
+        {
+          "index": 4,
+          "label": "Caracterização",
+          "values": {
+            "E": "Motor eletrônico",
+            "G": "Motor a gás",
+            "L": "Suspensão pneumática",
+            "M": "Multiuso",
+            "R": "Eixo alto/reforçado"
+          }
+        },
+        {
+          "index": 5,
+          "label": "Distância entre-eixos (mm)",
+          "mapping": { "48": 4830, "51": 5170, "59": 5950, "60": 6050 }
+        }
+      ]
+    },
+    {
+      "id": "O-xxx",
+      "title": "Séries O-xxx (O-500 etc.)",
+      "positions": [
+        { "index": 1, "label": "Tipo", "values": { "O": "Omnibus (ônibus)" } },
+        { "index": 2, "label": "Modelo (série/projeto de fábrica)" },
+        {
+          "index": 3,
+          "label": "Caracterização",
+          "values": {
+            "A": "Articulado",
+            "D": "Eixo adicional",
+            "E": "Aumento de PBT (RSE)",
+            "G": "Motor a gás",
+            "L": "Suspensão pneumática urbana / Chassi alongado (conforme série)",
+            "M": "Multiuso",
+            "P": "Padron",
+            "PL": "Plataforma",
+            "R": "Rodoviário",
+            "S": "Suspensão pneumática rodoviária",
+            "ST": "Plataforma urbana",
+            "TR": "Trólebus",
+            "U": "Urbano",
+            "UA": "Urbano articulado",
+            "UDA": "Urbano biarticulado",
+            "RS": "Rodoviário 2 eixos",
+            "RSD": "Rodoviário 3 eixos (6x2)"
+          }
+        },
+        {
+          "index": 4,
+          "label": "PBT e potência",
+          "note": "Primeiros dois dígitos = PBT (t); últimos dois dígitos ×10 = cv"
+        },
+        {
+          "index": 5,
+          "label": "Distância entre-eixos (mm)",
+          "mapping": { "30": 3000, "48": 4830, "51": 5170, "59": 5950, "60": 6050 }
+        }
+      ]
+    }
+  ]
+}

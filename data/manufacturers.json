@@ -1,0 +1,431 @@
+{
+  "schema": "decodevin.manufacturers/v1",
+  "generatedAt": "2026-03-03T00:00:00Z",
+  "manufacturers": [
+    {
+      "id": "vwco",
+      "name": "Volkswagen Caminhões e Ônibus",
+      "aliases": ["Volksbus", "VWCO", "MAN Latin America"],
+      "status": "active",
+      "types": ["micro", "onibus", "articulado", "piso_baixo", "plataforma"],
+      "identifiers": {
+        "wmi": ["953","9BW","WVW","WVG","WV1","WV2","8AW","AAV","3VW","3VV","1VW","1V2","XW8","LSV","LFV"],
+        "modelPatterns": [
+          {
+            "name": "VolksbusNomenclature",
+            "regex": "^(\\d{2})[-\\s]?(\\d{3})\\s*([A-Z]{1,4})$",
+            "groups": ["pbtTons", "powerHp", "sigla"]
+          },
+          {
+            "name": "Volksbus953",
+            "regex": "^(953)[\\s-]?([0-9A-Z]{1,2})[\\s-]?([A-Z])[\\s-]?([0-9A-Z])[\\s-]?([A-Z])[\\s-]?([A-Z])[\\s-]?(\\d{4,6})$",
+            "groups": ["code953", "carroceria", "tipoFamilia", "controle", "anoCodigo", "planta", "sequencia"]
+          }
+        ]
+      },
+      "periods": [
+        {
+          "range": { "from": 1993, "to": 2000 },
+          "decoder": "VolksbusPre2001",
+          "mappings": {
+            "sigla": {
+              "CO": "Chassis para Ônibus (motor dianteiro único período pré-2001)"
+            }
+          }
+        },
+        {
+          "range": { "from": 2001, "to": 2022 },
+          "decoder": "Volksbus2001to2022",
+          "mappings": {
+            "sigla": {
+              "OD": "Ônibus Dianteiro",
+              "OT": "Ônibus Traseiro",
+              "EOD": "Ônibus Dianteiro com motor eletrônico",
+              "EOT": "Ônibus Traseiro com motor eletrônico",
+              "VT": "V-Tronic (câmbio automatizado)",
+              "LE": "Low-Entry (piso baixo)",
+              "ODR": "Dianteiro com suspensão reforçada (rally)",
+              "ODS": "Dianteiro com suspensão a ar (Full Air)",
+              "OTA": "Traseiro articulado",
+              "OTS": "Traseiro com suspensão a ar (Full Air)"
+            }
+          }
+        },
+        {
+          "range": { "from": 2023, "to": 9999 },
+          "decoder": "VolksbusEuro6",
+          "mappings": {
+            "sigla": {
+              "S": "Suspensão a ar",
+              "H": "Piso alto",
+              "L": "Piso baixo",
+              "R": "Rural, suspensão elevada/reforçada",
+              "E": "Escolarbus"
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "pbtTons": "PBT admissível (t)",
+        "powerHp": "Potência aproximada (cv)",
+        "sigla": "Tipo/variante conforme período"
+      }
+    },
+    {
+      "id": "mercedes-benz",
+      "name": "Mercedes-Benz do Brasil",
+      "aliases": ["MBB", "Mercedes", "MB"],
+      "status": "active",
+      "types": ["micro", "onibus", "articulado", "piso_baixo"],
+      "identifiers": {
+        "wmi": ["9BM", "WDB", "WDD", "WDF", "WEB", "NMB", "AAV", "4JG", "WD4", "VSA", "VF9", "LE4", "8BP", "8AB", "8AC"],
+        "modelPatterns": [
+          {
+            "name": "MB_ABR1986",
+            "regex": "^(9BM|8AB|8AC|WDB|WDD|WDF|WEB|NMB|AAV|4JG|WD4|VSA|VF9|LE4|8BP)[\\s-]?([0-9A-Z]{4,6})[\\s-]?([0-9A-Z])[\\s-]?([A-Z])[\\s-]?(\\d{4,7})$",
+            "groups": ["wmi", "modelCode", "yearCode", "plantCode", "sequence"]
+          },
+          {
+            "name": "MB_OF",
+            "regex": "^OF[\\s-]?([0-9]{2})[\\s]?([0-9]{2})[\\s]?([A-Z])(?:[\\s/](\\d{2}))?$",
+            "groups": ["pbt", "powerCode", "feature", "wheelbase"]
+          },
+          {
+            "name": "MB_LO",
+            "regex": "^LO[\\s-]?([0-9])[\\s]?([0-9]{2})[\\s]?([A-Z])(?:[\\s/](\\d{2}))?$",
+            "groups": ["pbt", "powerCode", "engineType", "wheelbase"]
+          },
+          {
+            "name": "MB_OXXX",
+            "regex": "^O[\\s-]?(\\d{3})[\\s]?([A-Z]{1,3})[\\s]?(\\d{4})(?:[\\s/](\\d{2}))?$",
+            "groups": ["model", "variant", "pbtPower", "wheelbase"]
+          }
+        ]
+      },
+      "periods": [
+        {
+          "range": { "from": 1998, "to": 9999 },
+          "decoder": "MercedesGeneric",
+          "mappings": {
+            "familia": {
+              "OF": "Motor dianteiro",
+              "O-500": "Motor traseiro (família O-500)",
+              "O500": "Motor traseiro (família O-500)",
+              "LO": "Leve/micro com motor dianteiro"
+            },
+            "sufixo": {
+              "U": "Aplicação urbana",
+              "R": "Aplicação rodoviária",
+              "LE": "Low-Entry (piso baixo)",
+              "M": "Aplicação midi/urbana"
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "familia": "Família do chassi",
+        "serie": "Série/capacidade aproximada",
+        "sufixo": "Variante ou aplicação"
+      }
+    },
+    {
+      "id": "scania",
+      "name": "Scania Latin America",
+      "aliases": ["Scania"],
+      "status": "active",
+      "types": ["onibus", "articulado", "piso_baixo"],
+      "identifiers": {
+        "wmi": ["9BS", "8AG", "WSD", "WSC", "VS6", "VS7", "VF7", "5L6", "ZCB", "SJA", "XLR", "JXB", "YS2", "YS3", "YS4", "YK1"],
+        "modelPatterns": [
+          {
+            "name": "ScaniaSeries",
+            "regex": "^(K|F|L)(\\d{2,3})([A-Z]{1,3})?(?:[\\s-]?(\\d+[x×]\\d+))?.*$",
+            "groups": ["serie", "capacidade", "sufixo", "eixos"]
+          }
+        ]
+      },
+      "periods": [
+        {
+          "range": { "from": 2000, "to": 9999 },
+          "decoder": "ScaniaGeneric",
+          "mappings": {
+            "serie": {
+              "K": "Motor traseiro",
+              "F": "Motor dianteiro",
+              "L": "Low-Entry (piso baixo)"
+            },
+            "sufixo": {
+              "LE": "Low-Entry (piso baixo)",
+              "H": "Híbrido",
+              "U": "Aplicação urbana",
+              "R": "Aplicação rodoviária"
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "serie": "Série do chassi",
+        "capacidade": "Designação numérica do modelo",
+        "sufixo": "Variante"
+      }
+    },
+    {
+      "id": "volvo",
+      "name": "Volvo do Brasil",
+      "aliases": ["Volvo"],
+      "status": "active",
+      "types": ["onibus", "articulado", "piso_baixo"],
+      "identifiers": {
+        "wmi": ["9BV", "YV3", "3CE", "SCV"],
+        "modelPatterns": [
+          {
+            "name": "VolvoB",
+            "regex": "^B(\\d{2,3})([FRM])(?:[\\s-]?(LE|L|H))?$",
+            "groups": ["serie", "motorPos", "extra"]
+          }
+        ]
+      },
+      "periods": [
+        {
+          "range": { "from": 1998, "to": 9999 },
+          "decoder": "VolvoGeneric",
+          "mappings": {
+            "sufixo": {
+              "F": "Motor dianteiro",
+              "R": "Motor traseiro",
+              "M": "Motor central",
+              "LE": "Low-Entry (piso baixo)",
+              "H": "Híbrido"
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "serie": "Designação numérica do modelo",
+        "sufixo": "Variante"
+      }
+    },
+    {
+      "id": "agrale",
+      "name": "Agrale",
+      "aliases": ["Agrale"],
+      "status": "active",
+      "types": ["mini_micro", "micro", "onibus"],
+      "identifiers": {
+        "wmi": ["9BY", "9C5", "9BF"],
+        "modelPatterns": [
+          {
+            "name": "AgraleA1",
+            "regex": "^C[\\s-]?(\\d{2})[\\s-]?(\\d{4})[\\s-]?([1-9A-G])[\\s-]?(\\d{2})$",
+            "groups": ["tipoVeiculo", "sequencia", "anoCodigo", "mesCodigo"]
+          },
+          {
+            "name": "AgraleA2",
+            "regex": "^(9BY|9C5|9BF)[\\s-]?([A-Z])[\\s-]?([0-9A-Z]{1,3})[\\s-]?([0-9A-Z])[\\s-]?([1-4])[\\s-]?([0-9A-Z])[\\s-]?([0-9A-Z])[\\s-]?([A-Z])[\\s-]?(\\d{4,6})$",
+            "groups": ["wmi", "tipoVeiculo", "modeloCod", "motorCod", "carroceriaCod", "rodadoDECod", "anoCodigo", "plantaCod", "sequencia"]
+          }
+        ]
+      },
+      "periods": [
+        {
+          "range": { "from": 1971, "to": 1986 },
+          "decoder": "AgraleA1",
+          "mappings": {}
+        },
+        {
+          "range": { "from": 1986, "to": 9999 },
+          "decoder": "AgraleA2",
+          "mappings": {
+            "carroceriaCod": {
+              "1": "Sem cabina",
+              "2": "Cabina simples",
+              "3": "Cabina dupla",
+              "4": "Nenhuma das anteriores"
+            },
+            "plantaCod": {
+              "C": "Caxias do Sul-RS"
+            },
+            "wmi": {
+              "9BY": "Agrale S.A. Caminhões",
+              "9C5": "Agrale Caxias do Sul"
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "tipoVeiculo": "Tipo de veículo (A1)",
+        "sequencia": "Sequência/ordem de produção",
+        "anoCodigo": "Código de ano",
+        "mesCodigo": "Código de mês",
+        "wmi": "Identificador mundial do fabricante",
+        "modeloCod": "Código do modelo do chassi",
+        "motorCod": "Código do motor",
+        "carroceriaCod": "Código de tipo de carroceria",
+        "rodadoDECod": "Rodado/entre-eixos (código)",
+        "plantaCod": "Código da planta",
+        "modeloMotor": "Modelo/motor (derivado das posições 3 e 4)"
+      }
+    },
+    {
+      "id": "iveco",
+      "name": "Iveco",
+      "aliases": ["Iveco Bus"],
+      "status": "active",
+      "types": ["mini_micro", "micro", "onibus"],
+      "identifiers": {
+        "wmi": ["93Z", "ZC8", "ZCF", "ZCG", "8AI", "8AJ", "VHI", "VF6", "LNV", "LNY", "LZZ", "XLR"],
+        "modelPatterns": [
+          {
+            "name": "IvecoA2",
+            "regex": "^(93Z|ZC8|ZCF|ZCG|8AI|8AJ|VHI|VF6|LNV|LNY|LZZ|XLR)[\\s-]?([A-Z0-9])[\\s-]?([A-Z0-9])[\\s-]?([A-Z0-9])[\\s-]?(\\d{4,7})$",
+            "groups": ["wmi", "tipo", "anoCodigo", "planta", "sequencia"]
+          },
+          {
+            "name": "IvecoA2Bus",
+            "regex": "^(93Z|ZC8|ZCF|ZCG|8AI|8AJ|VHI|VF6|LNV|LNY|LZZ|XLR)([A-Z0-9]{5})([A-Z0-9])([A-Z0-9])([A-Z0-9])(\\d{6})$",
+            "groups": ["wmi", "modelo5", "unused", "anoCodigo", "planta", "sequencia6"]
+          },
+          {
+            "name": "IvecoGeneric",
+            "regex": "^(\\d{2,3})[-\\s]?(\\d{2,3})([A-Z]{0,3})$",
+            "groups": ["pbtTonsApprox", "potenciaApprox", "sufixo"]
+          }
+        ]
+      },
+      "periods": [
+        {
+          "range": { "from": 2000, "to": 9999 },
+          "decoder": "IvecoGeneric",
+          "mappings": {}
+        }
+      ],
+      "tokens": {
+        "pbtTonsApprox": "PBT aproximado (t)",
+        "potenciaApprox": "Potência aproximada (cv)",
+        "sufixo": "Variante"
+      }
+    },
+    {
+      "id": "volare",
+      "name": "Volare (Marcopolo)",
+      "aliases": ["Volare"],
+      "status": "active",
+      "types": ["mini_micro", "plataforma"],
+      "identifiers": {
+        "wmi": ["93P", "9EJ", "9EL", "9ES"],
+        "modelPatterns": [
+          {
+            "name": "VolareGeneric",
+            "regex": "^V(\\d{2,3})([A-Z]{0,3})$",
+            "groups": ["serie", "sufixo"]
+          },
+          {
+            "name": "VolareA2",
+            "regex": "^(93P|9EJ|9EL|9ES)[\\s-]?([A-Z])[\\s-]?([0-9A-Z]{2})[\\s-]?([A-Z])[\\s-]?([0-9A-Z])[\\s-]?([0-9A-Z])[\\s-]?([0-9A-Z])[\\s-]?(\\d{4,7})$",
+            "groups": ["wmi","tipoVeiculo","modeloCod","motorCod","carroceriaCod","rodadoDECod","anoCodigo","plantaCod","sequencia"]
+          }
+        ]
+      },
+      "periods": [
+        {
+          "range": { "from": 1998, "to": 9999 },
+          "decoder": "VolareGeneric",
+          "mappings": {}
+        }
+      ],
+      "tokens": {
+        "serie": "Série",
+        "sufixo": "Variante"
+      }
+    },
+    {
+      "id": "ford",
+      "name": "Ford Brasil",
+      "aliases": ["Ford"],
+      "status": "inactive",
+      "types": ["micro", "onibus"],
+      "identifiers": {
+        "wmi": ["9BF"],
+        "modelPatterns": []
+      },
+      "periods": [],
+      "tokens": {}
+    },
+    {
+      "id": "chevrolet",
+      "name": "Chevrolet (GM) Brasil",
+      "aliases": ["GM"],
+      "status": "inactive",
+      "types": ["micro"],
+      "identifiers": {
+        "wmi": [],
+        "modelPatterns": []
+      },
+      "periods": [],
+      "tokens": {}
+    },
+    {
+      "id": "international",
+      "name": "International/Navistar Brasil",
+      "aliases": ["International", "Navistar"],
+      "status": "inactive",
+      "types": ["micro", "onibus"],
+      "identifiers": {
+        "wmi": [],
+        "modelPatterns": []
+      },
+      "periods": [],
+      "tokens": {}
+    },
+    {
+      "id": "marcopolo",
+      "name": "Marcopolo S.A.",
+      "aliases": ["Marcopolo"],
+      "status": "active",
+      "identifiers": {
+        "wmi": ["936", "93P", "9EJ", "9EL", "9ES"],
+        "modelPatterns": []
+      }
+    },
+    {
+      "id": "caio",
+      "name": "Caio Induscar",
+      "aliases": ["Caio"],
+      "status": "active",
+      "identifiers": {
+        "wmi": ["93K"],
+        "modelPatterns": []
+      }
+    },
+    {
+      "id": "comil",
+      "name": "Comil Carrocerias e Ônibus",
+      "aliases": ["Comil"],
+      "status": "active",
+      "identifiers": {
+        "wmi": ["93R"],
+        "modelPatterns": []
+      }
+    },
+    {
+      "id": "mascarello",
+      "name": "Mascarello Carrocerias e Ônibus",
+      "aliases": ["Mascarello"],
+      "status": "active",
+      "identifiers": {
+        "wmi": ["93Y"],
+        "modelPatterns": []
+      }
+    },
+    {
+      "id": "neobus",
+      "name": "Neobus (Marcopolo S.A.)",
+      "aliases": ["Neobus"],
+      "status": "active",
+      "identifiers": {
+        "wmi": ["93L"],
+        "modelPatterns": []
+      }
+    }
+  ]
+}

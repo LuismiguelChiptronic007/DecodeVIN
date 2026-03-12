@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DecodeVIN • Chassis Decoder</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/logo.svg">
+  <link rel="stylesheet" href="index.css">
+  <script type="module" src="./src/app.js"></script>
+  <link rel="preload" href="./data/manufacturers.json" as="fetch" crossorigin="anonymous">
+  <link rel="preload" href="./src/decoder.js" as="script" crossorigin="anonymous">
+  <link rel="preload" href="./src/app.js" as="script" crossorigin="anonymous">
+</head>
+<body>
+  <div id="selectionScreen" class="selection-screen">
+    <h1>DecodeVIN</h1>
+    <p style="color:var(--muted);margin-bottom:32px">Selecione o modo de operação</p>
+    <div class="selection-cards">
+      <div class="selection-card" id="optSingle">
+        <div class="selection-icon">🔍</div>
+        <h3>Decodificar um único Chassi</h3>
+        <p>Insira um VIN ou código comercial para uma análise detalhada.</p>
+      </div>
+      <div class="selection-card" id="optGroup">
+        <div class="selection-icon">📚</div>
+        <h3>Decodificar grupo de Chassis</h3>
+        <p>Processe múltiplos códigos simultaneamente.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="singleDecoder" style="display:none">
+    <div class="header">
+      <button class="back-btn" id="backFromSingle">←</button>
+      <h1>DecodeVIN</h1>
+    </div>
+    <div class="bar">
+      <input id="input" type="text" placeholder="Digite VIN (17)" maxlength="17" autocomplete="off">
+      <button id="btn">Decodificar</button>
+    </div>
+    <div class="bar">
+      <input id="plateInput" type="text" placeholder="Placa (opcional)" maxlength="8" autocomplete="off">
+      <button id="btnPlate">Buscar Placa</button>
+    </div>
+    <div class="bar" id="scaniaField" style="display:none">
+      <label for="scaniaCode" style="min-width:200px">Código comercial do chassi</label>
+      <input id="scaniaCode" type="text" placeholder="Informe o código comercial do chassi Scania">
+      <button id="scaniaBtn" disabled>Decodificar Scania</button>
+    </div>
+    <!-- <div id="summary" class="row"></div> -->
+    <h2 id="resultTitle" style="display:none;font-size:16px;margin:12px 0">Resultado</h2>
+    
+    <!-- Botões de Relatório (Single Mode) -->
+    <div id="singleReportButtons" style="display: none; gap: 10px; margin-bottom: 20px;">
+      <button id="btnExportCSVSingle" style="background: var(--accent); color: black;">📄 Exportar CSV</button>
+      <button id="btnExportPDFSingle" style="background: var(--accent); color: black;">📕 Exportar PDF</button>
+    </div>
+
+    <div id="segments" class="segment"></div>
+    <div id="cards" class="cards"></div>
+    
+    <!-- Seção OnibusBrasil -->
+    <div id="secao-onibusbrasil" style="margin-top: 24px; display: none; border-top: 1px solid var(--border); padding-top: 24px;">
+      <h3 style="font-size: 16px; color: var(--accent-2); margin-bottom: 16px;">🚌 Dados OnibusBrasil</h3>
+      <p id="ob_status" style="font-size: 14px; color: var(--muted); text-align: center; margin-bottom: 16px;"></p>
+
+      <div id="ob_container" class="cards">
+        <!-- Cards serão injetados aqui via JS no mesmo grid dos outros -->
+        <div class="card card-plate">
+          <div class="label">Encarroçadeira</div>
+          <div class="value" id="ob_encarrocadeira">—</div>
+        </div>
+        <div class="card card-plate">
+          <div class="label">Carroceria</div>
+          <div class="value" id="ob_carroceria">—</div>
+        </div>
+        <div class="card card-plate">
+          <div class="label">Fabricante Chassi</div>
+          <div class="value" id="ob_fabricante_chassi">—</div>
+        </div>
+        <div class="card card-plate">
+          <div class="label">Modelo Chassi</div>
+          <div class="value" id="ob_chassi">—</div>
+        </div>
+        
+        <!-- Foto e Link integrados ao Grid -->
+        <div id="ob_media_container" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 16px;">
+          <img id="ob_foto" src="" alt="Foto do ônibus" style="display:none; width:100%; max-width: 600px; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow);">
+          <a id="ob_fonte" href="#" target="_blank" style="display:none; padding: 12px 24px; border-radius: 8px; background: rgba(56,189,248,0.1); border: 1px solid var(--accent-2); color: var(--accent-2); text-decoration: none; font-size: 14px; font-weight: 600; transition: all 0.2s;">🔗 Ver ficha completa no Ônibus Brasil</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="errors" class="row"></div>
+    <div class="history">
+      <h2 style="font-size:16px;margin:12px 0">Histórico <button id="btnClearHistory" style="margin-left:8px">Limpar</button></h2>
+      <div id="history"></div>
+    </div>
+  </div>
+
+  <div id="groupDecoder" style="display:none">
+    <div class="header">
+      <button class="back-btn" id="backFromGroup">←</button>
+      <h1>DecodeVIN <small style="font-size:14px;color:var(--muted);font-weight:normal">Modo Grupo</small></h1>
+    </div>
+    
+    <!-- Opção Chassi + Placa -->
+    <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px; background: var(--card); padding: 12px; border-radius: 10px; border: 1px solid var(--border);">
+      <input type="checkbox" id="combinedMode" style="width: 18px; height: 18px; cursor: pointer;">
+      <label for="combinedMode" style="cursor: pointer; font-size: 14px; color: var(--text); font-weight: 500;">Modo Combinado (Chassi + Placa na mesma linha)</label>
+      <small style="color: var(--muted); margin-left: auto;">Ative para vincular cada chassi à sua respectiva placa.</small>
+    </div>
+
+    <div class="group-inputs" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+      <div class="bar-group">
+        <label style="display:block; margin-bottom:8px; font-size:14px; color:var(--accent);">Chassis (17 chars)</label>
+        <textarea id="groupInput" placeholder="Insira vários chassis (um por linha)" style="width:100%;height:150px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;outline:none;font-family:inherit"></textarea>
+      </div>
+      <div class="bar-group">
+        <label style="display:block; margin-bottom:8px; font-size:14px; color:var(--accent);">Placas (6 ou 7 chars)</label>
+        <textarea id="groupPlateInput" placeholder="Insira várias placas (uma por linha)" style="width:100%;height:150px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;outline:none;font-family:inherit"></textarea>
+      </div>
+    </div>
+    <div class="bar">
+      <button id="btnGroupDecode" style="width:100%" disabled>Decodificar Grupo</button>
+    </div>
+    
+    <!-- Botões de Relatório -->
+    <div id="reportButtons" style="display: none; gap: 10px; margin-bottom: 20px; justify-content: center;">
+      <button id="btnExportCSV" style="background: var(--accent); color: black;">📄 Exportar CSV</button>
+      <button id="btnExportPDF" style="background: var(--accent); color: black;">📕 Exportar PDF</button>
+    </div>
+
+    <div id="groupResults" class="group-list"></div>
+    <div class="history">
+      <h2 style="font-size:16px;margin:12px 0">Histórico <button id="btnClearHistoryGroup" style="margin-left:8px">Limpar</button></h2>
+    </div>
+  </div>
+
+  <!-- Modal para exibição detalhada no modo grupo -->
+  <div id="detailModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalTitle">Detalhes do Chassi</h2>
+        <button class="close-modal" id="closeModal">&times;</button>
+      </div>
+      <div id="modalBody" class="modal-body">
+        <div id="modalSegments" class="segment"></div>
+        <div id="modalCards" class="cards"></div>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+  <script src="decodevin-integracao.js"></script>
+</body>

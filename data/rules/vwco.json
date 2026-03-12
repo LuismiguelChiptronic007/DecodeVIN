@@ -1,0 +1,128 @@
+{
+  "schema": "decodevin.rules/vwco/v1",
+  "manufacturer": "Volkswagen Caminhões e Ônibus",
+  "nomenclatures": [
+    {
+      "id": "953",
+      "title": "Código 953 (estrutura e posições)",
+      "positions": [
+        { "index": 1, "label": "Região continental", "values": { "9": "Brasil/Paraguai/Colômbia/Uruguai" } },
+        { "index": 2, "label": "País", "values": { "5": "Brasil" } },
+        { "index": 3, "label": "Fabricante", "values": { "3": "MAN Latin America (VWCO)" } },
+        { "index": 4, "label": "Carroceria", "note": "2=Volksbus" },
+        { "index": 5, "label": "Família (motor/freio)" },
+        { "index": 6, "label": "Dígito de controle" },
+        {
+          "index": 7,
+          "label": "Ano Modelo (código)",
+          "mapping": {
+            "1": 2001, "2": 2002, "3": 2003, "4": 2004, "5": 2005, "6": 2006, "7": 2007, "8": 2008, "9": 2009,
+            "A": 2010, "B": 2011, "C": 2012, "D": 2013, "E": 2014, "F": 2015, "G": 2016, "H": 2017, "J": 2018, "K": 2019,
+            "L": 2020, "M": 2021, "N": 2022, "P": 2023, "R": 2024, "S": 2025, "T": 2026, "V": 2027, "W": 2028, "X": 2029, "Y": 2030
+          }
+        },
+        { "index": 8, "label": "Local de fabricação", "values": { "R": "Resende-RJ" } },
+        { "index": 9, "label": "Sequência/ordem de produção" }
+      ]
+    },
+    {
+      "id": "VIN-9BW",
+      "title": "VIN 9BW — Posições do VDS (Volksbus 2012+)",
+      "positions": [
+        { "index": 1, "label": "Carroceria (VDS pos. 2)", "values": { "2": "Volksbus" } },
+        {
+          "index": 2,
+          "label": "Motor/Freio/Família (VDS pos. 3)",
+          "values": {
+            "582": "17.280 OT",
+            "58S": "18.280 OT",
+            "682": "15.180 EOD",
+            "8B2": "15.190 EOD",
+            "932": "15.190 EOD",
+            "952": "8.150 EOD",
+            "A52": "9.150 CO",
+            "A62": "9.150 EOD",
+            "AA4": "8.120 OD",
+            "AB4": "8.140 OD",
+            "AC4": "9.150 OD",
+            "AD4": "9.160 OD",
+            "AD5": "17.230 OD",
+            "AE4": "10.160 OD",
+            "AE5": "17.260 OD",
+            "AF4": "11.180 OD",
+            "AF5": "18.280 OT",
+            "AG5": "18.320 OT",
+            "AH5": "18.330 OT",
+            "AJ5": "18.360 OT",
+            "AK5": "22.280 OT",
+            "AL5": "23.230 OD",
+            "AM5": "23.360 OT",
+            "B82": "17.260 EOT",
+            "D82": "8.150 OD",
+            "E82": "15.190 OD / ODR",
+            "F82": "17.210 OD",
+            "FY2": "16.210 OD",
+            "G82": "17.230 OD / ODS",
+            "J82": "18.320 EOT",
+            "K82": "17.260 OD / ODS",
+            "L82": "17.210 EOD",
+            "M32": "5.150 OD",
+            "M52": "8.160 OD / ODR",
+            "M62": "9.160 OD",
+            "P82": "17.210 EOD",
+            "R82": "18.310 OT",
+            "TAV": "8.140 OT",
+            "TH7": "7.90 S",
+            "TJ7": "7.90 CO",
+            "TM7": "7.110 CO",
+            "Y82": "18.330 OT",
+            "Y8Z": "26.330 OTA",
+            "252": "9.150 EOD",
+            "2RF": "8.140 OD",
+            "2TB": "17.240 OT",
+            "2TJ": "16.210 CO",
+            "2VE": "8.150 OD",
+            "452": "8.120 OD"
+          },
+          "note": "Identificadores pós-2012 observados em recorrência"
+        },
+        { "index": 3, "label": "Dígito de controle (VDS pos. 5)", "note": "Gerado aleatoriamente pelo sistema" },
+        {
+          "index": 4,
+          "label": "Ano Modelo (VDS pos. 6)",
+          "mapping": {
+            "9": 2009, "A": 2010, "B": 2011, "C": 2012, "D": 2013, "E": 2014, "F": 2015,
+            "G": 2016, "H": 2017, "J": 2018, "K": 2019,
+            "L": 2020, "M": 2021, "N": 2022, "P": 2023, "R": 2024, "S": 2025, "T": 2026, "V": 2027, "W": 2028, "X": 2029
+          }
+        },
+        { "index": 5, "label": "Local de fabricação (VDS pos. 7)", "values": { "R": "Resende-RJ" } },
+        { "index": 6, "label": "Sequência (VDS pos. 8)", "note": "Ordem de produção" }
+      ]
+    },
+    {
+      "id": "NOM",
+      "title": "Nomenclatura Volksbus (PBT • Potência • Sigla)",
+      "positions": [
+        { "index": 1, "label": "PBT (t)", "note": "Dois dígitos, ex.: 15" },
+        { "index": 2, "label": "Potência (cv)", "note": "Dois/três dígitos, ex.: 230" },
+        {
+          "index": 3,
+          "label": "Sigla",
+          "note": "Varia conforme o período",
+          "values": {
+            "OD": "Ônibus Dianteiro",
+            "OT": "Ônibus Traseiro",
+            "VT": "V-Tronic (câmbio automatizado)",
+            "LE": "Low-Entry (piso baixo)",
+            "S": "Suspensão a ar",
+            "H": "Piso alto",
+            "L": "Piso baixo",
+            "R": "Rural, suspensão elevada/reforçada",
+            "E": "Escolarbus"
+          }
+        }
+      ]
+    }
+  ]
+}

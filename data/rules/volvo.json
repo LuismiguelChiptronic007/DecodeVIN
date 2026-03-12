@@ -1,0 +1,85 @@
+{
+  "schema": "decodevin.rules/volvo/v1",
+  "manufacturer": "Volvo do Brasil",
+  "nomenclatures": [
+    {
+      "id": "VIN",
+      "title": "VIN Volvo — VDS e posições",
+      "positions": [
+        {
+          "index": 1,
+          "label": "Chassi/Motor (VDS pos. 1–4)",
+          "values": {
+            "1M2F": "B10M ECO",
+            "1MA5": "B10M 245",
+            "1MA6": "B10M 285",
+            "1MD4": "B10M 340",
+            "1MKC": "B10M 310",
+            "1MKF": "B10M",
+            "582F": "B58 ECO",
+            "58EB": "B58 217",
+            "58GB": "B58 230",
+            "58GC": "B58 253",
+            "58SP": "B58 275",
+            "58KF": "B58 245",
+            "58KJ": "B58",
+            "1ME9": "B10R 360",
+            "R2FH": "B12 360",
+            "R2FL": "B12 400",
+            "R2JL": "B12B 400",
+            "R2J5": "B12R 340",
+            "R2J6": "B12R 380",
+            "R2J7": "B12R 420",
+            "R6B4": "B7R 230",
+            "R6B5": "B7R 260",
+            "R6B6": "B7R 285",
+            "R6C4": "B7R 285",
+            "R6K7": "B7R 290 / B290R",
+            "R9F8": "B12M 340 / B340M",
+            "S3E9": "B10R 360",
+            "SS5L5": "B9R 340 / B340R",
+            "S6S5": "B9R 380 / B360S",
+            "S6M2": "B9SALF / B360S",
+            "T8R9": "B215LH / B215RH",
+            "T7V6": "B250R",
+            "T5T5": "B270F",
+            "T5T7": "B270F",
+            "R6R6": "B290R",
+            "T2T8": "B310R",
+            "R9R3": "B340M",
+            "SS5L6": "B380R",
+            "R2R6": "B380R",
+            "T2S8": "B380R",
+            "TS2S9": "B420R",
+            "T2T1": "B450R"
+          },
+          "note": "Códigos agrupados por fases (primeira/segunda/terceira)"
+        },
+        { "index": 2, "label": "Tipo de freio (VDS pos. 5)", "note": "Dígito não confirmado (possível tipo de freio)" },
+        { "index": 3, "label": "Dígito verificador (VDS pos. 6)", "note": "Gerado aleatoriamente" },
+        {
+          "index": 4,
+          "label": "Ano Modelo (VIN pos. 10)",
+          "mapping": {
+            "W": 1998, "X": 1999, "Y": 2000,
+            "1": 2001, "2": 2002, "3": 2003, "4": 2004, "5": 2005, "6": 2006, "7": 2007, "8": 2008, "9": 2009,
+            "A": 2010, "B": 2011, "C": 2012, "D": 2013, "E": 2014, "F": 2015, "G": 2016, "H": 2017, "J": 2018, "K": 2019,
+            "L": 2020, "M": 2021, "N": 2022, "P": 2023, "R": 2024, "S": 2025, "T": 2026, "V": 2027, "W2": 2028, "X2": 2029, "Y2": 2030
+          }
+        },
+        { "index": 5, "label": "Fábrica (VIN pos. 11)", "values": { "A": "Bus Corporation", "E": "Brasil", "G": "Peru", "L": "Colômbia" } },
+        { "index": 6, "label": "Sequência (VIN pos. 12–17)" }
+      ]
+    },
+    {
+      "id": "B",
+      "title": "Linha Volvo B (série e variantes)",
+      "positions": [
+        { "index": 1, "label": "Família", "values": { "B": "Linha Volvo B" } },
+        { "index": 2, "label": "Série", "note": "Ex.: 270/340/420" },
+        { "index": 3, "label": "Posição do motor", "values": { "F": "Motor dianteiro", "R": "Motor traseiro", "M": "Motor central" } },
+        { "index": 4, "label": "Variante", "values": { "LE": "Low-Entry (piso baixo)", "L": "Piso baixo", "H": "Híbrido" } }
+      ]
+    }
+  ]
+}
