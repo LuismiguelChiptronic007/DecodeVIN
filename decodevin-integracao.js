@@ -2,15 +2,16 @@
 // URL do Worker Cloudflare 
 const ONIBUSBRASIL_WORKER_URL = "https://onibusbrasil-proxy.luismiguelgomesoliveira-014.workers.dev";
 
-async function buscarDadosOnibusBrasil(placaOuChassi, isChassis = false) {
-    const secao = document.getElementById("secao-onibusbrasil");
-    const status = document.getElementById("ob_status");
-    const encarrocadeira = document.getElementById("ob_encarrocadeira");
-    const carroceria = document.getElementById("ob_carroceria");
-    const fabricanteChassi = document.getElementById("ob_fabricante_chassi");
-    const chassi = document.getElementById("ob_chassi");
-    const fonte = document.getElementById("ob_fonte");
-    const foto = document.getElementById("ob_foto");
+async function buscarDadosOnibusBrasil(placaOuChassi, isChassis = false, uiOverride = null) {
+    const doc = uiOverride || document;
+    const secao = doc.getElementById("secao-onibusbrasil");
+    const status = doc.getElementById("ob_status");
+    const encarrocadeira = doc.getElementById("ob_encarrocadeira");
+    const carroceria = doc.getElementById("ob_carroceria");
+    const fabricanteChassi = doc.getElementById("ob_fabricante_chassi");
+    const chassi = doc.getElementById("ob_chassi");
+    const fonte = doc.getElementById("ob_fonte");
+    const foto = doc.getElementById("ob_foto");
 
     if (!secao) return;
 
@@ -81,7 +82,7 @@ async function buscarDadosOnibusBrasil(placaOuChassi, isChassis = false) {
             status.textContent = "Dados encontrados com sucesso!";
             status.style.color = "var(--accent)";
             // Mostrar botões de relatório se estiver na tela individual
-            const sButtons = document.getElementById("singleReportButtons");
+            const sButtons = doc.getElementById("singleReportButtons");
             if (sButtons) {
                 sButtons.style.display = "flex";
                 console.log("Botões de relatório habilitados via Integração OB");

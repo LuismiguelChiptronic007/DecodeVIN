@@ -17,8 +17,12 @@ async function buscarDadosOnibusBrasil(placa) {
   const elStatus         = document.getElementById("ob_status");
 
   // ✅ Mostra a seção
-  if (secao) secao.style.display = "grid";
-
+ if (secao) secao.style.display = "block";
+  console.log("secao display:", 
+    document.getElementById("secao-onibusbrasil").style.display, 
+    getComputedStyle(document.getElementById("secao-onibusbrasil")).display 
+  );
+ 
   // Reset campos
   if (elCarroceria)     elCarroceria.textContent     = "—";
   if (elEncarrocadeira) elEncarrocadeira.textContent = "—";
