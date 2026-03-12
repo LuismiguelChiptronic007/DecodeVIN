@@ -357,7 +357,7 @@ async function main() {
     if (vinInputSingle) {
       vinInputSingle.addEventListener('input', () => {
         const pos = vinInputSingle.selectionStart;
-        const val = vinInputSingle.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const val = vinInputSingle.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17);
         vinInputSingle.value = val;
         vinInputSingle.setSelectionRange(pos, pos);
         if (btnSingle) btnSingle.disabled = val.length === 0;
@@ -427,17 +427,51 @@ async function main() {
     // GROUP MODE
     gInput.addEventListener('input', () => {
       const pos = gInput.selectionStart;
-      const val = gInput.value.toUpperCase().replace(/[^A-Z0-9\n\r]/g, "");
-      gInput.value = val;
-      gInput.setSelectionRange(pos, pos);
+      let val = gInput.value.toUpperCase().replace(/[^A-Z0-9\n\r]/g, "");
+      const lines = val.split('\n');
+      let newVal = "";
+      let offset = 0;
+      let currentTotal = 0;
+
+      for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+        if (line.length > 17) {
+          newVal += line.substring(0, 17) + "\n" + line.substring(17);
+          if (pos > currentTotal + 17) offset++;
+        } else {
+          newVal += line;
+        }
+        if (i < lines.length - 1) newVal += "\n";
+        currentTotal += line.length + 1;
+      }
+
+      gInput.value = newVal;
+      gInput.setSelectionRange(pos + offset, pos + offset);
       validateGBtn();
     });
 
     gPlateInput.addEventListener('input', () => {
       const pos = gPlateInput.selectionStart;
-      const val = gPlateInput.value.toUpperCase().replace(/[^A-Z0-9\n\r]/g, "");
-      gPlateInput.value = val;
-      gPlateInput.setSelectionRange(pos, pos);
+      let val = gPlateInput.value.toUpperCase().replace(/[^A-Z0-9\n\r]/g, "");
+      const lines = val.split('\n');
+      let newVal = "";
+      let offset = 0;
+      let currentTotal = 0;
+
+      for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+        if (line.length > 7) {
+          newVal += line.substring(0, 7) + "\n" + line.substring(7);
+          if (pos > currentTotal + 7) offset++;
+        } else {
+          newVal += line;
+        }
+        if (i < lines.length - 1) newVal += "\n";
+        currentTotal += line.length + 1;
+      }
+
+      gPlateInput.value = newVal;
+      gPlateInput.setSelectionRange(pos + offset, pos + offset);
       validateGBtn();
     });
 
