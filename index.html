@@ -9,6 +9,14 @@
   <link rel="preload" href="./data/manufacturers.json" as="fetch" crossorigin="anonymous">
   <link rel="preload" href="./src/decoder.js" as="script" crossorigin="anonymous">
   <link rel="preload" href="./src/app.js" as="script" crossorigin="anonymous">
+  
+  <!-- PWA Meta Tags -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#38bdf8">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="DecodeVIN">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2966/2966327.png">
 </head>
 <body>
   <div id="selectionScreen" class="selection-screen">
@@ -35,11 +43,12 @@
     </div>
     <div class="bar">
       <input id="vinInputSingle" type="text" placeholder="Digite VIN (17)" autocomplete="off" maxlength="17">
+      <button id="btnScanVIN" class="icon-btn" title="Escanear Código de Barras/QR">📷</button>
       <button id="btnDecodeSingle">Decodificar</button>
     </div>
     <div class="bar">
       <input id="plateInputSingle" type="text" placeholder="Placa (opcional)" autocomplete="off" maxlength="7">
-      <button id="btnPlateSingle">Buscar Placa</button>
+      <button id="btnPlateSingle">Buscar  Placa</button>
     </div>
     <div class="bar" id="scaniaField" style="display:none">
       <label for="scaniaCode" style="min-width:200px">Código comercial do chassi</label>
@@ -79,7 +88,7 @@
         </div>
         
         <div id="ob_media_container" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 16px;">
-          <img id="ob_foto" src="" alt="Foto do ônibus" style="display:none; width:100%; max-width: 600px; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow);">
+          <img id="ob_foto" src="" alt="Foto do ônibus" loading="lazy" decoding="async" style="display:none; width:100%; max-width: 600px; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow);">
           <a id="ob_fonte" href="#" target="_blank" style="display:none; padding: 12px 24px; border-radius: 8px; background: rgba(56,189,248,0.1); border: 1px solid var(--accent-2); color: var(--accent-2); text-decoration: none; font-size: 14px; font-weight: 600; transition: all 0.2s;">🔗 Ver ficha completa no Ônibus Brasil</a>
         </div>
       </div>
@@ -87,7 +96,7 @@
 
     <div id="errors" class="row"></div>
     <div class="history">
-      <h2 style="font-size:16px;margin:12px 0">Histórico <button id="btnClearHistory" style="margin-left:8px">Limpar</button></h2>
+      <h2 style="font-size:16px;margin:12px 0">Histórico</h2>
       <div id="history"></div>
     </div>
   </div>
@@ -125,7 +134,7 @@
 
     <div id="groupResults" class="group-list"></div>
     <div class="history">
-      <h2 style="font-size:16px;margin:12px 0">Histórico <button id="btnClearHistoryGroup" style="margin-left:8px">Limpar</button></h2>
+      <h2 style="font-size:16px;margin:12px 0">Histórico</h2>
     </div>
   </div>
 
@@ -141,8 +150,40 @@
       </div>
     </div>
   </div>
+
+  <!-- Tour Guided Structure -->
+  <div id="tourOverlay" class="tour-overlay"></div>
+  <div id="tourCard" class="tour-card">
+    <h3 id="tourTitle">Título do Passo</h3>
+    <p id="tourText">Descrição do passo a passo para o usuário.</p>
+    <div class="tour-footer">
+      <button id="tourSkip" class="tour-btn tour-btn-skip">Pular</button>
+      <button id="tourNext" class="tour-btn tour-btn-next">Próximo</button>
+    </div>
+  </div>
+
+  <!-- Help Floating Button -->
+  <div id="helpFab" class="help-fab" title="Iniciar Tour de Ajuda">?</div>
+
+  <!-- Scanner Modal -->
+  <div id="scannerModal" class="modal" style="display:none">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2>Escanear Código</h2>
+        <button class="close-modal" id="closeScanner">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="reader" style="width: 100%; border-radius: 8px; overflow: hidden; background: #000;"></div>
+        <p style="font-size: 12px; color: var(--muted); text-align: center; margin-top: 12px;">
+          Aponte a câmera para o código de barras ou QR Code do chassi.
+        </p>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   <script src="decodevin-integracao.js"></script>
   <script type="module" src="./src/app.js"></script>
 </body>

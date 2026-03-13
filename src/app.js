@@ -5,6 +5,20 @@ async function loadRules() {
   return await res.json();
 }
 
+async function fetchWithTimeout(resource, options = {}) {
+  const { timeout = 5000 } = options;
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(resource, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    throw error;
+  }
+}
+
 function el(id) {
   return document.getElementById(id);
 }
@@ -52,6 +66,51 @@ function card(label, value) {
   d.appendChild(v);
   return d;
 }
+
+function cardSkeleton() {
+  const d = document.createElement("div");
+  d.className = "card loading";
+  
+  const l = document.createElement("div");
+  l.className = "label skeleton skeleton-text";
+  
+  const v = document.createElement("div");
+  v.className = "value skeleton skeleton-value";
+  
+  d.appendChild(l);
+  d.appendChild(v);
+  return d;
+}
+
+function showSkeletons(container, count = 4) {
+  if (!container) return;
+  container.innerHTML = "";
+  for (let i = 0; i < count; i++) {
+    container.appendChild(cardSkeleton());
+  }
+}
+
+function toggleValueSkeletons(container, isLoading) {
+  if (!container) return;
+  const values = container.querySelectorAll(".value");
+  values.forEach(v => {
+    if (isLoading) {
+      v.classList.add("skeleton");
+      v.classList.add("skeleton-value");
+      v.dataset.oldValue = v.textContent;
+      v.textContent = "";
+    } else {
+      v.classList.remove("skeleton");
+      v.classList.remove("skeleton-value");
+      if (v.dataset.oldValue && v.textContent === "") {
+        v.textContent = v.dataset.oldValue;
+      }
+    }
+  });
+}
+
+window.toggleValueSkeletons = toggleValueSkeletons;
+window.showSkeletons = showSkeletons;
 
 function setSegments(result, container) {
   if (!container) container = el("segments");
@@ -119,10 +178,12 @@ function renderHistory() {
   const h = el("history");
   if (!h) return;
   h.innerHTML = "";
-  list.forEach(item => {
+  list.forEach((item, index) => {
     const row = document.createElement("div");
     row.className = "item clickable";
+    
     const v = document.createElement("div");
+    v.style.flex = "1";
     v.textContent = item.input || "Placa: " + item.plate;
     if (item.input && item.plate) {
       const p = document.createElement("span");
@@ -130,7 +191,8 @@ function renderHistory() {
       p.textContent = `[${item.plate}]`;
       v.appendChild(p);
     }
-    row.onclick = () => {
+    
+    v.onclick = () => {
       const vInput = el("vinInputSingle");
       const pInput = el("plateInputSingle");
       const bSingle = el("btnDecodeSingle");
@@ -144,7 +206,21 @@ function renderHistory() {
         if (bPlate) { bPlate.disabled = false; bPlate.click(); }
       }
     };
+
+    const btnDelete = document.createElement("button");
+    btnDelete.className = "btn-delete-item";
+    btnDelete.innerHTML = "&times;";
+    btnDelete.title = "Remover este item";
+    btnDelete.onclick = (e) => {
+      e.stopPropagation();
+      const currentList = JSON.parse(localStorage.getItem(key) || "[]");
+      currentList.splice(index, 1);
+      localStorage.setItem(key, JSON.stringify(currentList));
+      renderHistory();
+    };
+
     row.appendChild(v);
+    row.appendChild(btnDelete);
     h.appendChild(row);
   });
 }
@@ -230,6 +306,15 @@ const generatePDF = (data, title, filename) => {
 };
 
 async function main() {
+  // PWA: Registrar Service Worker
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('PWA: Service Worker registrado com sucesso!', reg.scope))
+        .catch(err => console.error('PWA: Erro ao registrar Service Worker:', err));
+    });
+  }
+
   try {
     console.log("Iniciando DecodeVIN...");
     const rules = await loadRules();
@@ -250,9 +335,21 @@ async function main() {
     const gResults = el("groupResults");
 
     const showScreen = (screen) => {
-      [selectionScreen, singleDecoder, groupDecoder].forEach(s => s.style.display = "none");
+      [selectionScreen, singleDecoder, groupDecoder].forEach(s => {
+        if (s) {
+          s.style.display = "none";
+          s.classList.remove("screen-fade-in");
+        }
+      });
+      
       clearUI();
-      screen.style.display = screen === selectionScreen ? "flex" : "block";
+      
+      if (screen) {
+        screen.style.display = screen === selectionScreen ? "flex" : "block";
+        // Forçar reflow para reiniciar a animação
+        void screen.offsetWidth;
+        screen.classList.add("screen-fade-in");
+      }
     };
 
     el("optSingle").onclick = () => {
@@ -317,6 +414,39 @@ async function main() {
         ob: {}
       };
       addHistoryEntry(text);
+
+      if (text.length === 17) {
+        try {
+          const apiRes = await fetchWithTimeout(`https://decodevin-1.onrender.com/decode/${text}`);
+          const apiData = await apiRes.json();
+          if (apiData?.Results?.length > 0) {
+            const ext = apiData.Results[0];
+            const extFields = [
+              { label: "Fabricante (API)", value: ext.Manufacturer },
+              { label: "Modelo (API)", value: ext.Model },
+              { label: "Ano Modelo (API)", value: ext.ModelYear },
+              { label: "Tipo de Veículo", value: ext.VehicleType },
+              { label: "País de Origem", value: ext.PlantCountry }
+            ];
+            extFields.forEach(f => {
+              if (f.value && f.value !== "Not Applicable" && f.value !== "" && f.value !== "None") {
+                el("cards").appendChild(card(f.label, f.value));
+              }
+            });
+          }
+        } catch (err) {
+          console.error("Erro API Render:", err);
+          const errorsDiv = el("errors");
+          if (errorsDiv) {
+            const warning = document.createElement("div");
+            warning.className = "note";
+            warning.style.color = "var(--muted)";
+            warning.style.marginTop = "10px";
+            warning.textContent = "Os dados extras da API externa estão indisponíveis no momento, mas a decodificação local funcionou.";
+            errorsDiv.appendChild(warning);
+          }
+        }
+      }
     };
 
     const runPlate = () => {
@@ -330,8 +460,10 @@ async function main() {
       if (window.buscarDadosOnibusBrasil) {
         el("secao-onibusbrasil").style.display = "block";
         el("ob_status").textContent = "Buscando...";
+        toggleValueSkeletons(el("ob_container"), true);
         showReports("single", true);
         window.buscarDadosOnibusBrasil(p).then(() => {
+          toggleValueSkeletons(el("ob_container"), false);
           addHistoryEntry(vinInputSingle.value, p);
           if (!window.currentSingleResult) {
             window.currentSingleResult = { tipo: 'PLATE', placa: p, ob: {} };
@@ -361,6 +493,18 @@ async function main() {
         vinInputSingle.value = val;
         vinInputSingle.setSelectionRange(pos, pos);
         if (btnSingle) btnSingle.disabled = val.length === 0;
+
+        // Se o campo estiver vazio, limpar os resultados exibidos
+        if (val.length === 0) {
+          ["segments", "cards", "errors"].forEach(id => {
+            const e = el(id);
+            if (e) { e.innerHTML = ""; if (id === "segments") e.style.display = "none"; }
+          });
+          showReports("single", false);
+          const rt = el("resultTitle"); if (rt) rt.style.display = "none";
+          const ob = el("secao-onibusbrasil"); if (ob) ob.style.display = "none";
+          window.currentSingleResult = null;
+        }
       });
     }
 
@@ -380,23 +524,6 @@ async function main() {
 
     if (btnSingle) btnSingle.disabled = true;
     if (btnPlateSingle) btnPlateSingle.disabled = true;
-
-    const btnClear = el("btnClearHistory");
-    if (btnClear) {
-      btnClear.onclick = () => {
-        if (vinInputSingle) vinInputSingle.value = "";
-        if (plateInputSingle) plateInputSingle.value = "";
-        if (btnSingle) btnSingle.disabled = true;
-        if (btnPlateSingle) btnPlateSingle.disabled = true;
-        ["segments", "cards", "errors"].forEach(id => {
-          const e = el(id);
-          if (e) { e.innerHTML = ""; e.style.display = "none"; }
-        });
-        showReports("single", false);
-        const rt = el("resultTitle"); if (rt) rt.style.display = "none";
-        const ob = el("secao-onibusbrasil"); if (ob) ob.style.display = "none";
-      };
-    }
 
     el("btnExportCSVSingle").onclick = () => {
       if (!window.currentSingleResult) return;
@@ -488,11 +615,6 @@ async function main() {
 
     combined.addEventListener('change', validateGBtn);
 
-    el("btnClearHistoryGroup").onclick = () => {
-      gInput.value = ""; gPlateInput.value = ""; gResults.innerHTML = "";
-      showReports("group", false); validateGBtn();
-    };
-
     gBtn.onclick = async () => {
       gResults.innerHTML = "";
       const isCombined = combined.checked;
@@ -514,6 +636,25 @@ async function main() {
           item.onclick = () => openModal(itemData.result, vin, false, plate, itemData);
           gResults.appendChild(item);
           addHistoryEntry(vin, plate);
+
+          if (vin.length === 17) {
+            apiCalls.push((async () => {
+              try {
+                const apiRes = await fetchWithTimeout(`https://decodevin-1.onrender.com/decode/${vin}`);
+                const apiData = await apiRes.json();
+                if (apiData?.Results?.length > 0) {
+                  const ext = apiData.Results[0];
+                  [{l:"Fabricante (API)",v:ext.Manufacturer},{l:"Modelo (API)",v:ext.Model},{l:"Ano Modelo (API)",v:ext.ModelYear}].forEach(f => {
+                    if (f.v && f.v!=="Not Applicable" && f.v!=="" && f.v!=="None") {
+                      if (!itemData.result.tokens.find(t => t.label === f.l)) {
+                        itemData.result.tokens.push({ key: f.l.toLowerCase().replace(/ /g, "_"), label: f.l, value: f.v });
+                      }
+                    }
+                  });
+                }
+              } catch (e) { console.error("Erro API Grupo (Combinado):", e); }
+            })());
+          }
         }
       } else {
         vLines.forEach(rawVin => {
@@ -527,6 +668,25 @@ async function main() {
           item.onclick = () => openModal(itemData.result, vin, false, null, itemData);
           gResults.appendChild(item);
           addHistoryEntry(vin);
+
+          if (vin.length === 17) {
+            apiCalls.push((async () => {
+              try {
+                const apiRes = await fetchWithTimeout(`https://decodevin-1.onrender.com/decode/${vin}`);
+                const apiData = await apiRes.json();
+                if (apiData?.Results?.length > 0) {
+                  const ext = apiData.Results[0];
+                  [{l:"Fabricante (API)",v:ext.Manufacturer},{l:"Modelo (API)",v:ext.Model},{l:"Ano Modelo (API)",v:ext.ModelYear}].forEach(f => {
+                    if (f.v && f.v!=="Not Applicable" && f.v!=="" && f.v!=="None") {
+                      if (!itemData.result.tokens.find(t => t.label === f.l)) {
+                        itemData.result.tokens.push({ key: f.l.toLowerCase().replace(/ /g, "_"), label: f.l, value: f.v });
+                      }
+                    }
+                  });
+                }
+              } catch (e) { console.error("Erro API Grupo (VIN):", e); }
+            })());
+          }
         });
         pLines.forEach(rawPlate => {
           const plate = rawPlate.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -568,6 +728,10 @@ async function main() {
         const obCards = document.createElement("div");
         obCards.className = "cards";
         obWrapper.appendChild(obCards);
+        
+        // Mostrar skeletons no modal
+        showSkeletons(obCards, 4);
+
         const mediaBox = document.createElement("div");
         mediaBox.style.display = "flex";
         mediaBox.style.flexDirection = "column";
@@ -575,18 +739,28 @@ async function main() {
         mediaBox.style.gap = "16px";
         mediaBox.style.marginTop = "20px";
         obWrapper.appendChild(mediaBox);
+
+        let hasLoaded = false;
+        const checkClear = () => { if(!hasLoaded) { obCards.innerHTML = ""; hasLoaded = true; } };
+
         const mockUI = {
           getElementById: (id) => {
             if (id === "secao-onibusbrasil") return obWrapper;
             if (id === "ob_status") return {
-              set textContent(v) { statusDiv.textContent = v; },
+              set textContent(v) { 
+                statusDiv.textContent = v; 
+                // Se avisar que não encontrou ou erro, limpar skeletons
+                if (v.includes("Aviso") || v.includes("Erro") || v.includes("sem ficha")) {
+                  checkClear();
+                }
+              },
               style: { set color(c) { statusDiv.style.color = c; } }
             };
-            if (id === "ob_encarrocadeira") return { set textContent(v) { if(v && v!=="—") { obCards.appendChild(card("Encarroçadora", v)); if (itemData) itemData.ob.ob_encarrocadeira = v; } } };
-            if (id === "ob_carroceria") return { set textContent(v) { if(v && v!=="—") { obCards.appendChild(card("Carroceria", v)); if (itemData) itemData.ob.ob_carroceria = v; } } };
-            if (id === "ob_fabricante_chassi") return { set textContent(v) { if(v && v!=="—") { obCards.appendChild(card("Fabricante Chassi", v)); if (itemData) itemData.ob.ob_fabricante_chassi = v; } } };
-            if (id === "ob_chassi") return { set textContent(v) { if(v && v!=="—") { obCards.appendChild(card("Modelo Chassi", v)); if (itemData) itemData.ob.ob_chassi = v; } } };
-            if (id === "ob_foto") return { set src(v) { if(v) { const i=document.createElement("img"); i.src=v; i.style.width="100%"; i.style.maxWidth="600px"; i.style.borderRadius="12px"; i.style.boxShadow="var(--shadow)"; i.style.border="1px solid var(--border)"; mediaBox.prepend(i); } }, style: { set display(v) {} } };
+            if (id === "ob_encarrocadeira") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Encarroçadora", v)); if (itemData) itemData.ob.ob_encarrocadeira = v; } } };
+            if (id === "ob_carroceria") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Carroceria", v)); if (itemData) itemData.ob.ob_carroceria = v; } } };
+            if (id === "ob_fabricante_chassi") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Fabricante Chassi", v)); if (itemData) itemData.ob.ob_fabricante_chassi = v; } } };
+            if (id === "ob_chassi") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Modelo Chassi", v)); if (itemData) itemData.ob.ob_chassi = v; } } };
+            if (id === "ob_foto") return { set src(v) { if(v) { const i=document.createElement("img"); i.src=v; i.loading="lazy"; i.decoding="async"; i.style.width="100%"; i.style.maxWidth="600px"; i.style.borderRadius="12px"; i.style.boxShadow="var(--shadow)"; i.style.border="1px solid var(--border)"; mediaBox.prepend(i); } }, style: { set display(v) {} } };
             if (id === "ob_fonte") return { set href(v) { if(v) { const a=document.createElement("a"); a.href=v; a.target="_blank"; a.textContent="🔗 Ficha Completa no Ônibus Brasil"; a.style.cssText="display:inline-block;padding:12px 24px;border-radius:8px;background:rgba(56,189,248,0.1);border:1px solid var(--accent-2);color:var(--accent-2);font-size:14px;font-weight:600;"; mediaBox.appendChild(a); } }, style: { set display(v) {} } };
             if (id === "singleReportButtons") return { style: { set display(v) {} } };
             return null;
@@ -612,6 +786,29 @@ async function main() {
         setCards(result, mCards);
       }
 
+      if (!isPlate && code.length === 17) {
+        try {
+          const apiRes = await fetchWithTimeout(`https://decodevin-1.onrender.com/decode/${code}`);
+          const apiData = await apiRes.json();
+          if (apiData?.Results?.length > 0) {
+            const ext = apiData.Results[0];
+            [{l:"Fabricante (API)",v:ext.Manufacturer},{l:"Modelo (API)",v:ext.Model},{l:"Ano Modelo (API)",v:ext.ModelYear},{l:"Tipo de Veículo",v:ext.VehicleType},{l:"País de Origem",v:ext.PlantCountry}].forEach(f => {
+              if (f.v && f.v!=="Not Applicable" && f.v!=="") mCards.appendChild(card(f.l, f.v));
+            });
+          }
+        } catch (e) {
+          console.error("Erro API Modal:", e);
+          const warn = document.createElement("div");
+          warn.className = "note";
+          warn.style.color = "var(--muted)";
+          warn.style.marginTop = "10px";
+          warn.style.textAlign = "center";
+          warn.style.gridColumn = "1/-1";
+          warn.textContent = "Os dados extras da API externa estão indisponíveis no momento, mas a decodificação local funcionou.";
+          mCards.appendChild(warn);
+        }
+      }
+
       el("detailModal").style.display = "flex";
     };
 
@@ -624,6 +821,158 @@ async function main() {
     };
 
     renderHistory();
+
+    // TOUR GUIDED LOGIC
+    let tourStep = 0;
+    const tourSteps = [
+      {
+        id: "optSingle",
+        title: "Consulta Individual",
+        text: "Aqui você pode decodificar um único chassi ou buscar informações por placa.",
+        pos: "bottom"
+      },
+      {
+        id: "optGroup",
+        title: "Consulta em Grupo",
+        text: "Processa múltiplos chassis ou placas de uma vez. Ideal para frotas!",
+        pos: "bottom"
+      },
+      {
+        id: "history",
+        title: "Histórico Local",
+        text: "Suas últimas consultas ficam salvas aqui para acesso rápido.",
+        pos: "top"
+      },
+      {
+        id: "helpFab",
+        title: "Dúvidas?",
+        text: "Sempre que precisar, clique aqui para rever este tour de ajuda.",
+        pos: "left"
+      }
+    ];
+
+    const showTourStep = () => {
+      const step = tourSteps[tourStep];
+      const target = el(step.id);
+      const tourCard = el("tourCard");
+      const tourOverlay = el("tourOverlay");
+
+      // Limpar destaques anteriores
+      document.querySelectorAll(".tour-highlight").forEach(e => e.classList.remove("tour-highlight"));
+
+      if (!step || !target) {
+        endTour();
+        return;
+      }
+
+      tourOverlay.style.display = "block";
+      tourCard.style.display = "block";
+      target.classList.add("tour-highlight");
+
+      el("tourTitle").textContent = step.title;
+      el("tourText").textContent = step.text;
+      el("tourNext").textContent = tourStep === tourSteps.length - 1 ? "Finalizar" : "Próximo";
+
+      const rect = target.getBoundingClientRect();
+      const cardRect = tourCard.getBoundingClientRect();
+
+      let top, left;
+      if (step.pos === "bottom") {
+        top = rect.bottom + 15;
+        left = rect.left + (rect.width / 2) - (cardRect.width / 2);
+      } else if (step.pos === "top") {
+        top = rect.top - cardRect.height - 15;
+        left = rect.left + (rect.width / 2) - (cardRect.width / 2);
+      } else if (step.pos === "left") {
+        top = rect.top + (rect.height / 2) - (cardRect.height / 2);
+        left = rect.left - cardRect.width - 15;
+      }
+
+      // Ajustes de borda da tela
+      left = Math.max(10, Math.min(left, window.innerWidth - cardRect.width - 10));
+      top = Math.max(10, Math.min(top, window.innerHeight - cardRect.height - 10));
+
+      tourCard.style.top = `${top}px`;
+      tourCard.style.left = `${left}px`;
+    };
+
+    const endTour = () => {
+      el("tourOverlay").style.display = "none";
+      el("tourCard").style.display = "none";
+      document.querySelectorAll(".tour-highlight").forEach(e => e.classList.remove("tour-highlight"));
+      localStorage.setItem("decodevin_tour_seen", "true");
+    };
+
+    el("tourNext").onclick = () => {
+      tourStep++;
+      if (tourStep < tourSteps.length) {
+        showTourStep();
+      } else {
+        endTour();
+      }
+    };
+
+    el("tourSkip").onclick = endTour;
+    el("helpFab").onclick = () => {
+      tourStep = 0;
+      showTourStep();
+    };
+
+    // Auto-start tour for new users
+    if (!localStorage.getItem("decodevin_tour_seen")) {
+      setTimeout(showTourStep, 1000);
+    }
+
+    // SCANNER LOGIC
+    let html5QrCode = null;
+
+    const startScanner = async () => {
+      const scannerModal = el("scannerModal");
+      scannerModal.style.display = "flex";
+      
+      html5QrCode = new Html5Qrcode("reader");
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+      try {
+        await html5QrCode.start(
+          { facingMode: "environment" }, 
+          config,
+          (decodedText) => {
+            // Sucesso na leitura
+            if (vinInputSingle) {
+              const cleaned = decodedText.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17);
+              vinInputSingle.value = cleaned;
+              // Disparar evento input para atualizar botão
+              vinInputSingle.dispatchEvent(new Event('input'));
+              stopScanner();
+            }
+          },
+          (errorMessage) => {
+            // Erro de leitura (ignorar logs constantes)
+          }
+        );
+      } catch (err) {
+        console.error("Erro ao iniciar câmera:", err);
+        alert("Não foi possível acessar a câmera. Verifique as permissões.");
+        stopScanner();
+      }
+    };
+
+    const stopScanner = async () => {
+      if (html5QrCode) {
+        try {
+          await html5QrCode.stop();
+          html5QrCode = null;
+        } catch (err) {
+          console.error("Erro ao parar scanner:", err);
+        }
+      }
+      el("scannerModal").style.display = "none";
+    };
+
+    el("btnScanVIN").onclick = startScanner;
+    el("closeScanner").onclick = stopScanner;
+
   } catch (err) {
     console.error("Erro fatal na inicialização:", err);
     const errs = el("errors");
