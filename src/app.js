@@ -241,9 +241,13 @@ function setCards(result, targetContainer) {
   if (!c) return;
   c.innerHTML = "";
   if (!result || result.type === "UNKNOWN") return;
+  const fragment = document.createDocumentFragment();
   result.tokens.forEach(t => {
-    c.appendChild(card(t.label, t.value));
+    if (t.value != null && t.value !== "—") {
+      fragment.appendChild(card(t.label, t.value));
+    }
   });
+  c.appendChild(fragment);
 }
 
 function setErrors(result) {
@@ -324,16 +328,16 @@ function renderHistory() {
 }
 
 const exportCSV = (data, name) => {
-  // Definição rigorosa das colunas na ordem solicitada
+  // Cabeçalhos solicitados anteriormente, organizados conforme o modelo visual
   const columns = [
     "MONTADORA",
     "CHASSI",
     "PLACA",
     "ANO",
     "CARROCERIA",
-    "MODELO DO CHASSI DA CARROCERIA",
+    "MODELO CHASSI CARROCERIA",
     "ENCARROÇADEIRA",
-    "MODELO DO CHASSI DA ENCARROÇADEIRA",
+    "MODELO CHASSI ENCARROÇADEIRA",
     "MOTOR"
   ];
 
@@ -341,32 +345,39 @@ const exportCSV = (data, name) => {
   let csv = "\ufeff" + columns.join(";") + "\n";
 
   data.forEach(item => {
-    // Mapeamento de dados do Ônibus Brasil e do Decodificador Local
     const tokens = item.result?.tokens || [];
-    const ob = item.ob || {};
+    const ob = item.ob_data || {};
+    
+    const findToken = (label) => {
+      const t = tokens.find(t => t.label === label || t.key === label.toLowerCase().replace(/ /g, "_"));
+      return t ? t.value : "—";
+    };
 
-    const findToken = (label) => tokens.find(t => t.label === label)?.value || "—";
-
+    // Mapeamento corrigido: 
+    // MODELO CHASSI CARROCERIA e MODELO CHASSI ENCARROÇADEIRA agora mostram o MODELO (ex: OF-1722M)
     const row = [
-      item.fabricante || findToken("Fabricante") || "—", // MONTADORA
+      item.fabricante || findToken("Fabricante") || "—",  // MONTADORA
       item.vin || "—",                                   // CHASSI
       item.placa || "—",                                  // PLACA
       findToken("Ano Modelo") || "—",                    // ANO
-      ob.ob_carroceria || findToken("Tipo de carroceria") || "—", // CARROCERIA
-      ob.ob_chassi || "—",                               // MODELO DO CHASSI DA CARROCERIA
-      ob.ob_encarrocadeira || findToken("Encarroçadora") || "—", // ENCARROÇADEIRA
-      ob.ob_fabricante_chassi || "—",                    // MODELO DO CHASSI DA ENCARROÇADEIRA
+      ob.carroceria || "—",                              // CARROCERIA
+      ob.modelo_chassi || ob.chassi || "—",              // MODELO CHASSI CARROCERIA
+      ob.encarrocadeira || ob.encarrocadora || "—",      // ENCARROÇADEIRA
+      ob.modelo_chassi || ob.chassi || "—",              // MODELO CHASSI ENCARROÇADEIRA (Corrigido para o modelo)
       findToken("Motor") || "—"                          // MOTOR
     ];
 
-    csv += row.map(val => String(val).replace(/;/g, ",")).join(";") + "\n";
+    csv += row.map(val => {
+      let s = String(val).trim();
+      return (s === "" || s === "—" || s === "undefined") ? "—" : s.replace(/;/g, ",");
+    }).join(";") + "\n";
   });
 
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = name + ".csv";
+  link.download = `${name}_${new Date().getTime()}.csv`;
   link.click();
 };
 
@@ -374,13 +385,6 @@ const exportCSV = (data, name) => {
   if (btnExportCSV) {
     btnExportCSV.onclick = () => {
       if (window.currentGroupResults) exportCSV(window.currentGroupResults, "Relatorio_Frota");
-    };
-  }
-
-  const btnExportCSVSingle = el("btnExportCSVSingle");
-  if (btnExportCSVSingle) {
-    btnExportCSVSingle.onclick = () => {
-      if (window.currentSingleResult) exportCSV([window.currentSingleResult], "Relatorio_Veiculo_" + window.currentSingleResult.vin);
     };
   }
 
@@ -453,6 +457,12 @@ async function main() {
 
     const showReports = (mode, show) => {
       const id = mode === "single" ? "singleReportButtons" : "reportButtons";
+      // Ocultar sempre no modo individual conforme solicitação
+      if (mode === "single") {
+        const e = el("singleReportButtons");
+        if (e) e.style.display = "none";
+        return;
+      }
       const e = el(id);
       if (e) e.style.display = show ? "flex" : "none";
     };
@@ -622,7 +632,7 @@ async function main() {
           }
         });
 
-        window.buscarDadosOnibusBrasil(p).then(async () => {
+        window.buscarDadosOnibusBrasil(p).then(async (obData) => {
           // Só continua se a verificação não tiver falhado (verifEl não contém erro)
           if (verifEl && verifEl.innerHTML.includes("#e74c3c")) {
              if (obSec) obSec.style.display = "none";
@@ -635,9 +645,10 @@ async function main() {
           const btnDecode = el("btnDecodeSingle");
 
           if (!window.currentSingleResult) {
-            window.currentSingleResult = { tipo: 'PLATE', placa: p, ob: {} };
+            window.currentSingleResult = { tipo: 'PLATE', placa: p, ob: {}, ob_data: obData || {} };
           } else {
             window.currentSingleResult.placa = p;
+            window.currentSingleResult.ob_data = obData || {};
           }
           
           // Captura os dados após o preenchimento do Ônibus Brasil
@@ -665,6 +676,7 @@ async function main() {
 
     // CORRIGIDO: usar addEventListener em vez de oninput para evitar sobrescrita
     if (vinInputSingle) {
+      let vinTimeout;
       vinInputSingle.addEventListener('input', () => {
         const pos = vinInputSingle.selectionStart;
         const val = vinInputSingle.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17);
@@ -683,22 +695,51 @@ async function main() {
           const ob = el("secao-onibusbrasil"); if (ob) ob.style.display = "none";
           const verif = el("ob_verificacao"); if (verif) verif.innerHTML = "";
           window.currentSingleResult = null;
+          return;
+        }
+
+        // ✅ REVALIDAÇÃO AUTOMÁTICA AO ALTERAR O CHASSI
+        const plate = plateInputSingle ? plateInputSingle.value.trim() : "";
+        if (plate.length >= 6) {
+          clearTimeout(vinTimeout);
+          const verifEl = el("ob_verificacao");
+          if (verifEl) verifEl.innerHTML = `<span style="color:var(--muted); font-weight:normal">Validando alteração...</span>`;
+          
+          vinTimeout = setTimeout(() => {
+            if (val.length === 17) {
+              runPlate(); // Re-executa a validação completa se o VIN estiver completo
+            } else {
+              if (verifEl) verifEl.innerHTML = `<span style="color:#e74c3c">⚠ VIN incompleto para validação</span>`;
+              const btnDecode = el("btnDecodeSingle");
+              if (btnDecode) btnDecode.disabled = true;
+            }
+          }, 800); // Pequeno delay para não sobrecarregar enquanto digita
         }
       });
     }
 
     if (plateInputSingle) {
+      let plateTimeout;
       plateInputSingle.addEventListener('input', () => {
         const pos = plateInputSingle.selectionStart;
         const val = plateInputSingle.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7);
         plateInputSingle.value = val;
         plateInputSingle.setSelectionRange(pos, pos);
         if (btnPlateSingle) btnPlateSingle.disabled = val.length < 3;
+        
         if (val.length === 0) {
           const obSec = el("secao-onibusbrasil");
           if (obSec) obSec.style.display = "none";
           const verif = el("ob_verificacao");
           if (verif) verif.innerHTML = "";
+          return;
+        }
+
+        // ✅ REVALIDAÇÃO AUTOMÁTICA AO ALTERAR A PLACA
+        const vin = vinInputSingle ? vinInputSingle.value.trim() : "";
+        if (vin.length === 17 && val.length >= 6) {
+          clearTimeout(plateTimeout);
+          plateTimeout = setTimeout(() => runPlate(), 800);
         }
       });
     }
@@ -783,68 +824,58 @@ async function main() {
       const vLines = gInput.value.split("\n").map(l => l.trim()).filter(Boolean);
       const pLines = gPlateInput.value.split("\n").map(l => l.trim()).filter(Boolean);
       const currentGroupResults = [];
-      const apiCalls = [];
-
-      // ✅ NOVA LÓGICA DE VINCULAÇÃO AUTOMÁTICA
-      const vins = vLines.map(v => v.toUpperCase().replace(/[^A-Z0-9]/g, ""));
-      const plates = pLines.map(p => p.toUpperCase().replace(/[^A-Z0-9]/g, ""));
       
-      const paired = []; // {vin, plate}
-      const unmatchedVins = [...vins];
-      const unmatchedPlates = [...plates];
-
-      // Se for modo combinado (mesma linha), o par já está definido pelo índice
-      if (isCombined) {
-        for (let i = 0; i < vins.length; i++) {
-          paired.push({ vin: vins[i], plate: plates[i] || "" });
-        }
-      } else {
-        // No modo livre, tentamos parear via API
-        const totalItems = Math.max(vins.length, plates.length);
-        // Primeiro, assume-se a ordem das linhas se houver o mesmo número de itens
-        // Caso contrário, processamos individualmente e destacamos os órfãos
-        for (let i = 0; i < totalItems; i++) {
-          paired.push({ 
-            vin: vins[i] || "", 
-            plate: plates[i] || "" 
-          });
-        }
+      // ✅ Processamento em Lotes para não travar a UI
+      const allItems = [];
+      const totalItems = Math.max(vLines.length, pLines.length);
+      for (let i = 0; i < totalItems; i++) {
+        allItems.push({ vin: vLines[i] || "", plate: pLines[i] || "" });
       }
 
-      for (const pair of paired) {
-        const { vin, plate } = pair;
-        const res = vin ? decoder.decode(vin) : { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
-        
-        const item = document.createElement("div"); 
-        item.className = "group-item";
-        
-        const itemData = { 
-          tipo: vin && plate ? 'COMBINADO' : (vin ? 'VIN' : 'PLATE'), 
-          vin, 
-          placa: plate, 
-          fabricante: res.manufacturerName || "Desconhecido", 
-          result: JSON.parse(JSON.stringify(res)), 
-          ob: {},
-          status: 'pending'
-        };
-        currentGroupResults.push(itemData);
+      const BATCH_SIZE = 10;
+      let currentIndex = 0;
 
-        // Layout inicial
-        let layout = "";
-        if (vin && plate) {
-          layout = `<div class="code"><span style="color:var(--accent);font-size:10px;display:block">VERIFICANDO PAR</span>${vin} / ${plate}</div>`;
-        } else if (vin) {
-          layout = `<div class="code"><span style="color:#e74c3c;font-size:10px;display:block">SEM PLACA</span>${vin}</div>`;
-        } else {
-          layout = `<div class="code"><span style="color:#e74c3c;font-size:10px;display:block">SEM CHASSI</span>${plate}</div>`;
+      const processBatch = async () => {
+        const batch = allItems.slice(currentIndex, currentIndex + BATCH_SIZE);
+        if (batch.length === 0) {
+          showReports("group", true);
+          window.currentGroupResults = currentGroupResults;
+          return;
         }
 
-        item.innerHTML = `${layout}<div class="info"><span>${res.manufacturerName || "—"}</span><span class="status-msg" style="color:var(--muted)">Aguardando...</span></div>`;
-        item.onclick = () => openModal(vin ? itemData.result : null, vin || plate, !vin, vin && plate ? plate : null, itemData);
-        gResults.appendChild(item);
+        const apiCalls = batch.map(pair => (async () => {
+          const { vin, plate } = pair;
+          const res = vin ? decoder.decode(vin) : { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
+          
+          const item = document.createElement("div"); 
+          item.className = "group-item";
+          
+          const itemData = { 
+            tipo: vin && plate ? 'COMBINADO' : (vin ? 'VIN' : 'PLATE'), 
+            vin, 
+            placa: plate, 
+            fabricante: res.manufacturerName || "Desconhecido", 
+            result: JSON.parse(JSON.stringify(res)), 
+            ob: {},
+            ob_data: {},
+            status: 'pending'
+          };
+          currentGroupResults.push(itemData);
 
-        if (vin && plate) {
-          apiCalls.push((async () => {
+          let layout = "";
+          if (vin && plate) {
+            layout = `<div class="code"><span style="color:var(--accent);font-size:10px;display:block">VERIFICANDO PAR</span>${vin} / ${plate}</div>`;
+          } else if (vin) {
+            layout = `<div class="code"><span style="color:#e74c3c;font-size:10px;display:block">SEM PLACA</span>${vin}</div>`;
+          } else {
+            layout = `<div class="code"><span style="color:#e74c3c;font-size:10px;display:block">SEM CHASSI</span>${plate}</div>`;
+          }
+
+          item.innerHTML = `${layout}<div class="info"><span>${res.manufacturerName || "—"}</span><span class="status-msg" style="color:var(--muted)">Aguardando...</span></div>`;
+          item.onclick = () => openModal(vin ? itemData.result : null, vin || plate, !vin, vin && plate ? plate : null, itemData);
+          gResults.appendChild(item);
+
+          if (vin && plate) {
             const statusMsg = item.querySelector(".status-msg");
             try {
               const apiResult = await consultarPlacaPHP(plate, vin);
@@ -853,7 +884,19 @@ async function main() {
                 statusMsg.innerHTML = `<span style="color:#2ecc71">✔ Confirmado</span>`;
                 itemData.status = 'ok';
                 
-                // Se o VIN for de 17, buscar dados extras
+                if (plate) {
+                   const obData = await window.buscarDadosOnibusBrasil(plate, false, document);
+                   if (obData) {
+                     itemData.ob_data = obData;
+                     itemData.ob = {
+                        ob_carroceria: obData.carroceria || "—",
+                        ob_encarrocadeira: obData.encarrocadeira || obData.encarrocadora || "—",
+                        ob_fabricante_chassi: obData.fabricante_chassi || obData.fabricante || "—",
+                        ob_chassi: obData.modelo_chassi || obData.chassi || "—"
+                     };
+                   }
+                }
+
                 if (vin.length === 17) {
                   const apiRes = await fetchWithTimeout(`https://decodevin-1.onrender.com/decode/${vin}`);
                   const apiData = await apiRes.json();
@@ -873,23 +916,27 @@ async function main() {
                 item.style.background = "rgba(231, 76, 60, 0.05)";
                 statusMsg.innerHTML = `<span style="color:#e74c3c">⚠ Divergência</span>`;
                 itemData.status = 'error';
-                // No modo grupo, se divergir, o modal mostrará o erro
               }
             } catch (e) { 
               statusMsg.textContent = "Erro na verificação";
               console.error("Erro no par do grupo:", e); 
             }
-          })());
-        } else {
-          item.style.borderLeft = "4px solid #f1c40f";
-          const statusMsg = item.querySelector(".status-msg");
-          statusMsg.innerHTML = `<span style="color:#f1c40f">Item Órfão</span>`;
-        }
-      }
+          } else {
+            item.style.borderLeft = "4px solid #f1c40f";
+            const statusMsg = item.querySelector(".status-msg");
+            statusMsg.innerHTML = `<span style="color:#f1c40f">Item Órfão</span>`;
+          }
+        })());
 
-      if (apiCalls.length > 0) await Promise.all(apiCalls);
-      showReports("group", true);
-      window.currentGroupResults = currentGroupResults;
+        await Promise.all(apiCalls);
+        currentIndex += BATCH_SIZE;
+        
+        // Pausa para o navegador respirar
+        await new Promise(resolve => setTimeout(resolve, 50)); 
+        processBatch(); // Processa o próximo lote
+      };
+
+      processBatch(); // Inicia o processamento
     };
 
     // MODAL LOGIC — corrigido: não substitui document.getElementById

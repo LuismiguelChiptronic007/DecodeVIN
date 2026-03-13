@@ -81,12 +81,6 @@ async function buscarDadosOnibusBrasil(placaOuChassi, isChassis = false, uiOverr
         if (temDados) {
             status.textContent = "Dados encontrados com sucesso!";
             status.style.color = "var(--accent)";
-            // Mostrar botões de relatório se estiver na tela individual
-            const sButtons = doc.getElementById("singleReportButtons");
-            if (sButtons) {
-                sButtons.style.display = "flex";
-                console.log("Botões de relatório habilitados via Integração OB");
-            }
         } else {
             status.textContent = "Veículo encontrado, mas sem ficha técnica cadastrada.";
             status.style.color = "var(--muted)";
@@ -98,7 +92,8 @@ async function buscarDadosOnibusBrasil(placaOuChassi, isChassis = false, uiOverr
         fonte.style.display = "inline-block";
         fonte.textContent = "Ver ficha completa no Ônibus Brasil";
 
-    } catch (err) {
+        return data; // ✅ Retornar os dados para quem chamou
+    } catch (error) {
         console.error("Erro na integração OB:", err);
         status.textContent = "Erro ao conectar com o serviço de busca.";
         status.style.color = "var(--danger)";
