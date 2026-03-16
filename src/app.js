@@ -300,6 +300,9 @@ function setErrors(result) {
   e.appendChild(d);
 }
 
+let currentHistoryPage = 1;
+const HISTORY_PAGE_SIZE = 10;
+
 function addHistoryEntry(input, plateOverride = "") {
   const key = "decodevin.history";
   const list = JSON.parse(localStorage.getItem(key) || "[]");
@@ -307,8 +310,10 @@ function addHistoryEntry(input, plateOverride = "") {
   const plate = plateOverride || (pInput ? pInput.value.trim().toUpperCase() : "");
   if (!input && !plate) return;
   const entry = { input, plate, ts: Date.now() };
-  const newList = [entry, ...list.filter(x => x.input !== input || (input === "" && x.plate !== plate))].slice(0, 10);
+  // Aumentado para 100 itens no histórico total
+  const newList = [entry, ...list.filter(x => x.input !== input || (input === "" && x.plate !== plate))].slice(0, 100);
   localStorage.setItem(key, JSON.stringify(newList));
+  currentHistoryPage = 1; // Volta para a primeira página ao adicionar novo
   renderHistory();
 }
 
@@ -318,7 +323,22 @@ function renderHistory() {
   const h = el("history");
   if (!h) return;
   h.innerHTML = "";
-  list.forEach((item, index) => {
+
+  if (list.length === 0) {
+    h.innerHTML = `<div style="color:var(--muted); text-align:center; padding: 20px;">Nenhum item no histórico.</div>`;
+    return;
+  }
+
+  const totalPages = Math.ceil(list.length / HISTORY_PAGE_SIZE);
+  if (currentHistoryPage > totalPages) currentHistoryPage = totalPages;
+  if (currentHistoryPage < 1) currentHistoryPage = 1;
+
+  const start = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE;
+  const end = start + HISTORY_PAGE_SIZE;
+  const pageList = list.slice(start, end);
+
+  pageList.forEach((item, idx) => {
+    const indexInFullList = start + idx;
     const row = document.createElement("div");
     row.className = "item clickable";
     
@@ -354,7 +374,7 @@ function renderHistory() {
     btnDelete.onclick = (e) => {
       e.stopPropagation();
       const currentList = JSON.parse(localStorage.getItem(key) || "[]");
-      currentList.splice(index, 1);
+      currentList.splice(indexInFullList, 1);
       localStorage.setItem(key, JSON.stringify(currentList));
       renderHistory();
     };
@@ -363,6 +383,35 @@ function renderHistory() {
     row.appendChild(btnDelete);
     h.appendChild(row);
   });
+
+  // Controles de Paginação
+  if (totalPages > 1) {
+    const pagination = document.createElement("div");
+    pagination.className = "history-pagination";
+    pagination.style.cssText = "display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 15px; padding: 10px;";
+
+    const btnPrev = document.createElement("button");
+    btnPrev.textContent = "← Anterior";
+    btnPrev.disabled = currentHistoryPage === 1;
+    btnPrev.className = "btn-page";
+    btnPrev.onclick = () => { currentHistoryPage--; renderHistory(); };
+
+    const pageInfo = document.createElement("span");
+    pageInfo.textContent = `Página ${currentHistoryPage} de ${totalPages}`;
+    pageInfo.style.fontSize = "14px";
+    pageInfo.style.color = "var(--muted)";
+
+    const btnNext = document.createElement("button");
+    btnNext.textContent = "Próximo →";
+    btnNext.disabled = currentHistoryPage === totalPages;
+    btnNext.className = "btn-page";
+    btnNext.onclick = () => { currentHistoryPage++; renderHistory(); };
+
+    pagination.appendChild(btnPrev);
+    pagination.appendChild(pageInfo);
+    pagination.appendChild(btnNext);
+    h.appendChild(pagination);
+  }
 }
 
 const exportCSV = (data, name) => {
@@ -426,9 +475,232 @@ const exportCSV = (data, name) => {
     };
   }
 
-  
+let currentGroupPage = 1;
+const GROUP_PAGE_SIZE = 10;
+
+function renderGroupResults() {
+  const gResults = el("groupResults");
+  if (!gResults || !window.currentGroupResults) return;
+  gResults.innerHTML = "";
+
+  const totalPages = Math.ceil(window.currentGroupResults.length / GROUP_PAGE_SIZE);
+  if (currentGroupPage > totalPages) currentGroupPage = totalPages;
+  if (currentGroupPage < 1) currentGroupPage = 1;
+
+  const start = (currentGroupPage - 1) * GROUP_PAGE_SIZE;
+  const end = start + GROUP_PAGE_SIZE;
+  const pageList = window.currentGroupResults.slice(start, end);
+
+  const fragment = document.createDocumentFragment();
+
+  pageList.forEach(itemData => {
+    const item = document.createElement("div");
+    item.className = "group-item";
+    
+    // Configurar o estilo com base no status
+    if (itemData.status === 'ok') {
+      item.style.borderLeft = "4px solid #2ecc71";
+    } else if (itemData.status === 'error') {
+      item.style.borderLeft = "4px solid #e74c3c";
+      item.style.background = "rgba(231, 76, 60, 0.05)";
+    } else if (itemData.status === 'pending') {
+      item.style.borderLeft = "4px solid var(--muted)";
+    } else {
+      item.style.borderLeft = "4px solid #f1c40f";
+    }
+
+    const vin = itemData.vin;
+    const plate = itemData.placa;
+
+    let layout = "";
+    if (vin && plate) {
+      layout = `<div class="code"><span style="color:var(--accent);font-size:10px;display:block">VERIFICANDO PAR</span>${vin} / ${plate}</div>`;
+    } else if (vin) {
+      layout = `<div class="code"><span style="color:#e74c3c;font-size:10px;display:block">SEM PLACA</span>${vin}</div>`;
+    } else {
+      layout = `<div class="code"><span style="color:#e74c3c;font-size:10px;display:block">SEM CHASSI</span>${plate}</div>`;
+    }
+
+    let statusHtml = "";
+    if (itemData.status === 'ok') {
+      statusHtml = `<span style="color:#2ecc71">✔ Confirmado</span>`;
+    } else if (itemData.status === 'error') {
+      statusHtml = `<span style="color:#e74c3c">⚠ Divergência</span>`;
+    } else if (itemData.status === 'pending') {
+      statusHtml = `<span style="color:var(--muted)">Aguardando...</span>`;
+    } else {
+      statusHtml = `<span style="color:#f1c40f">Item Órfão</span>`;
+    }
+
+    item.innerHTML = `${layout}<div class="info"><span>${itemData.fabricante || "—"}</span><span class="status-msg">${statusHtml}</span></div>`;
+    
+    // Garantir que o modal abre na primeira tentativa usando addEventListener e parando propagação
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openModal(vin ? itemData.result : null, vin || plate, !vin, vin && plate ? plate : null, itemData);
+    });
+
+    fragment.appendChild(item);
+  });
+
+  gResults.appendChild(fragment);
+
+  // Controles de Paginação do Grupo
+  if (totalPages > 1) {
+    const pagination = document.createElement("div");
+    pagination.className = "group-pagination";
+    pagination.style.cssText = "display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 25px; padding: 20px 0; border-top: 1px solid var(--border); width: 100%; grid-column: 1 / -1;";
+
+    const btnPrev = document.createElement("button");
+    btnPrev.textContent = "← Anterior";
+    btnPrev.disabled = currentGroupPage === 1;
+    btnPrev.className = "btn-page";
+    btnPrev.onclick = (e) => { e.stopPropagation(); currentGroupPage--; renderGroupResults(); };
+
+    const pageInfo = document.createElement("span");
+    pageInfo.textContent = `Página ${currentGroupPage} de ${totalPages}`;
+    pageInfo.style.fontSize = "14px";
+    pageInfo.style.color = "var(--muted)";
+
+    const btnNext = document.createElement("button");
+    btnNext.textContent = "Próximo →";
+    btnNext.disabled = currentGroupPage === totalPages;
+    btnNext.className = "btn-page";
+    btnNext.onclick = (e) => { e.stopPropagation(); currentGroupPage++; renderGroupResults(); };
+
+    pagination.appendChild(btnPrev);
+    pagination.appendChild(pageInfo);
+    pagination.appendChild(btnNext);
+    gResults.appendChild(pagination);
+  }
+}
+
+// MODAL LOGIC — corrigido: não substitui document.getElementById
+async function openModal(result, code, isPlate = false, linkedPlate = null, itemData = null) {
+  const mTitle = el("modalTitle");
+  const mSegs = el("modalSegments");
+  const mCards = el("modalCards");
+  const modal = el("detailModal");
+
+  if (!modal) return;
+
+  // Limpar e mostrar modal IMEDIATAMENTE para feedback visual
+  mTitle.textContent = linkedPlate ? `Análise Completa: ${code} + ${linkedPlate}` : (isPlate ? `Dados OB: ${code}` : `Detalhes: ${code}`);
+  mSegs.innerHTML = ""; 
+  mCards.innerHTML = "";
+  modal.style.display = "flex";
+
+  // Se houver erro de verificação no itemData, mostramos o erro no modal e bloqueamos os detalhes
+  if (itemData && itemData.status === 'error') {
+    mSegs.innerHTML = `<div class="seg" style="background:#e74c3c;color:white">⚠ DIVERGÊNCIA DETECTADA</div>`;
+    const errorCard = document.createElement("div");
+    errorCard.className = "error";
+    errorCard.style.cssText = "background: rgba(231, 76, 60, 0.1); border: 1px solid #e74c3c; color: #e74c3c; padding: 20px; border-radius: 8px; margin: 20px; font-weight: 600; text-align: center; grid-column: 1/-1;";
+    errorCard.innerHTML = `Este chassi (${code}) não pertence à placa (${linkedPlate}).<br><small style="font-weight:normal">Por segurança, os detalhes técnicos foram bloqueados.</small>`;
+    mCards.appendChild(errorCard);
+    return;
+  }
+
+  const injectOB = (p, container) => {
+    const obWrapper = document.createElement("div");
+    obWrapper.style.marginTop = "16px";
+    obWrapper.style.borderTop = "1px solid var(--border)";
+    obWrapper.style.paddingTop = "20px";
+    container.appendChild(obWrapper);
+    const statusDiv = document.createElement("div");
+    statusDiv.style.textAlign = "center";
+    statusDiv.style.marginBottom = "16px";
+    statusDiv.style.fontSize = "14px";
+    statusDiv.textContent = `Buscando ${p}...`;
+    obWrapper.appendChild(statusDiv);
+    const obCards = document.createElement("div");
+    obCards.className = "cards";
+    obWrapper.appendChild(obCards);
+    
+    showSkeletons(obCards, 4);
+
+    const mediaBox = document.createElement("div");
+    mediaBox.style.display = "flex";
+    mediaBox.style.flexDirection = "column";
+    mediaBox.style.alignItems = "center";
+    mediaBox.style.gap = "16px";
+    mediaBox.style.marginTop = "20px";
+    obWrapper.appendChild(mediaBox);
+
+    let hasLoaded = false;
+    const checkClear = () => { if(!hasLoaded) { obCards.innerHTML = ""; hasLoaded = true; } };
+
+    const mockUI = {
+      getElementById: (id) => {
+        if (id === "secao-onibusbrasil") return obWrapper;
+        if (id === "ob_status") return {
+          set textContent(v) { 
+            statusDiv.textContent = v; 
+            if (v.includes("Aviso") || v.includes("Erro") || v.includes("sem ficha")) {
+              checkClear();
+            }
+          },
+          style: { set color(c) { statusDiv.style.color = c; } }
+        };
+        if (id === "ob_encarrocadeira") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Encarroçadora", v)); if (itemData) itemData.ob.ob_encarrocadeira = v; } } };
+        if (id === "ob_carroceria") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Carroceria", v)); if (itemData) itemData.ob.ob_carroceria = v; } } };
+        if (id === "ob_fabricante_chassi") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Fabricante Chassi", v)); if (itemData) itemData.ob.ob_fabricante_chassi = v; } } };
+        if (id === "ob_chassi") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Modelo Chassi", v)); if (itemData) itemData.ob.ob_chassi = v; } } };
+        if (id === "ob_foto") return { set src(v) { if(v) { const i=document.createElement("img"); i.src=v; i.loading="lazy"; i.decoding="async"; i.style.width="100%"; i.style.maxWidth="600px"; i.style.borderRadius="12px"; i.style.boxShadow="var(--shadow)"; i.style.border="1px solid var(--border)"; mediaBox.prepend(i); } }, style: { set display(v) {} } };
+        if (id === "ob_fonte") return { set href(v) { if(v) { const a=document.createElement("a"); a.href=v; a.target="_blank"; a.textContent="🔗 Ficha Completa no Ônibus Brasil"; a.style.cssText="display:inline-block;padding:12px 24px;border-radius:8px;background:rgba(56,189,248,0.1);border:1px solid var(--accent-2);color:var(--accent-2);font-size:14px;font-weight:600;"; mediaBox.appendChild(a); } }, style: { set display(v) {} } };
+        if (id === "singleReportButtons") return { style: { set display(v) {} } };
+        return null;
+      }
+    };
+    window.buscarDadosOnibusBrasil(p, false, mockUI);
+  };
+
+  if (linkedPlate) {
+    mSegs.innerHTML = `<div class="seg">${code}</div><div class="seg" style="background:var(--accent);color:black">${linkedPlate}</div>`;
+    const c1 = document.createElement("div");
+    c1.className = "cards";
+    c1.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:15px;";
+    mCards.appendChild(c1);
+    setCards(result, c1);
+    const h = document.createElement("h3"); h.textContent = "🚌 Dados Carroceria"; h.style.gridColumn = "1/-1"; mCards.appendChild(h);
+    injectOB(linkedPlate, mCards);
+  } else if (isPlate) {
+    mSegs.innerHTML = `<div class="seg">${code}</div>`;
+    injectOB(code, mCards);
+  } else {
+    setSegments(result, mSegs);
+    setCards(result, mCards);
+  }
+
+  if (!isPlate && code.length === 17) {
+    try {
+      const apiRes = await fetchWithTimeout(`https://decodevin-1.onrender.com/decode/${code}`);
+      const apiData = await apiRes.json();
+      if (apiData?.Results?.length > 0) {
+        const ext = apiData.Results[0];
+        [{l:"Fabricante (API)",v:ext.Manufacturer},{l:"Modelo (API)",v:ext.Model},{l:"Ano Modelo (API)",v:ext.ModelYear},{l:"Tipo de Veículo",v:ext.VehicleType},{l:"País de Origem",v:ext.PlantCountry}].forEach(f => {
+          if (f.v && f.v!=="Not Applicable" && f.v!=="") mCards.appendChild(card(f.l, f.v));
+        });
+      }
+    } catch (e) {
+      console.error("Erro API Modal:", e);
+      const warn = document.createElement("div");
+      warn.className = "note";
+      warn.style.color = "var(--muted)";
+      warn.style.marginTop = "10px";
+      warn.style.textAlign = "center";
+      warn.style.gridColumn = "1/-1";
+      warn.textContent = "Os dados extras da API externa estão indisponíveis no momento, mas a decodificação local funcionou.";
+      mCards.appendChild(warn);
+    }
+  }
+}
+
+window.renderGroupResults = renderGroupResults;
+window.openModal = openModal;
 
 async function main() {
+
   // PWA: Registrar Service Worker
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -852,11 +1124,14 @@ async function main() {
     combined.addEventListener('change', validateGBtn);
 
     gBtn.onclick = async () => {
+      const gResults = el("groupResults");
+      if (!gResults) return;
       gResults.innerHTML = "";
-      const isCombined = combined.checked;
       const vLines = gInput.value.split("\n").map(l => l.trim()).filter(Boolean);
       const pLines = gPlateInput.value.split("\n").map(l => l.trim()).filter(Boolean);
-      const currentGroupResults = [];
+      
+      window.currentGroupResults = [];
+      currentGroupPage = 1; // Resetar para a primeira página
       
       // ✅ Processamento em Lotes para não travar a UI
       const allItems = [];
@@ -868,20 +1143,23 @@ async function main() {
       const BATCH_SIZE = 10;
       let currentIndex = 0;
 
+      // Mostrar mensagem de carregamento inicial
+      gResults.innerHTML = `<div style="text-align:center; padding: 20px; color: var(--accent);">⚙️ Processando frotas em lotes...</div>`;
+
       const processBatch = async () => {
         const batch = allItems.slice(currentIndex, currentIndex + BATCH_SIZE);
+        
         if (batch.length === 0) {
           showReports("group", true);
-          window.currentGroupResults = currentGroupResults;
+          renderGroupResults(); // Renderização final com paginação
           return;
         }
+
+        const batchResults = [];
 
         const apiCalls = batch.map(pair => (async () => {
           const { vin, plate } = pair;
           const res = vin ? decoder.decode(vin) : { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
-          
-          const item = document.createElement("div"); 
-          item.className = "group-item";
           
           const itemData = { 
             tipo: vin && plate ? 'COMBINADO' : (vin ? 'VIN' : 'PLATE'), 
@@ -893,28 +1171,13 @@ async function main() {
             ob_data: {},
             status: 'pending'
           };
-          currentGroupResults.push(itemData);
-
-          let layout = "";
-          if (vin && plate) {
-            layout = `<div class="code"><span style="color:var(--accent);font-size:10px;display:block">VERIFICANDO PAR</span>${vin} / ${plate}</div>`;
-          } else if (vin) {
-            layout = `<div class="code"><span style="color:#e74c3c;font-size:10px;display:block">SEM PLACA</span>${vin}</div>`;
-          } else {
-            layout = `<div class="code"><span style="color:#e74c3c;font-size:10px;display:block">SEM CHASSI</span>${plate}</div>`;
-          }
-
-          item.innerHTML = `${layout}<div class="info"><span>${res.manufacturerName || "—"}</span><span class="status-msg" style="color:var(--muted)">Aguardando...</span></div>`;
-          item.onclick = () => openModal(vin ? itemData.result : null, vin || plate, !vin, vin && plate ? plate : null, itemData);
-          gResults.appendChild(item);
+          
+          window.currentGroupResults.push(itemData);
 
           if (vin && plate) {
-            const statusMsg = item.querySelector(".status-msg");
             try {
               const apiResult = await consultarPlacaPHP(plate, vin);
               if (apiResult.status === "ok") {
-                item.style.borderLeft = "4px solid #2ecc71";
-                statusMsg.innerHTML = `<span style="color:#2ecc71">✔ Confirmado</span>`;
                 itemData.status = 'ok';
                 
                 if (plate) {
@@ -945,23 +1208,22 @@ async function main() {
                   }
                 }
               } else {
-                item.style.borderLeft = "4px solid #e74c3c";
-                item.style.background = "rgba(231, 76, 60, 0.05)";
-                statusMsg.innerHTML = `<span style="color:#e74c3c">⚠ Divergência</span>`;
                 itemData.status = 'error';
               }
             } catch (e) { 
-              statusMsg.textContent = "Erro na verificação";
+              itemData.status = 'error';
               console.error("Erro no par do grupo:", e); 
             }
           } else {
-            item.style.borderLeft = "4px solid #f1c40f";
-            const statusMsg = item.querySelector(".status-msg");
-            statusMsg.innerHTML = `<span style="color:#f1c40f">Item Órfão</span>`;
+            itemData.status = 'orphan';
           }
         })());
 
         await Promise.all(apiCalls);
+        
+        // Renderizar o progresso (opcional, mas bom para feedback)
+        renderGroupResults();
+
         currentIndex += BATCH_SIZE;
         
         // Pausa para o navegador respirar
@@ -970,123 +1232,6 @@ async function main() {
       };
 
       processBatch(); // Inicia o processamento
-    };
-
-    // MODAL LOGIC — corrigido: não substitui document.getElementById
-    const openModal = async (result, code, isPlate = false, linkedPlate = null, itemData = null) => {
-      const mTitle = el("modalTitle");
-      const mSegs = el("modalSegments");
-      const mCards = el("modalCards");
-      mTitle.textContent = linkedPlate ? `Análise Completa: ${code} + ${linkedPlate}` : (isPlate ? `Dados OB: ${code}` : `Detalhes: ${code}`);
-      mSegs.innerHTML = ""; mCards.innerHTML = "";
-
-      // Se houver erro de verificação no itemData, mostramos o erro no modal e bloqueamos os detalhes
-      if (itemData && itemData.status === 'error') {
-        mSegs.innerHTML = `<div class="seg" style="background:#e74c3c;color:white">⚠ DIVERGÊNCIA DETECTADA</div>`;
-        const errorCard = document.createElement("div");
-        errorCard.className = "error";
-        errorCard.style.cssText = "background: rgba(231, 76, 60, 0.1); border: 1px solid #e74c3c; color: #e74c3c; padding: 20px; border-radius: 8px; margin: 20px; font-weight: 600; text-align: center; grid-column: 1/-1;";
-        errorCard.innerHTML = `Este chassi (${code}) não pertence à placa (${linkedPlate}).<br><small style="font-weight:normal">Por segurança, os detalhes técnicos foram bloqueados.</small>`;
-        mCards.appendChild(errorCard);
-        el("detailModal").style.display = "flex";
-        return;
-      }
-
-      const injectOB = (p, container) => {
-        const obWrapper = document.createElement("div");
-        obWrapper.style.marginTop = "16px";
-        obWrapper.style.borderTop = "1px solid var(--border)";
-        obWrapper.style.paddingTop = "20px";
-        container.appendChild(obWrapper);
-        const statusDiv = document.createElement("div");
-        statusDiv.style.textAlign = "center";
-        statusDiv.style.marginBottom = "16px";
-        statusDiv.style.fontSize = "14px";
-        statusDiv.textContent = `Buscando ${p}...`;
-        obWrapper.appendChild(statusDiv);
-        const obCards = document.createElement("div");
-        obCards.className = "cards";
-        obWrapper.appendChild(obCards);
-        
-        showSkeletons(obCards, 4);
-
-        const mediaBox = document.createElement("div");
-        mediaBox.style.display = "flex";
-        mediaBox.style.flexDirection = "column";
-        mediaBox.style.alignItems = "center";
-        mediaBox.style.gap = "16px";
-        mediaBox.style.marginTop = "20px";
-        obWrapper.appendChild(mediaBox);
-
-        let hasLoaded = false;
-        const checkClear = () => { if(!hasLoaded) { obCards.innerHTML = ""; hasLoaded = true; } };
-
-        const mockUI = {
-          getElementById: (id) => {
-            if (id === "secao-onibusbrasil") return obWrapper;
-            if (id === "ob_status") return {
-              set textContent(v) { 
-                statusDiv.textContent = v; 
-                if (v.includes("Aviso") || v.includes("Erro") || v.includes("sem ficha")) {
-                  checkClear();
-                }
-              },
-              style: { set color(c) { statusDiv.style.color = c; } }
-            };
-            if (id === "ob_encarrocadeira") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Encarroçadora", v)); if (itemData) itemData.ob.ob_encarrocadeira = v; } } };
-            if (id === "ob_carroceria") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Carroceria", v)); if (itemData) itemData.ob.ob_carroceria = v; } } };
-            if (id === "ob_fabricante_chassi") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Fabricante Chassi", v)); if (itemData) itemData.ob.ob_fabricante_chassi = v; } } };
-            if (id === "ob_chassi") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Modelo Chassi", v)); if (itemData) itemData.ob.ob_chassi = v; } } };
-            if (id === "ob_foto") return { set src(v) { if(v) { const i=document.createElement("img"); i.src=v; i.loading="lazy"; i.decoding="async"; i.style.width="100%"; i.style.maxWidth="600px"; i.style.borderRadius="12px"; i.style.boxShadow="var(--shadow)"; i.style.border="1px solid var(--border)"; mediaBox.prepend(i); } }, style: { set display(v) {} } };
-            if (id === "ob_fonte") return { set href(v) { if(v) { const a=document.createElement("a"); a.href=v; a.target="_blank"; a.textContent="🔗 Ficha Completa no Ônibus Brasil"; a.style.cssText="display:inline-block;padding:12px 24px;border-radius:8px;background:rgba(56,189,248,0.1);border:1px solid var(--accent-2);color:var(--accent-2);font-size:14px;font-weight:600;"; mediaBox.appendChild(a); } }, style: { set display(v) {} } };
-            if (id === "singleReportButtons") return { style: { set display(v) {} } };
-            return null;
-          }
-        };
-        window.buscarDadosOnibusBrasil(p, false, mockUI);
-      };
-
-      if (linkedPlate) {
-        mSegs.innerHTML = `<div class="seg">${code}</div><div class="seg" style="background:var(--accent);color:black">${linkedPlate}</div>`;
-        const c1 = document.createElement("div");
-        c1.className = "cards";
-        c1.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:15px;";
-        mCards.appendChild(c1);
-        setCards(result, c1);
-        const h = document.createElement("h3"); h.textContent = "🚌 Dados Carroceria"; h.style.gridColumn = "1/-1"; mCards.appendChild(h);
-        injectOB(linkedPlate, mCards);
-      } else if (isPlate) {
-        mSegs.innerHTML = `<div class="seg">${code}</div>`;
-        injectOB(code, mCards);
-      } else {
-        setSegments(result, mSegs);
-        setCards(result, mCards);
-      }
-
-      if (!isPlate && code.length === 17) {
-        try {
-          const apiRes = await fetchWithTimeout(`https://decodevin-1.onrender.com/decode/${code}`);
-          const apiData = await apiRes.json();
-          if (apiData?.Results?.length > 0) {
-            const ext = apiData.Results[0];
-            [{l:"Fabricante (API)",v:ext.Manufacturer},{l:"Modelo (API)",v:ext.Model},{l:"Ano Modelo (API)",v:ext.ModelYear},{l:"Tipo de Veículo",v:ext.VehicleType},{l:"País de Origem",v:ext.PlantCountry}].forEach(f => {
-              if (f.v && f.v!=="Not Applicable" && f.v!=="") mCards.appendChild(card(f.l, f.v));
-            });
-          }
-        } catch (e) {
-          console.error("Erro API Modal:", e);
-          const warn = document.createElement("div");
-          warn.className = "note";
-          warn.style.color = "var(--muted)";
-          warn.style.marginTop = "10px";
-          warn.style.textAlign = "center";
-          warn.style.gridColumn = "1/-1";
-          warn.textContent = "Os dados extras da API externa estão indisponíveis no momento, mas a decodificação local funcionou.";
-          mCards.appendChild(warn);
-        }
-      }
-
-      el("detailModal").style.display = "flex";
     };
 
     el("closeModal").onclick = () => el("detailModal").style.display = "none";

@@ -121,6 +121,14 @@
     <div class="bar">
       <button id="btnGroupDecode" style="width:100%" disabled>Decodificar Grupo</button>
     </div>
+
+    <!-- Importar Excel -->
+    <div class="bar" style="margin-top: 10px;">
+      <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display:none">
+      <button onclick="document.getElementById('excelFileInput').click()" class="btn" style="width:100%; background: #27ae60; color: white; display: flex; align-items: center; justify-content: center; gap: 8px;">
+        📂 Importar Excel
+      </button>
+    </div>
     
     <div id="reportButtons" style="display: none; gap: 10px; margin-bottom: 20px; justify-content: center;">
       <button id="btnExportCSV" style="background: var(--accent); color: black;">📄 Exportar Planilha (CSV)</button>
@@ -159,6 +167,17 @@
   <!-- Help Floating Button -->
   <div id="helpFab" class="help-fab" title="Iniciar Tour de Ajuda">?</div>
 
+  <!-- SheetJS para importação de Excel -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="src/importar-excel.js"></script>
   <script src="decodevin-integracao.js"></script>
   <script type="module" src="./src/app.js"></script>
+  
+  <script>
+    document.getElementById('excelFileInput')?.addEventListener('change', function(e) {
+      if (e.target.files && e.target.files[0]) {
+        window.lerExcelEPopularGrupo(e.target.files[0]);
+      }
+    });
+  </script>
 </body>

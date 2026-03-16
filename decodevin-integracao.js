@@ -94,7 +94,7 @@ async function buscarDadosOnibusBrasil(placaOuChassi, isChassis = false, uiOverr
 
         return data; // ✅ Retornar os dados para quem chamou
     } catch (error) {
-        console.error("Erro na integração OB:", err);
+        console.error("Erro na integração OB:", error);
         status.textContent = "Erro ao conectar com o serviço de busca.";
         status.style.color = "var(--danger)";
     }
