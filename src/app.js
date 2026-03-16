@@ -525,7 +525,11 @@ function renderGroupResults() {
     if (itemData.status === 'ok') {
       statusHtml = `<span style="color:#2ecc71">✔ Confirmado</span>`;
     } else if (itemData.status === 'error') {
-      statusHtml = `<span style="color:#e74c3c">⚠ Divergência</span>`;
+      if (String(itemData.error_detail).includes("402")) {
+        statusHtml = `<span style="color:#e74c3c">🔴 API SEM SALDO</span>`;
+      } else {
+        statusHtml = `<span style="color:#e74c3c">⚠ Divergência</span>`;
+      }
     } else if (itemData.status === 'pending') {
       statusHtml = `<span style="color:var(--muted)">Aguardando...</span>`;
     } else {
@@ -592,11 +596,26 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
 
   // Se houver erro de verificação no itemData, mostramos o erro no modal e bloqueamos os detalhes
   if (itemData && itemData.status === 'error') {
-    mSegs.innerHTML = `<div class="seg" style="background:#e74c3c;color:white">⚠ DIVERGÊNCIA DETECTADA</div>`;
+    const isNoBalance = String(itemData.error_detail || "").includes("402");
+    
+    if (isNoBalance) {
+      mSegs.innerHTML = `<div class="seg" style="background:#e74c3c;color:white">🔴 API SEM SALDO</div>`;
+    } else {
+      mSegs.innerHTML = `<div class="seg" style="background:#e74c3c;color:white">⚠ DIVERGÊNCIA DETECTADA</div>`;
+    }
+
     const errorCard = document.createElement("div");
     errorCard.className = "error";
     errorCard.style.cssText = "background: rgba(231, 76, 60, 0.1); border: 1px solid #e74c3c; color: #e74c3c; padding: 20px; border-radius: 8px; margin: 20px; font-weight: 600; text-align: center; grid-column: 1/-1;";
-    errorCard.innerHTML = `Este chassi (${code}) não pertence à placa (${linkedPlate}).<br><small style="font-weight:normal">Por segurança, os detalhes técnicos foram bloqueados.</small>`;
+    
+    if (isNoBalance) {
+       errorCard.innerHTML = `As consultas de validação de placa estão suspensas por falta de créditos na WDAPI.<br><small style="font-weight:normal">Por favor, recarregue seu saldo para continuar.</small>`;
+     } else if (String(itemData.error_detail || "").includes("não pertence")) {
+       errorCard.innerHTML = `Este chassi (${code}) não pertence à placa (${linkedPlate}).<br><small style="font-weight:normal; margin-top: 5px; display: block;">Por segurança, os detalhes técnicos foram bloqueados.</small>`;
+     } else {
+       errorCard.innerHTML = `Não foi possível localizar os dígitos do chassi para a placa ${linkedPlate} em fontes públicas.<br><small style="font-weight:normal; margin-top: 5px; display: block;">Por segurança, os detalhes técnicos não serão exibidos.</small>`;
+     }
+    
     mCards.appendChild(errorCard);
     return;
   }
@@ -952,17 +971,30 @@ async function main() {
         } else {
           // ❌ ERRO DE VALIDAÇÃO
           isPlateValidated = false;
-          if (verifEl) verifEl.innerHTML = `<span style="color:#e74c3c">${apiResult.mensagem || "⚠ Erro de validação"}</span>`;
+          
+          let errorMsg = "";
+          let subMsg = "Por segurança, os dados técnicos não serão exibidos.";
+          
+          if (String(apiResult.mensagem).includes("402")) {
+            errorMsg = "🔴 API SEM SALDO";
+            subMsg = "As consultas de validação de placa estão suspensas por falta de créditos na WDAPI.";
+          } else if (String(apiResult.mensagem).includes("não pertence")) {
+            errorMsg = `Este chassi (${chassiDigitado}) não pertence à placa (${p}).`;
+          } else {
+            errorMsg = `Não foi possível localizar os dígitos do chassi para a placa ${p} em fontes públicas.`;
+          }
+
+          if (verifEl) verifEl.innerHTML = `<span style="color:#e74c3c">${errorMsg}</span>`;
           const btnDecode = el("btnDecodeSingle");
           if (btnDecode) btnDecode.disabled = true;
           
           if (obSec) obSec.style.display = "none";
           showReports("single", false);
 
-          // ✅ Exibir a mensagem real vinda do servidor para facilitar diagnóstico
-          el("errors").innerHTML = `<div class="error" style="background: rgba(231, 76, 60, 0.1); border: 1px solid #e74c3c; color: #e74c3c; padding: 15px; border-radius: 8px; margin-top: 15px; font-weight: 600;">
-            ${apiResult.mensagem || "⚠ BLOQUEADO: A placa digitada não pertence a este chassi."}
-            <br><small style="font-weight: normal; opacity: 0.8;">Por segurança, os dados técnicos não serão exibidos.</small>
+          // ✅ Exibir a mensagem formatada conforme as imagens do usuário
+          el("errors").innerHTML = `<div class="error" style="background: rgba(231, 76, 60, 0.1); border: 1px solid #e74c3c; color: #e74c3c; padding: 20px; border-radius: 8px; margin-top: 15px; font-weight: 600; text-align: center; width: 100%;">
+            ${errorMsg}
+            <br><small style="font-weight: normal; opacity: 0.8; margin-top: 5px; display: block;">${subMsg}</small>
           </div>`;
         }
       } catch (e) {
@@ -1209,6 +1241,7 @@ async function main() {
                 }
               } else {
                 itemData.status = 'error';
+                itemData.error_detail = apiResult.mensagem; // ✅ Armazenar detalhe do erro
               }
             } catch (e) { 
               itemData.status = 'error';
