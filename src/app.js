@@ -805,6 +805,11 @@ async function main() {
       showReports("group", false);
       const rt = el("resultTitle"); if (rt) rt.style.display = "none";
       const ob = el("secao-onibusbrasil"); if (ob) ob.style.display = "none";
+      
+      // Sempre limpar o valor do input de arquivo para permitir novas importações
+      const excelInput = el("excelFileInput");
+      if (excelInput) excelInput.value = "";
+
       if (!keepInputs) {
         [vinInputSingle, plateInputSingle, gInput, gPlateInput].forEach(e => { if (e) e.value = ""; });
       }

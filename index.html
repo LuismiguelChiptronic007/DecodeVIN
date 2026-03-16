@@ -177,6 +177,8 @@
     document.getElementById('excelFileInput')?.addEventListener('change', function(e) {
       if (e.target.files && e.target.files[0]) {
         window.lerExcelEPopularGrupo(e.target.files[0]);
+        // Limpar o valor do input para permitir importar o mesmo arquivo novamente
+        e.target.value = '';
       }
     });
   </script>
