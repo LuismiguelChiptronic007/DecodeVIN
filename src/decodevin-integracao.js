@@ -4,8 +4,8 @@
 
 const WORKER_URL = "https://onibusbrasil-proxy.luismiguelgomesoliveira-014.workers.dev";
 
-async function buscarDadosOnibusBrasil(placa) {
-  if (!placa || placa.trim().length < 7) return;
+async function buscarDadosOnibusBrasil(placa, render = true) {
+  if (!placa || placa.trim().length < 7) return null;
 
   const secao            = document.getElementById("secao-onibusbrasil");
   const elCarroceria     = document.getElementById("ob_carroceria");
@@ -16,25 +16,23 @@ async function buscarDadosOnibusBrasil(placa) {
   const elFonte          = document.getElementById("ob_fonte");
   const elStatus         = document.getElementById("ob_status");
 
-  // ✅ Mostra a seção
- if (secao) secao.style.display = "block";
-  console.log("secao display:", 
-    document.getElementById("secao-onibusbrasil").style.display, 
-    getComputedStyle(document.getElementById("secao-onibusbrasil")).display 
-  );
+  // ✅ Mostra a seção apenas se render for true
+  if (render && secao) secao.style.display = "block";
  
-  // Reset campos
-  if (elCarroceria)     elCarroceria.textContent     = "—";
-  if (elEncarrocadeira) elEncarrocadeira.textContent = "—";
-  if (elChassi)         elChassi.textContent         = "—";
-  if (elFabChassi)      elFabChassi.textContent      = "—";
-  if (elFoto)           { elFoto.src = ""; elFoto.style.display = "none"; }
-  if (elFonte)          elFonte.style.display        = "none";
+  // Reset campos apenas se render for true
+  if (render) {
+    if (elCarroceria)     elCarroceria.textContent     = "—";
+    if (elEncarrocadeira) elEncarrocadeira.textContent = "—";
+    if (elChassi)         elChassi.textContent         = "—";
+    if (elFabChassi)      elFabChassi.textContent      = "—";
+    if (elFoto)           { elFoto.src = ""; elFoto.style.display = "none"; }
+    if (elFonte)          elFonte.style.display        = "none";
 
-  // Loading
-  if (elStatus) {
-    elStatus.textContent = "🔍 Buscando dados no OnibusBrasil...";
-    elStatus.style.color = "#f0a500";
+    // Loading
+    if (elStatus) {
+      elStatus.textContent = "🔍 Buscando dados no OnibusBrasil...";
+      elStatus.style.color = "#f0a500";
+    }
   }
 
   try {
@@ -42,43 +40,48 @@ async function buscarDadosOnibusBrasil(placa) {
     const dados = await response.json();
 
     if (dados.erro) {
-      if (elStatus) {
+      if (render && elStatus) {
         elStatus.textContent = "⚠️ " + dados.erro;
         elStatus.style.color = "#e74c3c";
       }
-      return;
+      return dados;
     }
 
-    // Preenche campos
-    if (elCarroceria)     elCarroceria.textContent     = dados.carroceria        || "—";
-    if (elEncarrocadeira) elEncarrocadeira.textContent = dados.encarrocadeira    || "—";
-    if (elChassi)         elChassi.textContent         = dados.modelo_chassi     || "—";
-    if (elFabChassi)      elFabChassi.textContent      = dados.fabricante_chassi || "—";
+    // Preenche campos apenas se render for true
+    if (render) {
+      if (elCarroceria)     elCarroceria.textContent     = dados.carroceria        || "—";
+      if (elEncarrocadeira) elEncarrocadeira.textContent = dados.encarrocadeira    || "—";
+      if (elChassi)         elChassi.textContent         = dados.modelo_chassi     || "—";
+      if (elFabChassi)      elFabChassi.textContent      = dados.fabricante_chassi || "—";
 
-    // Foto
-    if (elFoto && dados.foto_url) {
-      elFoto.src = dados.foto_url;
-      elFoto.style.display = "block";
+      // Foto
+      if (elFoto && dados.foto_url) {
+        elFoto.src = dados.foto_url;
+        elFoto.style.display = "block";
+      }
+
+      // Link fonte
+      if (elFonte && dados.fonte) {
+        elFonte.href = dados.fonte;
+        elFonte.textContent = "Ver ficha completa no Ônibus Brasil";
+        elFonte.style.display = "inline-block";
+      }
+
+      if (elStatus) {
+        elStatus.textContent = "✅ Dados encontrados com sucesso!";
+        elStatus.style.color = "#2ecc71";
+      }
     }
 
-    // Link fonte
-    if (elFonte && dados.fonte) {
-      elFonte.href = dados.fonte;
-      elFonte.textContent = "Ver ficha completa no Ônibus Brasil";
-      elFonte.style.display = "inline-block";
-    }
-
-    if (elStatus) {
-      elStatus.textContent = "✅ Dados encontrados com sucesso!";
-      elStatus.style.color = "#2ecc71";
-    }
+    return dados;
 
   } catch (err) {
-    if (elStatus) {
+    if (render && elStatus) {
       elStatus.textContent = "❌ Erro ao conectar com o servidor proxy.";
       elStatus.style.color = "#e74c3c";
     }
     console.error("Erro OnibusBrasil:", err);
+    return { erro: "Erro ao conectar com o servidor proxy." };
   }
 }
 

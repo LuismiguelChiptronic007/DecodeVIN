@@ -35,18 +35,16 @@ async function consultarKePlaca(placa) {
   }
 }
 
-// Função para verificar placa e chassi via Cloudflare Worker (Scraping KePlaca)
-const WORKER_PLACA_URL = "https://keplaca-proxy.luismiguelgomesoliveira-014.workers.dev";
-
+// Função para verificar placa e chassi via script local PHP (Scraping KePlaca)
 async function consultarPlacaPHP(placa, chassiDigitado = "") {
   try {
     const resp = await fetch(
-      `${WORKER_PLACA_URL}/?placa=${placa}&chassi=${chassiDigitado}`
+      `api_verificar_placa.php?placa=${placa}&chassi=${chassiDigitado}`
     );
     return await resp.json();
   } catch (e) {
-    console.error("Erro Worker keplaca:", e);
-    return { status: "erro", mensagem: "Erro de conexão" };
+    console.error("Erro na verificação local:", e);
+    return { status: "erro", mensagem: "Erro de conexão com o servidor de verificação" };
   }
 }
 
@@ -188,7 +186,7 @@ function showSkeletons(container, count = 4) {
   }
 }
 
-function toggleValueSkeletons(container, isLoading) {
+function toggleValueSkeletons(container, isLoading, restoreValue = true) {
   if (!container) return;
   const values = container.querySelectorAll(".value");
   values.forEach(v => {
@@ -200,11 +198,51 @@ function toggleValueSkeletons(container, isLoading) {
     } else {
       v.classList.remove("skeleton");
       v.classList.remove("skeleton-value");
-      if (v.dataset.oldValue && v.textContent === "") {
-        v.textContent = v.dataset.oldValue;
-      }
+      if (restoreValue && v.dataset.oldValue) v.textContent = v.dataset.oldValue;
     }
   });
+}
+
+function renderResult(result, text) {
+  const segs = el("segments");
+  const cards = el("cards");
+  const errors = el("errors");
+
+  if (segs) {
+    segs.innerHTML = "";
+    if (result.type === "VIN") {
+      const parts = [text.slice(0, 3), text.slice(3, 9), text.slice(9)];
+      parts.forEach(p => {
+        const d = document.createElement("div");
+        d.className = "seg";
+        d.textContent = p;
+        segs.appendChild(d);
+      });
+    }
+  }
+
+  if (cards) {
+    cards.innerHTML = "";
+    const fragment = document.createDocumentFragment();
+    result.tokens.forEach(t => {
+      if (t.value != null && t.value !== "—") {
+        fragment.appendChild(card(t.label, t.value));
+      }
+    });
+    cards.appendChild(fragment);
+  }
+
+  if (errors) {
+    errors.innerHTML = "";
+    if (result.errors && result.errors.length > 0) {
+      result.errors.forEach(e => {
+        const d = document.createElement("div");
+        d.className = "error";
+        d.textContent = e;
+        errors.appendChild(d);
+      });
+    }
+  }
 }
 
 window.toggleValueSkeletons = toggleValueSkeletons;
@@ -484,17 +522,18 @@ async function main() {
     if (btnSingle) btnSingle.disabled = true;
     if (btnPlateSingle) btnPlateSingle.disabled = true;
 
-    const runVIN = async () => {
+    let isPlateValidated = false;
+
+    const runVIN = async (force = false) => {
       if (!vinInputSingle) return;
       const text = vinInputSingle.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
       if (text.length === 0) return;
 
-      // Se houver placa, a verificação deve ter passado ou estar em apresentando OK
       const plate = plateInputSingle ? plateInputSingle.value.trim().toUpperCase() : "";
-      const verifEl = el("ob_verificacao");
       
-      if (plate && verifEl && (verifEl.innerHTML.includes("#e74c3c") || verifEl.innerHTML === "")) {
-          // Se houver erro de verificação ou não foi verificado ainda
+      // ✅ NOVA LÓGICA: Só bloqueia se houver placa informada E ela não estiver validada
+      // Se o campo de placa estiver vazio, libera a decodificação do chassi normalmente
+      if (plate !== "" && !isPlateValidated && !force) {
           el("errors").innerHTML = `<div class="error">Verifique a placa antes de decodificar ou corrija a divergência.</div>`;
           return;
       }
@@ -502,42 +541,38 @@ async function main() {
       el("errors").innerHTML = "";
       const result = decoder.decode(text);
       
-      // ✅ ATUALIZA O OBJETO GLOBAL AO DECODIFICAR
-      if (!window.currentSingleResult) {
-        window.currentSingleResult = { tipo: 'VIN', vin: text, placa: plate, result, fabricante: result.manufacturerName, ob: {} };
-      } else {
-        window.currentSingleResult.vin = text;
-        window.currentSingleResult.result = result;
-        window.currentSingleResult.fabricante = result.manufacturerName;
-      }
       if (result.type === "UNKNOWN" && text.length === 17) {
         result.type = "VIN";
         result.input = text;
         result.tokens = [{ key: "wmi", label: "WMI", value: text.slice(0, 3) }];
       }
+
       if (result.type === "UNKNOWN") {
         el("errors").innerHTML = `<div class="error">Chassi não reconhecido. Certifique-se de que o código está correto.</div>`;
         return;
       }
-      setSegments(result);
-      setCards(result);
-      setErrors(result);
-      const rt = el("resultTitle");
-      if (rt) rt.style.display = "block";
-      showReports("single", true);
+
+      // Exibir título e seções de resultado
+      const rt = el("resultTitle"); if (rt) rt.style.display = "block";
+      const segs = el("segments"); if (segs) { segs.innerHTML = ""; segs.style.display = "flex"; }
+      
+      renderResult(result, text);
+      
+      // ✅ ATUALIZA O OBJETO GLOBAL AO DECODIFICAR
       window.currentSingleResult = {
         tipo: result.type,
         vin: text,
-        placa: plateInputSingle ? plateInputSingle.value.trim().toUpperCase() : "",
+        placa: plate,
         fabricante: result.manufacturerName || "Desconhecido",
         result: result,
         ob: {}
       };
+
       addHistoryEntry(text);
 
       if (text.length === 17) {
         try {
-          const apiRes = await fetchWithTimeout(`https://decodevin-1.onrender.com/decode/${text}`);
+          const apiRes = await fetchWithTimeout(`https://decodevin-1.onrender.com/decode/${text}`, { timeout: 30000 });
           const apiData = await apiRes.json();
           if (apiData?.Results?.length > 0) {
             const ext = apiData.Results[0];
@@ -569,7 +604,7 @@ async function main() {
       }
     };
 
-    const runPlate = () => {
+    const runPlate = async () => {
       if (!plateInputSingle) return;
       const p = plateInputSingle.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
       const vin = vinInputSingle ? vinInputSingle.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") : "";
@@ -579,7 +614,7 @@ async function main() {
         return;
       }
 
-      // ✅ Garantir que o objeto global tenha o VIN e a Placa ANTES da consulta
+      isPlateValidated = false; // Resetar estado ao iniciar nova busca
       window.currentSingleResult = { vin: vin, placa: p, ob: {}, result: null };
 
       // Limpar resultados anteriores ao iniciar nova busca de placa
@@ -593,79 +628,74 @@ async function main() {
       showReports("single", false);
 
       el("errors").innerHTML = "";
-      if (window.buscarDadosOnibusBrasil) {
-        if (obSec) obSec.style.display = "block";
-        el("ob_status").textContent = "Buscando...";
-        toggleValueSkeletons(el("ob_container"), true);
-        
-        // --- VALIDAÇÃO VIA CLOUDFLARE WORKER (SCRAPING KEPLACA) ---
-        const chassiDigitado = vinInputSingle ? vinInputSingle.value.trim().toUpperCase() : "";
-        if (verifEl) verifEl.innerHTML = `<span style="color:var(--muted); font-weight:normal">Verificando placa...</span>`;
+      
+      if (obSec) obSec.style.display = "block";
+      el("ob_status").textContent = "Buscando...";
+      toggleValueSkeletons(el("ob_container"), true);
+      
+      const chassiDigitado = vinInputSingle ? vinInputSingle.value.trim().toUpperCase() : "";
+      if (verifEl) verifEl.innerHTML = `<span style="color:var(--muted); font-weight:normal">Verificando placa...</span>`;
 
-        consultarPlacaPHP(p, chassiDigitado).then(apiResult => {
-          if (verifEl) {
-            if (apiResult.status === "ok") {
-              verifEl.innerHTML = `<span style="color:#2ecc71">${apiResult.mensagem || "✔ Chassi confirmado"}</span>`;
-              // Libera decodificação
-              const btnDecode = el("btnDecodeSingle");
-              if (btnDecode) btnDecode.disabled = false;
-              
-              // ✅ MOSTRAR RESULTADO AUTOMATICAMENTE SE COINCIDIR
-              runVIN(); 
-              showReports("single", true);
+      try {
+        // ✅ 1. Aguarda a validação da placa pelo PHP
+        const apiResult = await consultarPlacaPHP(p, chassiDigitado);
+        console.log("Resultado da verificação de placa:", apiResult);
+
+        if (apiResult.status === "ok") {
+          isPlateValidated = true; // ✅ MARCAR COMO VALIDADO
+          if (verifEl) verifEl.innerHTML = `<span style="color:#2ecc71">${apiResult.mensagem || "✔ Chassi confirmado"}</span>`;
+          const btnDecode = el("btnDecodeSingle");
+          if (btnDecode) btnDecode.disabled = false;
+          
+          // ✅ MOSTRAR RESULTADO AUTOMATICAMENTE
+          runVIN(true); 
+          showReports("single", true);
+
+          // ✅ 2. Só agora busca os dados do Ônibus Brasil (Evita condição de corrida)
+          if (window.buscarDadosOnibusBrasil) {
+            const obData = await window.buscarDadosOnibusBrasil(p);
+            toggleValueSkeletons(el("ob_container"), false, false);
+            addHistoryEntry(vinInputSingle.value, p);
+            
+            if (!window.currentSingleResult) {
+              window.currentSingleResult = { tipo: 'PLATE', placa: p, ob: {}, ob_data: obData || {} };
             } else {
-              verifEl.innerHTML = `<span style="color:#e74c3c">${apiResult.mensagem || "⚠ Erro de validação"}</span>`;
-              // Bloqueia a consulta principal e ESCONDE resultados se houver divergência
-              const btnDecode = el("btnDecodeSingle");
-              if (btnDecode) btnDecode.disabled = true;
-              
-              // ❌ NÃO APRESENTA NENHUM RESULTADO SE FOR DIFERENTE
-              if (obSec) obSec.style.display = "none";
-              showReports("single", false);
+              window.currentSingleResult.placa = p;
+              window.currentSingleResult.ob_data = obData || {};
+            }
+            
+            window.currentSingleResult.ob = {
+              ob_encarrocadeira: el("ob_encarrocadeira").textContent,
+              ob_carroceria: el("ob_carroceria").textContent,
+              ob_fabricante_chassi: el("ob_fabricante_chassi").textContent,
+              ob_chassi: el("ob_chassi").textContent
+            };
 
-              // ✅ MENSAGEM DE ERRO CLARA NA ÁREA DE ERROS
-              el("errors").innerHTML = `<div class="error" style="background: rgba(231, 76, 60, 0.1); border: 1px solid #e74c3c; color: #e74c3c; padding: 15px; border-radius: 8px; margin-top: 15px; font-weight: 600;">
-                ⚠ BLOQUEADO: A placa digitada não pertence a este chassi. 
-                <br><small style="font-weight: normal; opacity: 0.8;">Por segurança, os dados técnicos não serão exibidos.</small>
-              </div>`;
+            if (window.currentSingleResult.vin) {
+               const result = decoder.decode(window.currentSingleResult.vin);
+               window.currentSingleResult.result = result;
+               window.currentSingleResult.fabricante = result.manufacturerName;
             }
           }
-        });
-
-        window.buscarDadosOnibusBrasil(p).then(async (obData) => {
-          // Só continua se a verificação não tiver falhado (verifEl não contém erro)
-          if (verifEl && verifEl.innerHTML.includes("#e74c3c")) {
-             if (obSec) obSec.style.display = "none";
-             return;
-          }
-
-          toggleValueSkeletons(el("ob_container"), false);
-          addHistoryEntry(vinInputSingle.value, p);
-          
+        } else {
+          // ❌ ERRO DE VALIDAÇÃO
+          isPlateValidated = false;
+          if (verifEl) verifEl.innerHTML = `<span style="color:#e74c3c">${apiResult.mensagem || "⚠ Erro de validação"}</span>`;
           const btnDecode = el("btnDecodeSingle");
-
-          if (!window.currentSingleResult) {
-            window.currentSingleResult = { tipo: 'PLATE', placa: p, ob: {}, ob_data: obData || {} };
-          } else {
-            window.currentSingleResult.placa = p;
-            window.currentSingleResult.ob_data = obData || {};
-          }
+          if (btnDecode) btnDecode.disabled = true;
           
-          // Captura os dados após o preenchimento do Ônibus Brasil
-          window.currentSingleResult.ob = {
-            ob_encarrocadeira: el("ob_encarrocadeira").textContent,
-            ob_carroceria: el("ob_carroceria").textContent,
-            ob_fabricante_chassi: el("ob_fabricante_chassi").textContent,
-            ob_chassi: el("ob_chassi").textContent
-          };
+          if (obSec) obSec.style.display = "none";
+          showReports("single", false);
 
-          // ✅ Forçar atualização do objeto global para o exportCSV
-          if (window.currentSingleResult.vin) {
-             const result = decoder.decode(window.currentSingleResult.vin);
-             window.currentSingleResult.result = result;
-             window.currentSingleResult.fabricante = result.manufacturerName;
-          }
-        });
+          // ✅ Exibir a mensagem real vinda do servidor para facilitar diagnóstico
+          el("errors").innerHTML = `<div class="error" style="background: rgba(231, 76, 60, 0.1); border: 1px solid #e74c3c; color: #e74c3c; padding: 15px; border-radius: 8px; margin-top: 15px; font-weight: 600;">
+            ${apiResult.mensagem || "⚠ BLOQUEADO: A placa digitada não pertence a este chassi."}
+            <br><small style="font-weight: normal; opacity: 0.8;">Por segurança, os dados técnicos não serão exibidos.</small>
+          </div>`;
+        }
+      } catch (e) {
+        console.error("Erro no fluxo de validação:", e);
+        if (verifEl) verifEl.innerHTML = `<span style="color:#e74c3c">Erro de conexão</span>`;
       }
     };
 
@@ -682,6 +712,9 @@ async function main() {
         const val = vinInputSingle.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17);
         vinInputSingle.value = val;
         vinInputSingle.setSelectionRange(pos, pos);
+        
+        // Se o campo de chassi tiver algo, libera o botão de decodificar
+        // A trava de segurança só agirá dentro da função runVIN se houver placa
         if (btnSingle) btnSingle.disabled = val.length === 0;
 
         // Se o campo estiver vazio, limpar os resultados exibidos
@@ -885,8 +918,8 @@ async function main() {
                 itemData.status = 'ok';
                 
                 if (plate) {
-                   const obData = await window.buscarDadosOnibusBrasil(plate, false, document);
-                   if (obData) {
+                   const obData = await window.buscarDadosOnibusBrasil(plate, false);
+                   if (obData && !obData.erro) {
                      itemData.ob_data = obData;
                      itemData.ob = {
                         ob_carroceria: obData.carroceria || "—",
