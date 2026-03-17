@@ -444,9 +444,7 @@ const exportCSV = (data, name) => {
     "PLACA",
     "ANO",
     "CARROCERIA",
-    "MODELO CHASSI CARROCERIA",
     "ENCARROÇADEIRA",
-    "MODELO CHASSI ENCARROÇADEIRA",
     "MOTOR",
     "MODELO CHASSI"
   ];
@@ -463,19 +461,15 @@ const exportCSV = (data, name) => {
       return t ? t.value : "—";
     };
 
-    // Mapeamento corrigido: 
-    // MODELO CHASSI CARROCERIA e MODELO CHASSI ENCARROÇADEIRA agora mostram o MODELO (ex: OF-1722M)
     const row = [
       item.fabricante || findToken("Fabricante") || "—",  // MONTADORA
       item.vin || "—",                                   // CHASSI
       item.placa || "—",                                  // PLACA
       findToken("Ano Modelo") || "—",                    // ANO
       ob.carroceria || "—",                              // CARROCERIA
-      ob.modelo_chassi || ob.chassi || "—",              // MODELO CHASSI CARROCERIA
       ob.encarrocadeira || ob.encarrocadora || "—",      // ENCARROÇADEIRA
-      ob.modelo_chassi || ob.chassi || "—",              // MODELO CHASSI ENCARROÇADEIRA
       findToken("Motor") || "—",                         // MOTOR
-      ob.modelo_chassi || ob.chassi || findToken("Modelo") || "—" // MODELO CHASSI (Novo campo solicitado)
+      ob.modelo_chassi || ob.chassi || findToken("Modelo") || "—" // MODELO CHASSI
     ];
 
     csv += row.map(val => {
