@@ -425,7 +425,8 @@ const exportCSV = (data, name) => {
     "MODELO CHASSI CARROCERIA",
     "ENCARROÇADEIRA",
     "MODELO CHASSI ENCARROÇADEIRA",
-    "MOTOR"
+    "MOTOR",
+    "MODELO CHASSI"
   ];
 
   // Cabeçalho com BOM para Excel reconhecer acentos
@@ -433,7 +434,7 @@ const exportCSV = (data, name) => {
 
   data.forEach(item => {
     const tokens = item.result?.tokens || [];
-    const ob = item.ob_data || {};
+    const ob = item.ob_data || item.ob || {};
     
     const findToken = (label) => {
       const t = tokens.find(t => t.label === label || t.key === label.toLowerCase().replace(/ /g, "_"));
@@ -450,8 +451,9 @@ const exportCSV = (data, name) => {
       ob.carroceria || "—",                              // CARROCERIA
       ob.modelo_chassi || ob.chassi || "—",              // MODELO CHASSI CARROCERIA
       ob.encarrocadeira || ob.encarrocadora || "—",      // ENCARROÇADEIRA
-      ob.modelo_chassi || ob.chassi || "—",              // MODELO CHASSI ENCARROÇADEIRA (Corrigido para o modelo)
-      findToken("Motor") || "—"                          // MOTOR
+      ob.modelo_chassi || ob.chassi || "—",              // MODELO CHASSI ENCARROÇADEIRA
+      findToken("Motor") || "—",                         // MOTOR
+      ob.modelo_chassi || ob.chassi || findToken("Modelo") || "—" // MODELO CHASSI (Novo campo solicitado)
     ];
 
     csv += row.map(val => {
@@ -947,31 +949,53 @@ async function main() {
           runVIN(true); 
           showReports("single", true);
 
-          // ✅ 2. Só agora busca os dados do Ônibus Brasil (Evita condição de corrida)
-          if (window.buscarDadosOnibusBrasil) {
-            const obData = await window.buscarDadosOnibusBrasil(p);
-            toggleValueSkeletons(el("ob_container"), false, false);
-            addHistoryEntry(vinInputSingle.value, p);
-            
-            if (!window.currentSingleResult) {
-              window.currentSingleResult = { tipo: 'PLATE', placa: p, ob: {}, ob_data: obData || {} };
-            } else {
-              window.currentSingleResult.placa = p;
-              window.currentSingleResult.ob_data = obData || {};
+          // ✅ 2. Tentar usar os dados do OB que vieram no cache da API de placa
+          let obData = apiResult.ob_data;
+          
+          if (obData && obData.success) {
+            console.log("Usando dados do Ônibus Brasil vindos do cache DB");
+            // Preencher a UI com os dados do cache
+            if (el("ob_container")) {
+              el("ob_status").textContent = "Dados carregados do cache local.";
+              el("ob_status").style.color = "var(--accent)";
+              el("ob_encarrocadeira").textContent = obData.encarrocadeira || obData.encarrocadora || "—";
+              el("ob_carroceria").textContent = obData.carroceria || "—";
+              el("ob_fabricante_chassi").textContent = obData.fabricante_chassi || obData.fabricante || "—";
+              el("ob_chassi").textContent = obData.modelo_chassi || obData.chassi || "—";
+              if (obData.foto_url && el("ob_foto")) {
+                el("ob_foto").src = obData.foto_url;
+                el("ob_foto").style.display = "block";
+              }
+              const fonte = el("ob_fonte");
+              if (fonte) {
+                fonte.href = `https://onibusbrasil.com/placa/${p}`;
+                fonte.style.display = "inline-block";
+              }
+              toggleValueSkeletons(el("ob_container"), false, false);
             }
-            
+          } else if (window.buscarDadosOnibusBrasil) {
+            // Se não tem no cache, busca normalmente no Worker
+            obData = await window.buscarDadosOnibusBrasil(p);
+            toggleValueSkeletons(el("ob_container"), false, false);
+          }
+
+          addHistoryEntry(vinInputSingle.value, p);
+          
+          if (!window.currentSingleResult) {
+            window.currentSingleResult = { tipo: 'PLATE', placa: p, ob: {}, ob_data: obData || {} };
+          } else {
+            window.currentSingleResult.placa = p;
+            window.currentSingleResult.ob_data = obData || {};
+          }
+          
+          // Atualizar objeto global para relatórios
+          if (el("ob_container")) {
             window.currentSingleResult.ob = {
               ob_encarrocadeira: el("ob_encarrocadeira").textContent,
               ob_carroceria: el("ob_carroceria").textContent,
               ob_fabricante_chassi: el("ob_fabricante_chassi").textContent,
               ob_chassi: el("ob_chassi").textContent
             };
-
-            if (window.currentSingleResult.vin) {
-               const result = decoder.decode(window.currentSingleResult.vin);
-               window.currentSingleResult.result = result;
-               window.currentSingleResult.fabricante = result.manufacturerName;
-            }
           }
         } else {
           // ❌ ERRO DE VALIDAÇÃO
