@@ -35,41 +35,37 @@ async function consultarKePlaca(placa) {
   }
 }
 
-// Função para verificar placa e chassi via script local PHP (Scraping KePlaca)
+// Função para verificar placa e chassi via API direta (Worker Cloudflare) - BYPASS PHP
 async function consultarPlacaPHP(placa, chassiDigitado = "") {
   try {
-    // Detecta se estamos rodando no GitHub Pages
-    const isGitHubPages = window.location.hostname.includes("github.io");
-    
-    // Se estiver no GitHub Pages, precisamos da URL completa do XAMPP local (via 127.0.0.1)
-    // Se estiver em QUALQUER outro lugar (localhost ou domínio como duckdns.org), 
-    // usamos o caminho relativo para evitar erros de CORS e PNA.
-    const apiUrl = isGitHubPages 
-      ? `http://127.0.0.1/DecodeVIN/api_verificar_placa.php?placa=${placa}&chassi=${chassiDigitado}`
-      : `api_verificar_placa.php?placa=${placa}&chassi=${chassiDigitado}`;
+    console.log("Iniciando consulta de placa direta (Worker) para:", placa);
 
-    console.log("Iniciando consulta de placa em:", apiUrl);
+    // ✅ Chamada direta ao Worker do KePlaca (evita problemas de PHP/XAMPP/PNA)
+    const workerUrl = `https://keplaca-proxy.luismiguelgomesoliveira-014.workers.dev/?placa=${placa}`;
+    const resp = await fetch(workerUrl);
+    const data = await resp.json();
 
-    const resp = await fetch(apiUrl, {
-      method: 'GET',
-      mode: 'cors'
-    });
-    
-    // Se o retorno for texto HTML (começa com <), o PHP não está sendo processado
-    const contentType = resp.headers.get("content-type");
-    if (contentType && contentType.includes("text/html")) {
-      const text = await resp.text();
-      if (text.trim().startsWith("<?php")) {
-        throw new Error("O servidor retornou o código PHP puro. Certifique-se de que o Apache está processando arquivos .php.");
-      }
+    console.log("Dados recebidos do Worker:", data);
+
+    if (data && data.status === 'ok' && data.final_chassi) {
+      const final_site = data.final_chassi.toUpperCase();
+      
+      // Simula a estrutura que o PHP retornava para manter compatibilidade com o restante do código
+      return {
+        status: "ok",
+        final: final_site,
+        mensagem: `Chassi final encontrado: ${final_site}`,
+        fonte: "worker_keplaca"
+      };
     }
 
-    return await resp.json();
+    throw new Error("Placa não encontrada ou erro no Worker.");
+
   } catch (e) {
-    console.error("Erro na verificação local:", e);
+    console.error("Erro na verificação direta:", e);
     return { 
       status: "erro", 
-      mensagem: "Erro de conexão com o servidor PHP. Verifique se o XAMPP (Apache e MySQL) está ligado e se a pasta no htdocs chama 'DecodeVIN'." 
+      mensagem: "Não foi possível localizar os dígitos do chassi para esta placa em fontes públicas." 
     };
   }
 }

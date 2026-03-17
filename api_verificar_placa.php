@@ -2,6 +2,7 @@
 // ✅ 1. CONFIGURAÇÕES DE CABEÇALHO PARA PERMITIR ACESSO DO GITHUB (CORS + PNA)
 header('Content-Type: application/json'); 
 
+/*
 // Permitir origens de forma dinâmica
 if (isset($_SERVER['HTTP_ORIGIN'])) {
     header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
@@ -24,10 +25,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
     http_response_code(200);
     exit;
 }
-
-/**
- * API DE VERIFICAÇÃO DE CHASSI (SCRAPING)
- */
 
 $placa  = strtoupper(trim($_POST['placa']  ?? $_GET['placa']  ?? '')); 
 $chassi = strtoupper(trim($_POST['chassi'] ?? $_GET['chassi'] ?? '')); 
@@ -193,4 +190,7 @@ if (!empty($chassi)) {
         "ob_data" => $ob_cache ?? null
     ]);
 }
+*/
+
+echo json_encode(["status" => "desativado", "mensagem" => "O backend PHP foi desativado temporariamente."]);
 ?>
