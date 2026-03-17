@@ -1,18 +1,22 @@
 <?php 
 // ✅ 1. CONFIGURAÇÕES DE CABEÇALHO PARA PERMITIR ACESSO DO GITHUB (CORS + PNA)
 header('Content-Type: application/json'); 
-header('Access-Control-Allow-Origin: *'); 
+
+// Permitir origens específicas ou todas (ajuste conforme necessário)
+if (isset($_SERVER['HTTP_ORIGIN'])) {
+    header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
+    header('Access-Control-Allow-Credentials: true');
+} else {
+    header('Access-Control-Allow-Origin: *');
+}
+
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 header('Access-Control-Allow-Private-Network: true'); 
+header('Access-Control-Max-Age: 86400');
 
 // ✅ 2. RESPONDER A REQUISIÇÕES DE TESTE (PREFLIGHT)
 if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-    if (isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD']))
-        header("Access-Control-Allow-Methods: GET, POST, OPTIONS");         
-    if (isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']))
-        header("Access-Control-Allow-Headers: {$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']}");
-    header('Access-Control-Max-Age: 86400');
     http_response_code(200);
     exit;
 }
