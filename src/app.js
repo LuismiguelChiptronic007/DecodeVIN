@@ -989,11 +989,18 @@ async function main() {
               }
               toggleValueSkeletons(el("ob_container"), false, false);
             }
-          } else if (window.buscarDadosOnibusBrasil) {
-            // Se não tem no cache, busca normalmente no Worker
-            obData = await window.buscarDadosOnibusBrasil(p);
-            toggleValueSkeletons(el("ob_container"), false, false);
-          }
+          } else if (window.buscarDadosOnibusBrasil) { 
+            obData = await window.buscarDadosOnibusBrasil(p); 
+            toggleValueSkeletons(el("ob_container"), false, false); 
+          
+            // ✅ Se o fallback retornou chassi via KePlaca, preenche manualmente 
+            if (obData && obData.final_chassi && !obData.carroceria) { 
+              el("ob_chassi").textContent = obData.chassi || obData.final_chassi || "—"; 
+              el("ob_status").textContent = "Dados parciais via KePlaca."; 
+              el("ob_status").style.color = "#f0a500"; 
+            } 
+          } 
+
 
           addHistoryEntry(vinInputSingle.value, p);
           
