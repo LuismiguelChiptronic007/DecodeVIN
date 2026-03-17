@@ -55,6 +55,7 @@ if (empty($placa)) {
 $final_site = '';
 $fonte = '';
 
+/* 
 // ✅ 1. VERIFICAR NO BANCO DE DADOS (CACHE)
 if ($conn) {
     $stmt = $conn->prepare("SELECT * FROM cache_placas WHERE placa = ?");
@@ -79,6 +80,7 @@ if ($conn) {
     }
     $stmt->close();
 }
+*/
 
 // ✅ 2. SE NÃO ESTÁ NO BANCO, CONSULTA A API (SCRAPING)
 if (empty($final_site)) {
@@ -170,6 +172,7 @@ if (empty($final_site)) {
         }
     }
 
+    /* 
     // ✅ SALVAR NO BANCO SE ENCONTROU PELA PRIMEIRA VEZ (DADOS BÁSICOS)
     if ($conn && !empty($final_site)) {
         $stmt_save = $conn->prepare("INSERT IGNORE INTO cache_placas (placa, final_chassi, fonte_original) VALUES (?, ?, ?)");
@@ -177,6 +180,7 @@ if (empty($final_site)) {
         $stmt_save->execute();
         $stmt_save->close();
     }
+    */
 }
 
 // ✅ SE ENCONTROU A PLACA MAS NÃO TEM DADOS DO OB, BUSCA NO WORKER DO OB
@@ -196,6 +200,7 @@ if (!empty($final_site) && !isset($ob_cache)) {
         $ob_data = json_decode($ob_res, true);
         if ($ob_data && isset($ob_data['success']) && $ob_data['success']) {
             $ob_cache = $ob_data;
+                        /* 
             // Salvar no banco (Cache completo)
             if ($conn) {
                 $stmt_up = $conn->prepare("INSERT INTO cache_placas (placa, final_chassi, fonte_original, ob_encarrocadeira, ob_carroceria, ob_fabricante_chassi, ob_modelo_chassi, ob_foto_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ob_encarrocadeira=VALUES(ob_encarrocadeira), ob_carroceria=VALUES(ob_carroceria), ob_fabricante_chassi=VALUES(ob_fabricante_chassi), ob_modelo_chassi=VALUES(ob_modelo_chassi), ob_foto_url=VALUES(ob_foto_url)");
@@ -208,6 +213,7 @@ if (!empty($final_site) && !isset($ob_cache)) {
                 $stmt_up->execute();
                 $stmt_up->close();
             }
+            */
         }
     }
 }
