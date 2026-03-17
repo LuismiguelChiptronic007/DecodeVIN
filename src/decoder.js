@@ -142,7 +142,8 @@ function getBusBodyworkByModel(manufacturerId, modelName) {
   
   if (manufacturerId === "vwco") {
     if (m.includes("OD")) return "Urbano / Escolar (Motor Dianteiro)";
-    if (m.includes("OT")) return "Urbano / Rodoviário (Motor Traseiro)";
+    if (m.includes("OT")) return "Urbano / Rodoviário (Motor Traseiro)"
+    if (m.includes("S")) return "Piso Alto (Motor Traseiro)";
   }
   
   if (manufacturerId === "agrale") {
@@ -624,7 +625,8 @@ const VWCO_VDS_FAMILY_MAP_2012 = {
   "TH7": "7.90 S",
   "TJ7": "7.90 CO",
   "TM7": "7.110 CO",
-  "A8T": "17.230 OD/ODS"
+  "A8T": "17.230 OD/ODS",
+  "F8T": "22.260 S"
 };
 
 const VWCO_MODEL_ENGINE_MAP = {
@@ -683,7 +685,8 @@ const VWCO_MODEL_ENGINE_MAP = {
   "8.140 OT": "MAN D0834",
   "7.90 S": "MAN D0834",
   "7.90 CO": "MAN D0834",
-  "7.110 CO": "MAN D0834"
+  "7.110 CO": "MAN D0834",
+  "22.260 S": "MAN D08 36"
 };
 
 // Volvo WMIs
