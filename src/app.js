@@ -38,20 +38,36 @@ async function consultarKePlaca(placa) {
 // Função para verificar placa e chassi via script local PHP (Scraping KePlaca)
 async function consultarPlacaPHP(placa, chassiDigitado = "") {
   try {
+    // URL base do servidor PHP (Ajuste para seu endereço IP se for usar em outros dispositivos na rede)
+    const baseUrl = "http://localhost/DecodeVIN/";
+    
     // Detectar se o site está rodando no GitHub Pages ou Localhost
     const isGitHubPages = window.location.hostname.includes("github.io");
     
-    // Se estiver no GitHub, aponta para o servidor que hospeda o PHP (XAMPP Local ou Servidor Online)
-    // Se estiver local, usa o caminho relativo padrão
+    // No GitHub Pages, precisamos usar a URL completa do localhost
     const apiUrl = isGitHubPages 
-      ? `http://localhost/DecodeVIN/api_verificar_placa.php?placa=${placa}&chassi=${chassiDigitado}`
+      ? `${baseUrl}api_verificar_placa.php?placa=${placa}&chassi=${chassiDigitado}`
       : `api_verificar_placa.php?placa=${placa}&chassi=${chassiDigitado}`;
 
-    const resp = await fetch(apiUrl);
+    console.log("Consultando API em:", apiUrl);
+
+    const resp = await fetch(apiUrl, {
+      method: 'GET',
+      mode: 'cors', // Garantir que o modo CORS está ativo
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!resp.ok) throw new Error(`HTTP error! status: ${resp.status}`);
+    
     return await resp.json();
   } catch (e) {
     console.error("Erro na verificação local:", e);
-    return { status: "erro", mensagem: "Erro de conexão com o servidor de verificação (PHP não encontrado ou offline)" };
+    return { 
+      status: "erro", 
+      mensagem: "Não foi possível conectar ao servidor PHP local. Certifique-se de que o XAMPP está ligado e o Apache/MySQL estão ativos." 
+    };
   }
 }
 

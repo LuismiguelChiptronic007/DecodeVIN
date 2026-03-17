@@ -1,10 +1,18 @@
 <?php 
+// ✅ HABILITAR ACESSO EXTERNO (CORS) PARA O GITHUB PAGES
 header('Content-Type: application/json'); 
 header('Access-Control-Allow-Origin: *'); 
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+
+// Responder a requisições preflight (OPTIONS)
+if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
 
 /**
  * API DE VERIFICAÇÃO DE CHASSI (SCRAPING)
- * Objetivo: Extrair apenas os últimos dígitos do chassi para comparação.
  */
 
 // ✅ CONFIGURAÇÃO DO BANCO DE DATAS (AJUSTE CONFORME SEU XAMPP)
