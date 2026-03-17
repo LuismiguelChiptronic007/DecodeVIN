@@ -1,25 +1,26 @@
 /**
- * INTEGRAÇÃO ONIBUSBRASIL → DecodeVIN (v3 - corrigido)
+ * INTEGRAÇÃO ONIBUSBRASIL → DecodeVIN (v4 - com fallback keplaca)
  */
 
-const WORKER_URL = "https://onibusbrasil-proxy.luismiguelgomesoliveira-014.workers.dev";
+const WORKER_URL    = "https://onibusbrasil-proxy.luismiguelgomesoliveira-014.workers.dev";
+const KEPLACA_URL   = "https://keplaca-proxy.luismiguelgomesoliveira-014.workers.dev";
 
-async function buscarDadosOnibusBrasil(placa, render = true) {
+async function buscarDadosOnibusBrasil(placa, render = true, docRef) {
+  const doc = docRef || document;
+
   if (!placa || placa.trim().length < 7) return null;
 
-  const secao            = document.getElementById("secao-onibusbrasil");
-  const elCarroceria     = document.getElementById("ob_carroceria");
-  const elEncarrocadeira = document.getElementById("ob_encarrocadeira");
-  const elChassi         = document.getElementById("ob_chassi");
-  const elFabChassi      = document.getElementById("ob_fabricante_chassi");
-  const elFoto           = document.getElementById("ob_foto");
-  const elFonte          = document.getElementById("ob_fonte");
-  const elStatus         = document.getElementById("ob_status");
+  const secao            = doc.getElementById("secao-onibusbrasil");
+  const elCarroceria     = doc.getElementById("ob_carroceria");
+  const elEncarrocadeira = doc.getElementById("ob_encarrocadeira");
+  const elChassi         = doc.getElementById("ob_chassi");
+  const elFabChassi      = doc.getElementById("ob_fabricante_chassi");
+  const elFoto           = doc.getElementById("ob_foto");
+  const elFonte          = doc.getElementById("ob_fonte");
+  const elStatus         = doc.getElementById("ob_status");
 
-  // ✅ Mostra a seção apenas se render for true
   if (render && secao) secao.style.display = "block";
- 
-  // Reset campos apenas se render for true
+
   if (render) {
     if (elCarroceria)     elCarroceria.textContent     = "—";
     if (elEncarrocadeira) elEncarrocadeira.textContent = "—";
@@ -27,53 +28,67 @@ async function buscarDadosOnibusBrasil(placa, render = true) {
     if (elFabChassi)      elFabChassi.textContent      = "—";
     if (elFoto)           { elFoto.src = ""; elFoto.style.display = "none"; }
     if (elFonte)          elFonte.style.display        = "none";
-
-    // Loading
     if (elStatus) {
       elStatus.textContent = "🔍 Buscando dados no OnibusBrasil...";
       elStatus.style.color = "#f0a500";
     }
   }
 
+  const placaUpper = placa.trim().toUpperCase();
+
   try {
-    const response = await fetch(`${WORKER_URL}/?placa=${placa.trim().toUpperCase()}`);
+    // ✅ TENTATIVA 1 — OnibusBrasil
+    const response = await fetch(`${WORKER_URL}/?placa=${placaUpper}`);
     const dados = await response.json();
 
-    if (dados.erro) {
-      if (render && elStatus) {
-        elStatus.textContent = "⚠️ " + dados.erro;
-        elStatus.style.color = "#e74c3c";
-      }
+    const naoEncontrado = !dados.success || dados.erro ||
+      (typeof dados.erro === "string" && dados.erro.length > 0);
+
+    if (!naoEncontrado) {
+      // ✅ Achou no OnibusBrasil — preenche e retorna
+      if (render) preencherUI({ 
+        carroceria:     dados.carroceria     || dados.modelo_chassi || "—",
+        encarrocadeira: dados.encarrocadora  || "—",
+        chassi:         dados.chassi        || "—",
+        fabricante:     dados.fabricante     || "—",
+        foto_url:       dados.foto_url       || null,
+        fonte:          dados.fonte          || null,
+        fonte_cache:    dados.fonte_cache    || false,
+      }, elCarroceria, elEncarrocadeira, elChassi, elFabChassi, elFoto, elFonte, elStatus);
       return dados;
     }
 
-    // Preenche campos apenas se render for true
-    if (render) {
-      if (elCarroceria)     elCarroceria.textContent     = dados.carroceria        || "—";
-      if (elEncarrocadeira) elEncarrocadeira.textContent = dados.encarrocadeira    || "—";
-      if (elChassi)         elChassi.textContent         = dados.modelo_chassi     || "—";
-      if (elFabChassi)      elFabChassi.textContent      = dados.fabricante_chassi || "—";
-
-      // Foto
-      if (elFoto && dados.foto_url) {
-        elFoto.src = dados.foto_url;
-        elFoto.style.display = "block";
-      }
-
-      // Link fonte
-      if (elFonte && dados.fonte) {
-        elFonte.href = dados.fonte;
-        elFonte.textContent = "Ver ficha completa no Ônibus Brasil";
-        elFonte.style.display = "inline-block";
-      }
-
-      if (elStatus) {
-        elStatus.textContent = "✅ Dados encontrados com sucesso!";
-        elStatus.style.color = "#2ecc71";
-      }
+    //  Não achou no OnibusBrasil — tenta o keplaca-proxy
+    if (render && elStatus) {
+      elStatus.textContent = "🔄 Buscando via KePlaca...";
+      elStatus.style.color = "#f0a500";
     }
 
-    return dados;
+    const respKe = await fetch(`${KEPLACA_URL}/?placa=${placaUpper}`);
+    const dadosKe = await respKe.json();
+
+    if (dadosKe.status === "ok" && dadosKe.chassi_completo) {
+      const dadosFallback = {
+        carroceria:     "—",
+        encarrocadeira: "—",
+        chassi:         dadosKe.chassi_completo  || "—",
+        fabricante:     "—",
+        foto_url:       null,
+        fonte:          null,
+        fonte_cache:    dadosKe.fonte === "cache",
+        final_chassi:   dadosKe.final_chassi,
+      };
+
+      if (render) preencherUI(dadosFallback, elCarroceria, elEncarrocadeira, elChassi, elFabChassi, elFoto, elFonte, elStatus, true);
+      return dadosFallback;
+    }
+
+    //  Nenhuma fonte encontrou
+    if (render && elStatus) {
+      elStatus.textContent = `⚠️ Placa ${placaUpper} sem ficha nas fontes disponíveis.`;
+      elStatus.style.color = "#e74c3c";
+    }
+    return { erro: "Placa não encontrada em nenhuma fonte." };
 
   } catch (err) {
     if (render && elStatus) {
@@ -85,5 +100,32 @@ async function buscarDadosOnibusBrasil(placa, render = true) {
   }
 }
 
-// ✅ ESSENCIAL: expõe a função no escopo global para o app.js conseguir chamar
+// ── Função auxiliar para preencher a UI ──────────────────
+function preencherUI(dados, elCarroceria, elEncarrocadeira, elChassi, elFabChassi, elFoto, elFonte, elStatus, isFallback = false) {
+  if (elCarroceria)     elCarroceria.textContent     = dados.carroceria     || "—";
+  if (elEncarrocadeira) elEncarrocadeira.textContent = dados.encarrocadeira || "—";
+  if (elChassi)         elChassi.textContent         = dados.chassi         || "—";
+  if (elFabChassi)      elFabChassi.textContent      = dados.fabricante     || "—";
+
+  if (elFoto && dados.foto_url) {
+    elFoto.src = dados.foto_url;
+    elFoto.style.display = "block";
+  }
+
+  if (elFonte && dados.fonte) {
+    elFonte.href = dados.fonte;
+    elFonte.textContent = "Ver ficha completa no Ônibus Brasil";
+    elFonte.style.display = "inline-block";
+  }
+
+  if (elStatus) {
+    if (isFallback) {
+      elStatus.textContent = `✅ Chassi encontrado: ${dados.final_chassi || dados.chassi}${dados.fonte_cache ? " (cache)" : ""}`;
+    } else {
+      elStatus.textContent = `✅ Dados encontrados!${dados.fonte_cache ? " (cache)" : ""}`;
+    }
+    elStatus.style.color = "#2ecc71";
+  }
+}
+
 window.buscarDadosOnibusBrasil = buscarDadosOnibusBrasil;
