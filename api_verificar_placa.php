@@ -1,18 +1,18 @@
 <?php 
-// ✅ HABILITAR ACESSO EXTERNO (CORS) PARA O GITHUB PAGES
+// ✅ 1. CONFIGURAÇÕES DE CABEÇALHO PARA PERMITIR ACESSO DO GITHUB (CORS + PNA)
 header('Content-Type: application/json'); 
 header('Access-Control-Allow-Origin: *'); 
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-header('Access-Control-Allow-Private-Network: true'); // ✅ PERMITIR ACESSO DO GITHUB (PUBLIC) AO LOCALHOST (PRIVATE)
+header('Access-Control-Allow-Private-Network: true'); 
 
-// Responder a requisições preflight (OPTIONS)
+// ✅ 2. RESPONDER A REQUISIÇÕES DE TESTE (PREFLIGHT)
 if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
     if (isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD']))
         header("Access-Control-Allow-Methods: GET, POST, OPTIONS");         
     if (isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']))
         header("Access-Control-Allow-Headers: {$_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']}");
-    header('Access-Control-Max-Age: 86400');    // cache por 1 dia
+    header('Access-Control-Max-Age: 86400');
     http_response_code(200);
     exit;
 }
@@ -21,19 +21,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
  * API DE VERIFICAÇÃO DE CHASSI (SCRAPING)
  */
 
-// ✅ CONFIGURAÇÃO DO BANCO DE DATAS (AJUSTE CONFORME SEU XAMPP)
+// ✅ 3. CONFIGURAÇÃO DO BANCO DE DADOS (XAMPP LOCAL)
 $db_host = 'localhost';
 $db_user = 'root';
 $db_pass = '';
-$db_name = 'decodevin'; // ✅ Certifique-se de criar este banco de dados no PHPMyAdmin
+$db_name = 'decodevin_db'; 
 
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+$conn = @new mysqli($db_host, $db_user, $db_pass, $db_name);
 
-// Se houver erro na conexão, continua sem banco (para não travar o sistema)
 if ($conn->connect_error) {
-    error_log("Erro de conexão DB: " . $conn->connect_error);
+    // Se o banco não existir ou falhar, tentamos apenas o scraping para não travar
     $conn = null;
 }
+
+// ... restante do código mantido ...
 
 $placa  = strtoupper(trim($_POST['placa']  ?? $_GET['placa']  ?? '')); 
 $chassi = strtoupper(trim($_POST['chassi'] ?? $_GET['chassi'] ?? '')); 
