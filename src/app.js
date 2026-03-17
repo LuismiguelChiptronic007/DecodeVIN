@@ -40,20 +40,16 @@ async function consultarPlacaPHP(placa, chassiDigitado = "") {
   try {
     const isGitHubPages = window.location.hostname.includes("github.io");
     
-    // Se estiver no GitHub Pages, força a URL completa do seu XAMPP local
-    // Se estiver rodando localmente (localhost), usa o caminho relativo
+    // Se estiver no GitHub Pages, tenta o IP de loopback (mais estável em alguns navegadores para PNA)
     const apiUrl = isGitHubPages 
-      ? `http://localhost/DecodeVIN/api_verificar_placa.php?placa=${placa}&chassi=${chassiDigitado}`
+      ? `http://127.0.0.1/DecodeVIN/api_verificar_placa.php?placa=${placa}&chassi=${chassiDigitado}`
       : `api_verificar_placa.php?placa=${placa}&chassi=${chassiDigitado}`;
 
     console.log("Iniciando consulta de placa em:", apiUrl);
 
     const resp = await fetch(apiUrl, {
       method: 'GET',
-      mode: 'cors',
-      headers: {
-        'Accept': 'application/json'
-      }
+      mode: 'cors'
     });
     
     // Se o retorno for texto HTML (começa com <), o PHP não está sendo processado

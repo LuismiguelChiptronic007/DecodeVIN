@@ -2,7 +2,7 @@
 // ✅ 1. CONFIGURAÇÕES DE CABEÇALHO PARA PERMITIR ACESSO DO GITHUB (CORS + PNA)
 header('Content-Type: application/json'); 
 
-// Permitir origens específicas ou todas (ajuste conforme necessário)
+// Permitir origens de forma dinâmica
 if (isset($_SERVER['HTTP_ORIGIN'])) {
     header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
     header('Access-Control-Allow-Credentials: true');
@@ -11,12 +11,16 @@ if (isset($_SERVER['HTTP_ORIGIN'])) {
 }
 
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Access-Control-Request-Private-Network');
 header('Access-Control-Allow-Private-Network: true'); 
 header('Access-Control-Max-Age: 86400');
 
 // ✅ 2. RESPONDER A REQUISIÇÕES DE TESTE (PREFLIGHT)
 if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+    // Para PNA (Private Network Access), o navegador exige que o OPTIONS retorne 200 e os cabeçalhos PNA
+    if (isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_PRIVATE_NETWORK'])) {
+        header('Access-Control-Allow-Private-Network: true');
+    }
     http_response_code(200);
     exit;
 }
