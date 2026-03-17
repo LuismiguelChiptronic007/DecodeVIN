@@ -38,12 +38,13 @@ async function consultarKePlaca(placa) {
 // Função para verificar placa e chassi via script local PHP (Scraping KePlaca)
 async function consultarPlacaPHP(placa, chassiDigitado = "") {
   try {
-    // Detecta se o site está rodando em um servidor público (GitHub Pages ou Domínio Próprio)
-    const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    // Detecta se estamos rodando no GitHub Pages
+    const isGitHubPages = window.location.hostname.includes("github.io");
     
-    // Se o site for público (HTTPS), ele tentará acessar o seu XAMPP local via 127.0.0.1
-    // Caso contrário, se estiver rodando tudo localmente, usa o caminho relativo
-    const apiUrl = !isLocal 
+    // Se estiver no GitHub Pages, precisamos da URL completa do XAMPP local (via 127.0.0.1)
+    // Se estiver em QUALQUER outro lugar (localhost ou domínio como duckdns.org), 
+    // usamos o caminho relativo para evitar erros de CORS e PNA.
+    const apiUrl = isGitHubPages 
       ? `http://127.0.0.1/DecodeVIN/api_verificar_placa.php?placa=${placa}&chassi=${chassiDigitado}`
       : `api_verificar_placa.php?placa=${placa}&chassi=${chassiDigitado}`;
 

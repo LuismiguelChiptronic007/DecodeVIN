@@ -29,21 +29,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
  * API DE VERIFICAÇÃO DE CHASSI (SCRAPING)
  */
 
-// ✅ 3. CONFIGURAÇÃO DO BANCO DE DADOS (XAMPP LOCAL)
-$db_host = 'localhost';
-$db_user = 'root';
-$db_pass = '';
-$db_name = 'decodevin_db'; 
-
-$conn = @new mysqli($db_host, $db_user, $db_pass, $db_name);
-
-if ($conn->connect_error) {
-    // Se o banco não existir ou falhar, tentamos apenas o scraping para não travar
-    $conn = null;
-}
-
-// ... restante do código mantido ...
-
 $placa  = strtoupper(trim($_POST['placa']  ?? $_GET['placa']  ?? '')); 
 $chassi = strtoupper(trim($_POST['chassi'] ?? $_GET['chassi'] ?? '')); 
 
@@ -55,34 +40,7 @@ if (empty($placa)) {
 $final_site = '';
 $fonte = '';
 
-/* 
-// ✅ 1. VERIFICAR NO BANCO DE DADOS (CACHE)
-if ($conn) {
-    $stmt = $conn->prepare("SELECT * FROM cache_placas WHERE placa = ?");
-    $stmt->bind_param("s", $placa);
-    $stmt->execute();
-    $result_db = $stmt->get_result();
-    
-    if ($row = $result_db->fetch_assoc()) {
-        $final_site = $row['final_chassi'];
-        $fonte = $row['fonte_original'] . ' (DB_CACHE)';
-        
-        // Dados extras do Ônibus Brasil se existirem no cache
-        $ob_cache = [
-            "success" => true,
-            "encarrocadeira" => $row['ob_encarrocadeira'],
-            "carroceria" => $row['ob_carroceria'],
-            "fabricante_chassi" => $row['ob_fabricante_chassi'],
-            "modelo_chassi" => $row['ob_modelo_chassi'],
-            "foto_url" => $row['ob_foto_url'],
-            "is_cache" => true
-        ];
-    }
-    $stmt->close();
-}
-*/
-
-// ✅ 2. SE NÃO ESTÁ NO BANCO, CONSULTA A API (SCRAPING)
+// ✅ CONSULTA A API (SCRAPING)
 if (empty($final_site)) {
     // ✅ TENTATIVA 0 — Cloudflare Worker (Prioritário e mais estável)
     $worker_url = "https://keplaca-proxy.luismiguelgomesoliveira-014.workers.dev/?placa=" . $placa;
@@ -171,16 +129,6 @@ if (empty($final_site)) {
             }
         }
     }
-
-    /* 
-    // ✅ SALVAR NO BANCO SE ENCONTROU PELA PRIMEIRA VEZ (DADOS BÁSICOS)
-    if ($conn && !empty($final_site)) {
-        $stmt_save = $conn->prepare("INSERT IGNORE INTO cache_placas (placa, final_chassi, fonte_original) VALUES (?, ?, ?)");
-        $stmt_save->bind_param("sss", $placa, $final_site, $fonte);
-        $stmt_save->execute();
-        $stmt_save->close();
-    }
-    */
 }
 
 // ✅ SE ENCONTROU A PLACA MAS NÃO TEM DADOS DO OB, BUSCA NO WORKER DO OB
@@ -200,20 +148,6 @@ if (!empty($final_site) && !isset($ob_cache)) {
         $ob_data = json_decode($ob_res, true);
         if ($ob_data && isset($ob_data['success']) && $ob_data['success']) {
             $ob_cache = $ob_data;
-                        /* 
-            // Salvar no banco (Cache completo)
-            if ($conn) {
-                $stmt_up = $conn->prepare("INSERT INTO cache_placas (placa, final_chassi, fonte_original, ob_encarrocadeira, ob_carroceria, ob_fabricante_chassi, ob_modelo_chassi, ob_foto_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ob_encarrocadeira=VALUES(ob_encarrocadeira), ob_carroceria=VALUES(ob_carroceria), ob_fabricante_chassi=VALUES(ob_fabricante_chassi), ob_modelo_chassi=VALUES(ob_modelo_chassi), ob_foto_url=VALUES(ob_foto_url)");
-                $enc = $ob_data['encarrocadeira'] ?? $ob_data['encarrocadora'] ?? null;
-                $car = $ob_data['carroceria'] ?? null;
-                $fab = $ob_data['fabricante_chassi'] ?? $ob_data['fabricante'] ?? null;
-                $mod = $ob_data['modelo_chassi'] ?? $ob_data['chassi'] ?? null;
-                $fot = $ob_data['foto_url'] ?? null;
-                $stmt_up->bind_param("ssssssss", $placa, $final_site, $fonte, $enc, $car, $fab, $mod, $fot);
-                $stmt_up->execute();
-                $stmt_up->close();
-            }
-            */
         }
     }
 }
@@ -259,6 +193,4 @@ if (!empty($chassi)) {
         "ob_data" => $ob_cache ?? null
     ]);
 }
-
-if ($conn) $conn->close();
 ?>
