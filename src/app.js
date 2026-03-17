@@ -38,13 +38,20 @@ async function consultarKePlaca(placa) {
 // Função para verificar placa e chassi via script local PHP (Scraping KePlaca)
 async function consultarPlacaPHP(placa, chassiDigitado = "") {
   try {
-    const resp = await fetch(
-      `api_verificar_placa.php?placa=${placa}&chassi=${chassiDigitado}`
-    );
+    // Detectar se o site está rodando no GitHub Pages ou Localhost
+    const isGitHubPages = window.location.hostname.includes("github.io");
+    
+    // Se estiver no GitHub, aponta para o servidor que hospeda o PHP (XAMPP Local ou Servidor Online)
+    // Se estiver local, usa o caminho relativo padrão
+    const apiUrl = isGitHubPages 
+      ? `http://localhost/DecodeVIN/api_verificar_placa.php?placa=${placa}&chassi=${chassiDigitado}`
+      : `api_verificar_placa.php?placa=${placa}&chassi=${chassiDigitado}`;
+
+    const resp = await fetch(apiUrl);
     return await resp.json();
   } catch (e) {
     console.error("Erro na verificação local:", e);
-    return { status: "erro", mensagem: "Erro de conexão com o servidor de verificação" };
+    return { status: "erro", mensagem: "Erro de conexão com o servidor de verificação (PHP não encontrado ou offline)" };
   }
 }
 
