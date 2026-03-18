@@ -117,6 +117,35 @@ try {
           fonte_cache:    dadosKe.fonte === "cache",
           final_chassi:   dadosKe.final_chassi,
         };
+        const obData = await window.buscarDadosOnibusBrasil(plate, true);
+
+// ✅ VERIFICAÇÃO DE DIVERGÊNCIA
+if (obData && !obData.erro && result && result.tokens) {
+  const finalChassiPlaca = obData.final_chassi || (obData.chassi ? obData.chassi.slice(-7) : null);
+  const serialToken = result.tokens.find(t => t.key === 'check_digit_and_serial');
+  
+  if (serialToken && finalChassiPlaca) {
+    const finalChassiVIN = serialToken.value.slice(-finalChassiPlaca.length);
+
+    if (finalChassiPlaca.toUpperCase() !== finalChassiVIN.toUpperCase()) {
+      const statusEl = el("ob_status");
+      
+      if (statusEl) {
+        statusEl.innerHTML = `
+          <div style="background: rgba(231, 76, 60, 0.1); ...">
+            <strong ...>⚠️ DIVERGÊNCIA CRÍTICA</strong>
+            <p ...>
+              A placa <strong>${plate}</strong> pertence a um veículo com final de chassi <strong>${finalChassiPlaca}</strong>.
+              <br>O chassi decodificado tem final <strong>${finalChassiVIN}</strong>.
+            </p>
+          </div>
+        `;
+      }
+      
+      return; // Interrompe a renderização dos dados do OB
+    }
+  }
+}
         preencherUI(dadosFallback, elCarroceria, elEncarrocadeira, elChassi, elFabChassi, elFoto, elFonte, elStatus, true); 
         return dadosFallback; 
       } 
