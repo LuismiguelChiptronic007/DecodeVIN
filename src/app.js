@@ -8,7 +8,7 @@ async function loadRules() {
 }
 
 async function fetchWithTimeout(resource, options = {}) {
-  const { timeout = 5000 } = options;
+  const { timeout = 30000 } = options; // Aumentado para 30s
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   try {
@@ -17,6 +17,10 @@ async function fetchWithTimeout(resource, options = {}) {
     return response;
   } catch (error) {
     clearTimeout(id);
+    // Se for erro de timeout (AbortError), tratamos como erro de conexão
+    if (error.name === 'AbortError') {
+      throw new Error('Timeout na requisição');
+    }
     throw error;
   }
 }
@@ -673,7 +677,8 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
         if (id === "ob_status") return {
           set textContent(v) { 
             statusDiv.textContent = v; 
-            if (v.includes("Aviso") || v.includes("Erro") || v.includes("sem ficha")) {
+            // Limpa esqueletos em caso de sucesso (✅) ou erro (⚠️/❌/sem ficha)
+            if (v.includes("✅") || v.includes("Aviso") || v.includes("Erro") || v.includes("sem ficha") || v.includes("Não encontrada")) {
               checkClear();
             }
           },
@@ -689,7 +694,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
         return null;
       }
     };
-    window.buscarDadosOnibusBrasil(p, false, mockUI);
+    window.buscarDadosOnibusBrasil(p, true, mockUI);
   };
 
   if (linkedPlate) {
@@ -1278,7 +1283,7 @@ async function main() {
                 }
 
                 if (vin.length === 17) {
-                  const apiRes = await fetchWithTimeout(`https://decodevin-1.onrender.com/decode/${vin}`);
+                  const apiRes = await fetch(`https://decodevin-1.onrender.com/decode/${vin}`);
                   const apiData = await apiRes.json();
                   if (apiData?.Results?.length > 0) {
                     const ext = apiData.Results[0];
