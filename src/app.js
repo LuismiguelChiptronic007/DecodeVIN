@@ -51,16 +51,27 @@ async function consultarPlacaPHP(placa, chassiDigitado = "") {
 
     console.log("Dados recebidos do Worker:", data);
 
-    if (data && data.status === 'ok' && data.final_chassi) {
-      const final_site = data.final_chassi.toUpperCase();
+    if (data && data.status === 'ok') {
+      // ✅ Prioriza chassi_completo (17 chars) para validação exata, caso disponível
+      const final_site = (data.chassi_completo || data.final_chassi || "").toUpperCase();
       
-      // Simula a estrutura que o PHP retornava para manter compatibilidade com o restante do código
-      return {
-        status: "ok",
-        final: final_site,
-        mensagem: `Chassi final encontrado: ${final_site}`,
-        fonte: "worker_keplaca"
-      };
+      if (final_site) {
+        // ✅ VALIDAÇÃO: Se o chassi foi fornecido, verifica se coincide com os dados da placa
+        if (chassiDigitado && !isChassisMatch(chassiDigitado, final_site)) {
+          return {
+            status: "erro",
+            mensagem: `Divergência: Este chassi (${chassiDigitado}) não pertence à placa (${placa}).`,
+            final: final_site
+          };
+        }
+
+        return {
+          status: "ok",
+          final: final_site,
+          mensagem: `Chassi final encontrado: ${final_site}`,
+          fonte: "worker_keplaca"
+        };
+      }
     }
 
     throw new Error("Placa não encontrada ou erro no Worker.");
@@ -140,11 +151,17 @@ function isChassisMatch(vin, partial) {
      const v = vin.toUpperCase().replace(/[^A-Z0-9]/g, "");
      const p = partial.toUpperCase().replace(/[^A-Z0-9]/g, "");
      
-     // REGRAS PARA IDENTIFICAR SE É UM NOME DE MODELO (não deve bloquear)
-     const isModel = (
-       p.length < 8 || // Chassis reais costumam ter pelo menos os últimos 8 dígitos
-       p.includes("-") || // Modelos costumam ter hífens
-       (/[A-Z]{2,}/.test(p) && !/^[0-9]+$/.test(p)) // Tem várias letras e não é só números
+     // ✅ NOVA LÓGICA DE DETECÇÃO DE MODELO: 
+     // Só ignoramos a validação se a string parecer um nome puramente alfabético (ex: "BUS", "SCANIA").
+     // Se contiver NÚMEROS e tiver pelo menos 4 caracteres, deve ser validado.
+     const hasNumbers = /[0-9]/.test(p);
+     const isLikelySerial = hasNumbers && p.length >= 4;
+     
+     // Consideramos modelo se não parecer um serial e tiver características de nome
+     const isModel = !isLikelySerial && p.length < 17 && (
+       p.length < 4 || // Muito curto
+       /^[A-Z]+$/.test(p) || // Só letras
+       p.includes("-") || p.includes(" ")
      );
 
      if (isModel) {
@@ -152,19 +169,26 @@ function isChassisMatch(vin, partial) {
        return true; 
      }
  
-     console.log(`[Validando Chassi] Digitado: ${v} | Retornado: ${p}`);
+     console.log(`[Validando Chassi] Digitado: ${v} | Retornado da API: ${p}`);
  
-     // Se for um VIN completo de 17 caracteres, a comparação deve ser exata
+     // Comparação exata para VIN completo
      if (p.length === 17) {
-       return v === p;
+       const match = v === p;
+       console.log(`[Validando Chassi] Comparação 17 chars: ${match ? "OK" : "DIVERGENTE"}`);
+       return match;
      }
 
-     // Se for o final do chassi (8 dígitos), verifica se o VIN termina com ele
-     if (p.length >= 8) {
-       return v.endsWith(p);
+     // Comparação final para VIS (8 chars)
+     if (p.length === 8) {
+       const match = v.endsWith(p);
+       console.log(`[Validando Chassi] Comparação 8 chars (final): ${match ? "OK" : "DIVERGENTE"}`);
+       return match;
      }
      
-     return v.includes(p);
+     // Se for um pedaço menor (ex: 7 dígitos), verifica se está contido no VIN
+     const match = v.includes(p);
+     console.log(`[Validando Chassi] Comparação parcial (${p.length} chars): ${match ? "OK" : "DIVERGENTE"}`);
+     return match;
    }
 
 function card(label, value) {
@@ -608,7 +632,10 @@ function renderGroupResults() {
 
     let layout = "";
     if (vin && plate) {
-      layout = `<div class="code"><span style="color:var(--accent);font-size:10px;display:block">VERIFICANDO PAR</span>${vin} / ${plate}</div>`;
+      const isMismatch = itemData.status === 'error' && String(itemData.error_detail || "").includes("não pertence");
+      const labelColor = isMismatch ? '#e74c3c' : 'var(--accent)';
+      const labelText = isMismatch ? 'DIVERGÊNCIA ENCONTRADA' : 'VERIFICANDO PAR';
+      layout = `<div class="code"><span style="color:${labelColor};font-size:10px;display:block">${labelText}</span>${vin} / ${plate}</div>`;
     } else if (vin) {
       layout = `<div class="code"><span style="color:#e74c3c;font-size:10px;display:block">SEM PLACA</span>${vin}</div>`;
     } else {
