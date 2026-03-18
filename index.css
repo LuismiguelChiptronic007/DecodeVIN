@@ -177,13 +177,12 @@ button:disabled{opacity:.6;cursor:not-allowed;filter:none;box-shadow:none}
 /* Cards */
 .cards{
   display:grid;
-  grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns:repeat(auto-fit, minmax(220px, 280px));
+  justify-content: center;
   gap:15px;
   margin-bottom:16px;
+  width: 100%;
 }
-#ob_container.cards{grid-template-columns:repeat(4, 1fr);}
-@media(max-width:1024px){#ob_container.cards{grid-template-columns:repeat(2, 1fr);}}
-@media(max-width:640px){#ob_container.cards{grid-template-columns:1fr;}}
 
 .card{
   display:flex;flex-direction:column;justify-content:center;
@@ -518,3 +517,4 @@ a{color:#93c5fd;text-decoration:none}
   cursor: not-allowed !important;
   transform: none !important;
 }
+

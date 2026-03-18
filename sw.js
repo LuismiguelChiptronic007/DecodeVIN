@@ -1,4 +1,4 @@
-const CACHE_NAME = 'decodevin-v2';
+const CACHE_NAME = 'decodevin-v3';
 const ASSETS = [
   './',
   './index.html',

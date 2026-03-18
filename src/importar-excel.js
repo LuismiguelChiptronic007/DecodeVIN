@@ -60,8 +60,34 @@ function lerExcelEPopularGrupo(file) {
       const combined    = document.getElementById('combinedMode'); 
       const gBtn        = document.getElementById('btnGroupDecode'); 
   
-      if (!gInput || !gPlateInput) { 
-        alert('Navegue para a tela de Consulta em Grupo antes de importar.'); 
+      if (!gInput || !gPlateInput) { // ✅ Trecho alterado em app.js, dentro da função injectOB:
+
+const obCards = document.createElement("div");
+obCards.className = "cards";// ✅ Trecho corrigido em app.js, dentro da função injectOB:
+
+const injectOB = (p, container, itemData) => {
+  // ... (código anterior)
+
+  const obCards = document.createElement("div");
+  obCards.className = "cards";
+
+  // ✅ ESTILO DE GRID APLICADO NO LUGAR CERTO:
+  obCards.style.cssText = "display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:15px;";
+  
+  obWrapper.appendChild(obCards);
+
+  // ... (resto da função)
+};
+
+// ✅ ESTILO DE GRID ADICIONADO AQUI:
+obCards.style.cssText = "display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:15px;";
+
+obWrapper.appendChild(obCards);
+        if (window.showToast) {
+          window.showToast('Navegue para a tela de Consulta em Grupo antes de importar.', 'error');
+        } else {
+          alert('Navegue para a tela de Consulta em Grupo antes de importar.'); 
+        }
         return; 
       } 
   
@@ -79,14 +105,23 @@ function lerExcelEPopularGrupo(file) {
       gInput.dispatchEvent(new Event('input')); 
       gPlateInput.dispatchEvent(new Event('input')); 
   
-      alert(`Excel importado! ${paresLimpos.length} par(es) carregado(s). Clique em "Decodificar Grupo".`); 
+      if (window.showToast) {
+        window.showToast(`Excel importado! ${paresLimpos.length} par(es) carregado(s). Clique em "Decodificar Grupo".`); 
+      } else {
+        alert(`Excel importado! ${paresLimpos.length} par(es) carregado(s). Clique em "Decodificar Grupo".`); 
+      }
+
       if (gBtn) {
         gBtn.disabled = false; // Força habilitação do botão
         gBtn.scrollIntoView({ behavior: 'smooth' }); 
       }
     } catch (err) {
       console.error("Erro ao ler Excel:", err);
-      alert("Erro ao ler o arquivo Excel. Verifique se o formato é válido.");
+      if (window.showToast) {
+        window.showToast("Erro ao ler o arquivo Excel. Verifique se o formato é válido.", "error");
+      } else {
+        alert("Erro ao ler o arquivo Excel. Verifique se o formato é válido.");
+      }
     }
   }; 
   reader.readAsArrayBuffer(file); 

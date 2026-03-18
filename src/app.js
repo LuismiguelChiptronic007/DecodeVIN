@@ -204,13 +204,83 @@ function cardSkeleton() {
   return d;
 }
 
+function showToast(message, type = "success") {
+  const existing = document.querySelector(".custom-toast");
+  if (existing) existing.remove();
+
+  const toast = document.createElement("div");
+  toast.className = "custom-toast";
+  
+  // Estilização via JS para garantir o tema
+  toast.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--bg-elev);
+    border: 2px solid ${type === "error" ? "var(--danger)" : "var(--accent)"};
+    padding: 24px 32px;
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5), var(--shadow);
+    z-index: 9999;
+    color: var(--text);
+    text-align: center;
+    max-width: 400px;
+    width: 90%;
+    animation: toast-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    font-weight: 500;
+    line-height: 1.5;
+  `;
+
+  toast.innerHTML = `
+    <div style="font-size: 32px; margin-bottom: 12px;">${type === "error" ? "⚠️" : "✅"}</div>
+    <div style="font-size: 16px;">${message}</div>
+    <button style="margin-top: 20px; width: 100%;" onclick="this.parentElement.remove()">OK</button>
+  `;
+
+  document.body.appendChild(toast);
+
+  // Keyframes para animação se não existirem
+  if (!document.getElementById("toast-styles")) {
+    const style = document.createElement("style");
+    style.id = "toast-styles";
+    style.innerHTML = `
+      @keyframes toast-in {
+        from { opacity: 0; transform: translate(-50%, -40%) scale(0.9); }
+        to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+}
+
+window.showToast = showToast;
+
 function showSkeletons(container, count = 4) {
   if (!container) return;
   container.innerHTML = "";
   for (let i = 0; i < count; i++) {
     container.appendChild(cardSkeleton());
   }
+  // Garante que o grid esteja centralizado
+  centerGrid(container);
 }
+
+/**
+ * Centraliza os cartões dentro de um container grid.
+ * @param {HTMLElement} container 
+ */
+function centerGrid(container) {
+  if (!container) return;
+  container.style.display = "grid";
+  // Usamos auto-fit para centralizar melhor quando há poucos cards
+  container.style.gridTemplateColumns = "repeat(auto-fit, minmax(220px, 280px))";
+  container.style.justifyContent = "center";
+  container.style.gap = "15px";
+  container.style.width = "100%";
+}
+
+window.centerGrid = centerGrid;
 
 function toggleValueSkeletons(container, isLoading, restoreValue = true) {
   if (!container) return;
@@ -256,6 +326,8 @@ function renderResult(result, text) {
       }
     });
     cards.appendChild(fragment);
+    // Centraliza os cartões na tela principal
+    centerGrid(cards);
   }
 
   if (errors) {
@@ -614,6 +686,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
   mTitle.textContent = linkedPlate ? `Análise Completa: ${code} + ${linkedPlate}` : (isPlate ? `Dados OB: ${code}` : `Detalhes: ${code}`);
   mSegs.innerHTML = ""; 
   mCards.innerHTML = "";
+  mCards.removeAttribute("style"); // Limpa o display: grid do caso anterior
   modal.style.display = "flex";
 
   // Se houver erro de verificação no itemData, mostramos o erro no modal e bloqueamos os detalhes
@@ -658,6 +731,9 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     obCards.className = "cards";
     obWrapper.appendChild(obCards);
     
+    // Centraliza os cartões da carroceria
+    centerGrid(obCards);
+    
     showSkeletons(obCards, 4);
 
     const mediaBox = document.createElement("div");
@@ -699,12 +775,20 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
 
   if (linkedPlate) {
     mSegs.innerHTML = `<div class="seg">${code}</div><div class="seg" style="background:var(--accent);color:black">${linkedPlate}</div>`;
+    
+    // Container para os cartões do chassi
     const c1 = document.createElement("div");
     c1.className = "cards";
-    c1.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:15px;";
+    centerGrid(c1);
     mCards.appendChild(c1);
     setCards(result, c1);
-    const h = document.createElement("h3"); h.textContent = "🚌 Dados Carroceria"; h.style.gridColumn = "1/-1"; mCards.appendChild(h);
+    
+    // Título da seção Ônibus Brasil
+    const h = document.createElement("h3"); 
+    h.textContent = "🚌 Dados Carroceria"; 
+    h.style.cssText = "font-size: 18px; color: var(--accent-2); margin: 24px 0 16px; border-top: 1px solid var(--border); padding-top: 24px; text-align: center; width: 100%;";
+    mCards.appendChild(h);
+    
     injectOB(linkedPlate, mCards);
   } else if (isPlate) {
     mSegs.innerHTML = `<div class="seg">${code}</div>`;
@@ -712,30 +796,11 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
   } else {
     setSegments(result, mSegs);
     setCards(result, mCards);
+    // Centraliza os cartões principais do modal
+    centerGrid(mCards);
   }
 
-  if (!isPlate && code.length === 17) {
-    try {
-      const apiRes = await fetchWithTimeout(`https://decodevin-1.onrender.com/decode/${code}`);
-      const apiData = await apiRes.json();
-      if (apiData?.Results?.length > 0) {
-        const ext = apiData.Results[0];
-        [{l:"Fabricante (API)",v:ext.Manufacturer},{l:"Modelo (API)",v:ext.Model},{l:"Ano Modelo (API)",v:ext.ModelYear},{l:"Tipo de Veículo",v:ext.VehicleType},{l:"País de Origem",v:ext.PlantCountry}].forEach(f => {
-          if (f.v && f.v!=="Not Applicable" && f.v!=="") mCards.appendChild(card(f.l, f.v));
-        });
-      }
-    } catch (e) {
-      console.error("Erro API Modal:", e);
-      const warn = document.createElement("div");
-      warn.className = "note";
-      warn.style.color = "var(--muted)";
-      warn.style.marginTop = "10px";
-      warn.style.textAlign = "center";
-      warn.style.gridColumn = "1/-1";
-      warn.textContent = "Os dados extras da API externa estão indisponíveis no momento, mas a decodificação local funcionou.";
-      mCards.appendChild(warn);
-    }
-  }
+  /* Código da API externa removido a pedido do usuário */
 }
 
 window.renderGroupResults = renderGroupResults;
@@ -888,39 +953,6 @@ async function main() {
       };
 
       addHistoryEntry(text);
-
-      if (text.length === 17) {
-        try {
-          const apiRes = await fetchWithTimeout(`https://decodevin-1.onrender.com/decode/${text}`, { timeout: 30000 });
-          const apiData = await apiRes.json();
-          if (apiData?.Results?.length > 0) {
-            const ext = apiData.Results[0];
-            const extFields = [
-              { label: "Fabricante (API)", value: ext.Manufacturer },
-              { label: "Modelo (API)", value: ext.Model },
-              { label: "Ano Modelo (API)", value: ext.ModelYear },
-              { label: "Tipo de Veículo", value: ext.VehicleType },
-              { label: "País de Origem", value: ext.PlantCountry }
-            ];
-            extFields.forEach(f => {
-              if (f.value && f.value !== "Not Applicable" && f.value !== "" && f.value !== "None") {
-                el("cards").appendChild(card(f.label, f.value));
-              }
-            });
-          }
-        } catch (err) {
-          console.error("Erro API Render:", err);
-          const errorsDiv = el("errors");
-          if (errorsDiv) {
-            const warning = document.createElement("div");
-            warning.className = "note";
-            warning.style.color = "var(--muted)";
-            warning.style.marginTop = "10px";
-            warning.textContent = "Os dados extras da API externa estão indisponíveis no momento, mas a decodificação local funcionou.";
-            errorsDiv.appendChild(warning);
-          }
-        }
-      }
     };
 
     const runPlate = async () => {
@@ -1280,21 +1312,6 @@ async function main() {
                         ob_chassi: obData.modelo_chassi || obData.chassi || "—"
                      };
                    }
-                }
-
-                if (vin.length === 17) {
-                  const apiRes = await fetch(`https://decodevin-1.onrender.com/decode/${vin}`);
-                  const apiData = await apiRes.json();
-                  if (apiData?.Results?.length > 0) {
-                    const ext = apiData.Results[0];
-                    [{l:"Fabricante (API)",v:ext.Manufacturer},{l:"Modelo (API)",v:ext.Model},{l:"Ano Modelo (API)",v:ext.ModelYear}].forEach(f => {
-                      if (f.v && f.v!=="Not Applicable" && f.v!=="" && f.v!=="None") {
-                        if (!itemData.result.tokens.find(t => t.label === f.l)) {
-                          itemData.result.tokens.push({ key: f.l.toLowerCase().replace(/ /g, "_"), label: f.l, value: f.v });
-                        }
-                      }
-                    });
-                  }
                 }
               } else {
                 itemData.status = 'error';
