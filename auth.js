@@ -132,7 +132,24 @@ function mostrarTelaLogin() {
           </div>
           <div style="margin-bottom:16px;">
             <label style="display:block; font-size:12px; font-weight:700; color:var(--accent-2); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Setor</label>
-            <input id="cad-setor" type="text" placeholder="Ex: Engenharia, Auditoria" style="${inputStyle()}">
+            <select id="cad-setor" style="${inputStyle()} appearance:none; background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2338bdf8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E'); background-repeat: no-repeat; background-position: right 12px top 50%; background-size: 12px auto; padding-right: 40px;">
+              <option value="" disabled selected>Selecione seu setor</option>
+              <option value="OBDMAP">OBDMAP</option>
+              <option value="DIESELDIAG">DIESELDIAG</option>
+              <option value="MOBILE">MOBILE</option>
+              <option value="MOTODIAG">MOTODIAG</option>
+              <option value="ECU TEST">ECU TEST</option>
+              <option value="PROJETOS ESPECIAIS">PROJETOS ESPECIAIS</option>
+              <option value="APLICAÇÃO">APLICAÇÃO</option>
+              <option value="TELEMETRIA ADM">TELEMETRIA ADM</option>
+              <option value="TELEMETRIA HW">TELEMETRIA HW</option>
+              <option value="TELEMETRIA SW">TELEMETRIA SW</option>
+              <option value="T.I TELEMETRIA">T.I TELEMETRIA</option>
+              <option value="T.I INTERNO">T.I INTERNO</option>
+              <option value="HARDWARE">HARDWARE</option>
+              <option value="CRIPTO">CRIPTO</option>
+              <option value="RESOLVE">RESOLVE</option>
+            </select>
           </div>
           <div style="margin-bottom:16px;">
             <label style="display:block; font-size:12px; font-weight:700; color:var(--accent-2); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">E-mail Corporativo</label>
@@ -145,7 +162,7 @@ function mostrarTelaLogin() {
               <button onclick="dvbTogglePass('cad-senha')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px; padding:5px;">👁️</button>
             </div>
             <p style="margin:8px 0 0; font-size:11px; color:var(--muted); font-style:italic;">
-              Requisito: Mínimo 6 caracteres, uma letra maiúscula e um caractere especial.
+              Requisito: Mínimo 6 caracteres, uma letra maiúscula e um caracter especial.
             </p>
           </div>
           <button onclick="dvbCadastrar()" style="${btnStyle('var(--accent)')}">Solicitar Credenciais</button>
