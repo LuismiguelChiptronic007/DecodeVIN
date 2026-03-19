@@ -943,7 +943,7 @@ async function main() {
 
       const plate = plateInputSingle ? plateInputSingle.value.trim().toUpperCase() : "";
       
-      // ✅ NOVA LÓGICA: Se houver placa informada e não estiver validada, 
+     
       // dispara a busca da placa automaticamente em vez de mostrar erro.
       if (plate !== "" && !isPlateValidated && !force) {
           console.log("Placa presente mas não validada. Iniciando busca automática...");
@@ -971,7 +971,7 @@ async function main() {
       
       renderResult(result, text);
       
-      // ✅ ATUALIZA O OBJETO GLOBAL AO DECODIFICAR
+      //  ATUALIZA O OBJETO GLOBAL AO DECODIFICAR
       window.currentSingleResult = {
         tipo: result.type,
         vin: text,
@@ -1024,19 +1024,19 @@ async function main() {
       if (verifEl) verifEl.innerHTML = `<span style="color:var(--muted); font-weight:normal">Verificando placa...</span>`;
 
       try {
-        // ✅ 1. Aguarda a validação da placa pelo PHP
+        // . Aguarda a validação da placa pelo PHP
         const apiResult = await consultarPlacaPHP(p, chassiDigitado);
         console.log("Resultado da verificação de placa:", apiResult);
 
         if (apiResult.status === "ok") {
-          isPlateValidated = true; // ✅ MARCAR COMO VALIDADO
+          isPlateValidated = true; //  MARCAR COMO VALIDADO
           if (verifEl) verifEl.innerHTML = `<span style="color:#2ecc71">${apiResult.mensagem || "✔ Chassi confirmado"}</span>`;
           
-          // ✅ MOSTRAR RESULTADO AUTOMATICAMENTE
+          //  MOSTRAR RESULTADO AUTOMATICAMENTE
           runVIN(true); 
           showReports("single", true);
 
-          // ✅ 2. Tentar usar os dados do OB que vieram no cache da API de placa
+          //  Tentar usar os dados do OB que vieram no cache da API de placa
           let obData = apiResult.ob_data;
           
           if (obData && obData.success) {
@@ -1064,7 +1064,7 @@ async function main() {
             obData = await window.buscarDadosOnibusBrasil(p); 
             toggleValueSkeletons(el("ob_container"), false, false); 
           
-            // ✅ Se o fallback retornou chassi via KePlaca, preenche manualmente 
+            //  Se o fallback retornou chassi via KePlaca, preenche manualmente 
             if (obData && obData.final_chassi && !obData.carroceria) { 
               el("ob_chassi").textContent = obData.chassi || obData.final_chassi || "—"; 
               el("ob_status").textContent = "Dados parciais via KePlaca."; 
@@ -1092,7 +1092,7 @@ async function main() {
             };
           }
         } else {
-          // ❌ ERRO DE VALIDAÇÃO
+          //  ERRO DE VALIDAÇÃO
           isPlateValidated = false;
           
           let errorMsg = "";
@@ -1112,7 +1112,7 @@ async function main() {
           if (obSec) obSec.style.display = "none";
           showReports("single", false);
 
-          // ✅ Exibir a mensagem formatada conforme as imagens do usuário
+          //  Exibir a mensagem formatada conforme as imagens do usuário
           el("errors").innerHTML = `<div class="error" style="background: rgba(231, 76, 60, 0.1); border: 1px solid #e74c3c; color: #e74c3c; padding: 20px; border-radius: 8px; margin-top: 15px; font-weight: 600; text-align: center; width: 100%;">
             ${errorMsg}
             <br><small style="font-weight: normal; opacity: 0.8; margin-top: 5px; display: block;">${subMsg}</small>
@@ -1165,7 +1165,7 @@ async function main() {
           return;
         }
 
-        // ✅ REVALIDAÇÃO AUTOMÁTICA AO ALTERAR O CHASSI
+        // REVALIDAÇÃO AUTOMÁTICA AO ALTERAR O CHASSI
         const plate = plateInputSingle ? plateInputSingle.value.trim() : "";
         if (plate.length >= 6) {
           clearTimeout(vinTimeout);
@@ -1202,7 +1202,7 @@ async function main() {
           return;
         }
 
-        // ✅ REVALIDAÇÃO AUTOMÁTICA AO ALTERAR A PLACA
+        //  REVALIDAÇÃO AUTOMÁTICA AO ALTERAR A PLACA
         const vin = vinInputSingle ? vinInputSingle.value.trim() : "";
         if (vin.length === 17 && val.length >= 6) {
           clearTimeout(plateTimeout);
@@ -1295,7 +1295,7 @@ async function main() {
       window.currentGroupResults = [];
       currentGroupPage = 1; // Resetar para a primeira página
       
-      // ✅ Processamento em Lotes para não travar a UI
+      // Processamento em Lotes para não travar a UI
       const allItems = [];
       const totalItems = Math.max(vLines.length, pLines.length);
       for (let i = 0; i < totalItems; i++) {

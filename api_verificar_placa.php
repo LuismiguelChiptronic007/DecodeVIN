@@ -1,5 +1,5 @@
 <?php 
-// ✅ 1. CONFIGURAÇÕES DE CABEÇALHO PARA PERMITIR ACESSO DO GITHUB (CORS + PNA)
+//  1. CONFIGURAÇÕES DE CABEÇALHO PARA PERMITIR ACESSO DO GITHUB (CORS + PNA)
 header('Content-Type: application/json'); 
 
 /*
@@ -16,7 +16,7 @@ header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-W
 header('Access-Control-Allow-Private-Network: true'); 
 header('Access-Control-Max-Age: 86400');
 
-// ✅ 2. RESPONDER A REQUISIÇÕES DE TESTE (PREFLIGHT)
+//  2. RESPONDER A REQUISIÇÕES DE TESTE (PREFLIGHT)
 if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
     // Para PNA (Private Network Access), o navegador exige que o OPTIONS retorne 200 e os cabeçalhos PNA
     if (isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_PRIVATE_NETWORK'])) {
@@ -37,9 +37,9 @@ if (empty($placa)) {
 $final_site = '';
 $fonte = '';
 
-// ✅ CONSULTA A API (SCRAPING)
+// CONSULTA A API (SCRAPING)
 if (empty($final_site)) {
-    // ✅ TENTATIVA 0 — Cloudflare Worker (Prioritário e mais estável)
+    //  TENTATIVA 0 — Cloudflare Worker (Prioritário e mais estável)
     $worker_url = "https://keplaca-proxy.luismiguelgomesoliveira-014.workers.dev/?placa=" . $placa;
     $chw = curl_init();
     curl_setopt_array($chw, [
@@ -60,7 +60,7 @@ if (empty($final_site)) {
         }
     }
 
-    // ✅ TENTATIVA 1 — KePlaca Local Scraping (Se o Worker falhar)
+    //  TENTATIVA 1 — KePlaca Local Scraping (Se o Worker falhar)
     if (empty($final_site)) {
         $url_ke = "https://www.keplaca.com/placa/" . $placa; 
         $ch = curl_init(); 
@@ -101,7 +101,7 @@ if (empty($final_site)) {
         }
     }
 
-    // ✅ TENTATIVA 2 — Ônibus Brasil (Se KePlaca falhar)
+    //  TENTATIVA 2 — Ônibus Brasil (Se KePlaca falhar)
     if (empty($final_site)) {
         $url_ob = "https://www.onibus.info/busca.php?s=" . urlencode($placa);
         $ch2 = curl_init();
@@ -128,7 +128,7 @@ if (empty($final_site)) {
     }
 }
 
-// ✅ SE ENCONTROU A PLACA MAS NÃO TEM DADOS DO OB, BUSCA NO WORKER DO OB
+//  SE ENCONTROU A PLACA MAS NÃO TEM DADOS DO OB, BUSCA NO WORKER DO OB
 if (!empty($final_site) && !isset($ob_cache)) {
     $ob_url = "https://onibusbrasil-proxy.luismiguelgomesoliveira-014.workers.dev/?placa=" . $placa;
     $ch_ob = curl_init();
@@ -149,7 +149,7 @@ if (!empty($final_site) && !isset($ob_cache)) {
     }
 }
 
-// ✅ SE NÃO ENCONTROU OS DÍGITOS DO CHASSI
+//  SE NÃO ENCONTROU OS DÍGITOS DO CHASSI
 if (empty($final_site)) {
     echo json_encode([ 
         "status"   => "erro", 
@@ -158,7 +158,7 @@ if (empty($final_site)) {
     exit; 
 } 
 
-// ✅ COMPARAÇÃO OBRIGATÓRIA DOS ÚLTIMOS DÍGITOS
+//  COMPARAÇÃO OBRIGATÓRIA DOS ÚLTIMOS DÍGITOS
 if (!empty($chassi)) {
     $chassi_digitado = preg_replace('/[^A-Z0-9]/', '', $chassi);
     $tamanho = strlen($final_site);

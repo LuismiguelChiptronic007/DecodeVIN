@@ -60,10 +60,10 @@ function lerExcelEPopularGrupo(file) {
       const combined    = document.getElementById('combinedMode'); 
       const gBtn        = document.getElementById('btnGroupDecode'); 
   
-      if (!gInput || !gPlateInput) { // ✅ Trecho alterado em app.js, dentro da função injectOB:
+      if (!gInput || !gPlateInput) { //  Trecho alterado em app.js, dentro da função injectOB:
 
 const obCards = document.createElement("div");
-obCards.className = "cards";// ✅ Trecho corrigido em app.js, dentro da função injectOB:
+obCards.className = "cards";//  Trecho corrigido em app.js, dentro da função injectOB:
 
 const injectOB = (p, container, itemData) => {
   // ... (código anterior)
@@ -71,7 +71,7 @@ const injectOB = (p, container, itemData) => {
   const obCards = document.createElement("div");
   obCards.className = "cards";
 
-  // ✅ ESTILO DE GRID APLICADO NO LUGAR CERTO:
+  //  ESTILO DE GRID APLICADO NO LUGAR CERTO:
   obCards.style.cssText = "display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:15px;";
   
   obWrapper.appendChild(obCards);
@@ -79,7 +79,7 @@ const injectOB = (p, container, itemData) => {
   // ... (resto da função)
 };
 
-// ✅ ESTILO DE GRID ADICIONADO AQUI:
+//  ESTILO DE GRID ADICIONADO AQUI:
 obCards.style.cssText = "display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:15px;";
 
 obWrapper.appendChild(obCards);

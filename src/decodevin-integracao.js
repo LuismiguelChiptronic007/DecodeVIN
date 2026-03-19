@@ -71,7 +71,7 @@ async function buscarDadosOnibusBrasil(placa, render = true, docRef) {
 const placaUpper = placa.trim().toUpperCase();
 
 try {
-  // ✅ TENTATIVA 1 — OnibusBrasil com Timeout
+  //  T — OnibusBrasil com Timeout
   let dados = {};
   try {
     const response = await fetchWithTimeout(`${WORKER_URL}/?placa=${placaUpper}`);
@@ -96,7 +96,7 @@ try {
     return dados; 
   } 
   
-  // ❌ Não achou no OnibusBrasil — tenta o keplaca-proxy com Timeout
+  //  Não achou no OnibusBrasil — tenta o keplaca-proxy com Timeout
   if (elStatus) { 
     elStatus.textContent = "🔄 Buscando via KePlaca..."; 
     elStatus.style.color = "#f0a500"; 
@@ -124,7 +124,7 @@ try {
       console.error("KePlaca fallback CATCH:", errKe.message);
     }
 
-    // ❌ Nenhuma fonte encontrou 
+    //  Nenhuma fonte encontrou 
     if (elStatus) { 
       elStatus.textContent = `⚠️ Placa ${placaUpper} sem ficha nas fontes disponíveis.`; 
       elStatus.style.color = "#e74c3c"; 
