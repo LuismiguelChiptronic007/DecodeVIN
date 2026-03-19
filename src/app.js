@@ -488,7 +488,14 @@ function renderSingleHistory() {
     
     const v = document.createElement("div");
     v.style.flex = "1";
-    v.textContent = item.input || "Placa: " + item.plate;
+    const dataHora = new Date(item.ts).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    v.textContent = (item.input || "Placa: " + item.plate) + ` (${dataHora})`;
     if (item.input && item.plate) {
       const p = document.createElement("span");
       p.style.fontSize = "12px"; p.style.color = "var(--accent)"; p.style.marginLeft = "8px";
@@ -587,7 +594,14 @@ function renderGroupHistory() {
     v.style.flex = "1";
     const vCount = (item.vins || "").split("\n").filter(Boolean).length;
     const pCount = (item.plates || "").split("\n").filter(Boolean).length;
-    v.textContent = `Lote: ${Math.max(vCount, pCount)} itens (${new Date(item.ts).toLocaleDateString()})`;
+    const dataHora = new Date(item.ts).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    v.textContent = `Lote: ${Math.max(vCount, pCount)} itens (${dataHora})`;
     
     v.onclick = () => {
       const gInput = el("groupInput");
