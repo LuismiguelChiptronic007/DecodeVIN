@@ -496,6 +496,39 @@ window.dvbPromover = async function(id, admin) {
   dvbAdmin();
 };
 
+function dvbAlert(titulo, texto, tipo = 'info') {
+  const modalAlert = document.createElement('div');
+  modalAlert.id = 'dvb-alert-modal';
+  const color = tipo === 'erro' ? 'var(--danger)' : 'var(--accent-2)';
+  const icon = tipo === 'erro' ? '❌' : 'ℹ️';
+
+  modalAlert.innerHTML = `
+    <div style="
+      position:fixed; inset:0; z-index:100001; background:rgba(0,0,0,0.85);
+      backdrop-filter: blur(8px); display:flex; align-items:center; justify-content:center;
+      font-family:system-ui,-apple-system,sans-serif; padding:20px;
+    ">
+      <div style="
+        background: var(--bg-elev); border: 1px solid var(--border); border-radius: 20px; 
+        padding: 32px; width: 100%; max-width: 400px; color: var(--text);
+        box-shadow: var(--shadow);
+        animation: slideUp 0.3s ease-out; text-align: center;
+      ">
+        <div style="font-size: 40px; margin-bottom: 16px;">${icon}</div>
+        <h3 style="margin: 0 0 12px; color: ${color}; font-size: 20px; font-weight: 800;">${titulo}</h3>
+        <p style="margin: 0 0 24px; color: var(--muted); font-size: 14px; line-height: 1.6;">${texto}</p>
+        <button id="alert-close" style="
+          width: 100%; padding: 12px; border-radius: 10px; border: none;
+          background: ${color}; color: ${tipo === 'erro' ? 'white' : '#000'}; 
+          font-weight: 700; cursor: pointer; transition: all 0.2s;
+        ">Entendido</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modalAlert);
+  document.getElementById('alert-close').onclick = () => modalAlert.remove();
+}
+
 window.dvbDeletar = async function(event, id, nome) {
   const modalConfirm = document.createElement('div');
   modalConfirm.id = 'dvb-confirm-modal';
@@ -548,17 +581,46 @@ window.dvbDeletar = async function(event, id, nome) {
           }, 500);
         } else {
           const data = await res.json();
-          alert('Erro ao excluir usuário: ' + (data.erro || 'Ação não permitida'));
-          if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
+          dvbAlert('Erro ao excluir', data.erro || 'Ação não permitida', 'erro');
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = oldHtml;
+          }
         }
       } catch (e) {
         console.error(e);
-        alert('Erro de conexão ao excluir.');
-        if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
+        dvbAlert('Erro de conexão', 'Não foi possível contatar o servidor.', 'erro');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = oldHtml;
+        }
       }
     };
   });
 };
 
+// ---------- Inatividade (Auto Logout) ----------
+
+let inatividadeTimer;
+const TEMPO_INATIVIDADE = 10 * 60 * 1000; // 10 minutos em milissegundos
+
+function resetarTimerInatividade() {
+  if (inatividadeTimer) clearTimeout(inatividadeTimer);
+  
+  // Só ativa o timer se o usuário estiver logado
+  if (getToken()) {
+    inatividadeTimer = setTimeout(() => {
+      console.log("Sessão expirada por inatividade.");
+      dvbLogout();
+    }, TEMPO_INATIVIDADE);
+  }
+}
+
+// Listeners para detectar atividade do usuário
+['mousedown', 'keydown', 'touchstart', 'scroll'].forEach(evt => {
+  window.addEventListener(evt, resetarTimerInatividade, { passive: true });
+});
+
 // ---------- Iniciar ----------
+resetarTimerInatividade();
 verificarSessao();
