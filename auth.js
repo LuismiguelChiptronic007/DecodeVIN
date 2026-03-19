@@ -466,7 +466,18 @@ window.dvbAdmin = async function() {
           background:#1e3a5f; color:#7dd3fc; font-size:12px;
         ">${u.admin ? 'Remover admin' : 'Tornar admin'}</button>
       </td>
-      <td style="padding:8px; font-size:11px; color:#64748b;">${u.last_login || '—'}</td>
+      <td style="padding:8px; font-size:11px; color:#64748b;">${(() => {
+        if (!u.last_login) return '—';
+        try {
+          // Garante que o formato do banco (que vem em UTC) seja interpretado corretamente
+          const d = new Date(u.last_login.includes('Z') ? u.last_login : u.last_login.replace(' ', 'T') + 'Z');
+          return d.toLocaleString('pt-BR', {
+            timeZone: 'America/Sao_Paulo',
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+          });
+        } catch(e) { return u.last_login; }
+      })()}</td>
       <td style="padding:8px; text-align:center;">
         <button onclick="dvbDeletar(event, ${u.id}, '${u.nome.replace(/'/g, "\\'")}')" style="
           padding:4px 10px; border-radius:6px; border:none; cursor:pointer;
