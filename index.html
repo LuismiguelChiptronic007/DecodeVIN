@@ -19,84 +19,85 @@
   <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2966/2966327.png">
 </head>
 <body>
-  <div id="selectionScreen" class="selection-screen">
-    <h1>DecodeVIN</h1>
-    <p style="color:var(--muted);margin-bottom:32px">Selecione o modo de operação</p>
-    <div class="selection-cards">
-      <div class="selection-card" id="optSingle">
-        <div class="selection-icon">🔍</div>
-        <h3>Decodificar um único Chassi e uma única Placa</h3>
-        <p>Insira um VIN ou a placa do Onibus</p>
-      </div>
-      <div class="selection-card" id="optGroup">
-        <div class="selection-icon">📚</div>
-        <h3>Decodificar grupo de Chassis e placas</h3>
-        <p>Processe múltiplos códigos simultaneamente.</p>
-      </div>
-    </div>
-  </div>
-
-  <div id="singleDecoder" style="display:none">
-    <div class="header">
-      <button class="back-btn" id="backFromSingle">←</button>
+  <div class="app-container">
+    <div id="selectionScreen" class="selection-screen">
       <h1>DecodeVIN</h1>
-    </div>
-    <div class="bar">
-      <input id="plateInputSingle" type="text" placeholder="Placa (opcional)" autocomplete="off" maxlength="7">
-      <button id="btnPlateSingle">Buscar  Placa</button>
-    </div>
-    <div class="bar">
-      <input id="vinInputSingle" type="text" placeholder="Digite VIN (17)" autocomplete="off" maxlength="17">
-      <button id="btnDecodeSingle">Decodificar</button>
-    </div>
-    <div class="bar" id="scaniaField" style="display:none">
-      <label for="scaniaCode" style="min-width:200px">Código comercial do chassi</label>
-      <input id="scaniaCode" type="text" placeholder="Informe o código comercial do chassi Scania">
-      <button id="scaniaBtn" disabled>Decodificar Scania</button>
-    </div>
-    <h2 id="resultTitle" style="display:none;font-size:16px;margin:12px 0">Resultado</h2>
-    
-    <div id="segments" class="segment"></div>
-    <div id="cards" class="cards"></div>
-    
-    <div id="secao-onibusbrasil" style="margin-top: 24px; display: none; border-top: 1px solid var(--border); padding-top: 24px;">
-      <h3 style="font-size: 16px; color: var(--accent-2); margin-bottom: 16px;">🚌 Dados OnibusBrasil</h3>
-      <div id="ob_verificacao" style="font-size: 14px; text-align: center; margin-bottom: 8px; font-weight: 600;"></div>
-      <p id="ob_status" style="font-size: 14px; color: var(--muted); text-align: center; margin-bottom: 16px;"></p>
-
-      <div id="ob_container" class="cards">
-        <div class="card card-plate">
-          <div class="label">Encarroçadeira</div>
-          <div class="value" id="ob_encarrocadeira">—</div>
+      <p style="color:var(--muted);margin-bottom:32px">Selecione o modo de operação</p>
+      <div class="selection-cards">
+        <div class="selection-card" id="optSingle">
+          <div class="selection-icon">🔍</div>
+          <h3>Decodificar um único Chassi e uma única Placa</h3>
+          <p>Insira um VIN ou a placa do Onibus</p>
         </div>
-        <div class="card card-plate">
-          <div class="label">Carroceria</div>
-          <div class="value" id="ob_carroceria">—</div>
-        </div>
-        <div class="card card-plate">
-          <div class="label">Fabricante Chassi</div>
-          <div class="value" id="ob_fabricante_chassi">—</div>
-        </div>
-        <div class="card card-plate">
-          <div class="label">Modelo Chassi</div>
-          <div class="value" id="ob_chassi">—</div>
-        </div>
-        
-        <div id="ob_media_container" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 16px;">
-          <img id="ob_foto" src="" alt="Foto do ônibus" loading="lazy" decoding="async" style="display:none; width:100%; max-width: 600px; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow);">
-          <a id="ob_fonte" href="#" target="_blank" style="display:none; padding: 12px 24px; border-radius: 8px; background: rgba(56,189,248,0.1); border: 1px solid var(--accent-2); color: var(--accent-2); text-decoration: none; font-size: 14px; font-weight: 600; transition: all 0.2s;">🔗 Ver ficha completa no Ônibus Brasil</a>
+        <div class="selection-card" id="optGroup">
+          <div class="selection-icon">📚</div>
+          <h3>Decodificar grupo de Chassis e placas</h3>
+          <p>Processe múltiplos códigos simultaneamente.</p>
         </div>
       </div>
     </div>
 
-    <div id="errors" class="row"></div>
-    <div class="history">
-      <h2 style="font-size:16px;margin:12px 0">Histórico</h2>
-      <div id="history"></div>
-    </div>
-  </div>
+    <div id="singleDecoder" style="display:none">
+      <div class="header">
+        <button class="back-btn" id="backFromSingle">←</button>
+        <h1>DecodeVIN</h1>
+      </div>
+      <div class="bar">
+        <input id="plateInputSingle" type="text" placeholder="Placa (opcional)" autocomplete="off" maxlength="7">
+        <button id="btnPlateSingle">Buscar  Placa</button>
+      </div>
+      <div class="bar">
+        <input id="vinInputSingle" type="text" placeholder="Digite VIN (17)" autocomplete="off" maxlength="17">
+        <button id="btnDecodeSingle">Decodificar</button>
+      </div>
+      <div class="bar" id="scaniaField" style="display:none">
+        <label for="scaniaCode" style="min-width:200px">Código comercial do chassi</label>
+        <input id="scaniaCode" type="text" placeholder="Informe o código comercial do chassi Scania">
+        <button id="scaniaBtn" disabled>Decodificar Scania</button>
+      </div>
+      <h2 id="resultTitle" style="display:none;font-size:16px;margin:12px 0">Resultado</h2>
+      
+      <div id="segments" class="segment"></div>
+      <div id="cards" class="cards"></div>
+      
+      <div id="secao-onibusbrasil" style="margin-top: 24px; display: none; border-top: 1px solid var(--border); padding-top: 24px;">
+        <h3 style="font-size: 16px; color: var(--accent-2); margin-bottom: 16px;">🚌 Dados OnibusBrasil</h3>
+        <div id="ob_verificacao" style="font-size: 14px; text-align: center; margin-bottom: 8px; font-weight: 600;"></div>
+        <p id="ob_status" style="font-size: 14px; color: var(--muted); text-align: center; margin-bottom: 16px;"></p>
 
-  <div id="groupDecoder" style="display:none">
+        <div id="ob_container" class="cards">
+          <div class="card card-plate">
+            <div class="label">Encarroçadeira</div>
+            <div class="value" id="ob_encarrocadeira">—</div>
+          </div>
+          <div class="card card-plate">
+            <div class="label">Carroceria</div>
+            <div class="value" id="ob_carroceria">—</div>
+          </div>
+          <div class="card card-plate">
+            <div class="label">Fabricante Chassi</div>
+            <div class="value" id="ob_fabricante_chassi">—</div>
+          </div>
+          <div class="card card-plate">
+            <div class="label">Modelo Chassi</div>
+            <div class="value" id="ob_chassi">—</div>
+          </div>
+          
+          <div id="ob_media_container" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 16px;">
+            <img id="ob_foto" src="" alt="Foto do ônibus" loading="lazy" decoding="async" style="display:none; width:100%; max-width: 600px; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow);">
+            <a id="ob_fonte" href="#" target="_blank" style="display:none; padding: 12px 24px; border-radius: 8px; background: rgba(56,189,248,0.1); border: 1px solid var(--accent-2); color: var(--accent-2); text-decoration: none; font-size: 14px; font-weight: 600; transition: all 0.2s;">🔗 Ver ficha completa no Ônibus Brasil</a>
+          </div>
+        </div>
+      </div>
+
+      <div id="errors" class="row"></div>
+      <div class="history">
+        <h2 style="font-size:16px;margin:12px 0">Histórico</h2>
+        <div id="history"></div>
+      </div>
+    </div>
+
+    <div id="groupDecoder" style="display:none">
     <div class="header">
       <button class="back-btn" id="backFromGroup">←</button>
       <h1>DecodeVIN <small style="font-size:14px;color:var(--muted);font-weight:normal">Modo Grupo</small></h1>
@@ -144,7 +145,7 @@
   <div id="detailModal" class="modal" style="display:none">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 id="modalTitle">Detalhes do Chassi</h2>
+        <h2 id="modalTitle">Detalhes</h2>
         <button class="close-modal" id="closeModal">&times;</button>
       </div>
       <div id="modalBody" class="modal-body">
@@ -153,6 +154,7 @@
       </div>
     </div>
   </div>
+</div>
 
   <!-- SheetJS para importação de Excel -->
   <script src="auth.js"></script>
