@@ -330,7 +330,7 @@ function mostrarApp(usuario) {
   const emailExibido = usuario.email || '';
 
   barra.innerHTML = `
-    <div style="display:flex; align-items:center; gap:12px;">
+    <div onclick="dvbGoToMenu()" style="display:flex; align-items:center; gap:12px; cursor:pointer;" title="Voltar ao Menu">
       <img src="assets/logo.svg" alt="Logo" style="width: 32px; height: 32px;">
       <div style="display:flex; flex-direction:column;">
         <span style="color:var(--text); font-weight:800; font-size:18px; letter-spacing:-0.5px; line-height:1;">DecodeVIN</span>
@@ -412,6 +412,21 @@ function mostrarApp(usuario) {
 window.dvbLogout = function() {
   limparSessao();
   location.reload();
+};
+
+window.dvbGoToMenu = function() {
+  // Esconde os decodificadores
+  const single = document.getElementById('singleDecoder');
+  const group = document.getElementById('groupDecoder');
+  if (single) single.style.display = 'none';
+  if (group) group.style.display = 'none';
+  
+  // Mostra a tela de seleção
+  const selection = document.getElementById('selectionScreen');
+  if (selection) selection.style.display = 'flex';
+  
+  // Limpa resultados anteriores (opcional, para garantir um estado limpo)
+  if (window.clearUI) window.clearUI();
 };
 
 // ---------- Painel Admin ----------
