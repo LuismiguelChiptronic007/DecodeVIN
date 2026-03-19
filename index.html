@@ -137,6 +137,7 @@
     <div id="groupResults" class="group-list"></div>
     <div class="history">
       <h2 style="font-size:16px;margin:12px 0">Histórico</h2>
+      <div id="groupHistory"></div>
     </div>
   </div>
 
@@ -153,23 +154,10 @@
     </div>
   </div>
 
-  <!-- Tour Guided Structure -->
-  <div id="tourOverlay" class="tour-overlay"></div>
-  <div id="tourCard" class="tour-card">
-    <h3 id="tourTitle">Título do Passo</h3>
-    <p id="tourText">Descrição do passo a passo para o usuário.</p>
-    <div class="tour-footer">
-      <button id="tourSkip" class="tour-btn tour-btn-skip">Pular</button>
-      <button id="tourNext" class="tour-btn tour-btn-next">Próximo</button>
-    </div>
-  </div>
-
-  <!-- Help Floating Button -->
-  <div id="helpFab" class="help-fab" title="Iniciar Tour de Ajuda">?</div>
-
   <!-- SheetJS para importação de Excel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="src/importar-excel.js"></script>
+  <script src="auth.js"></script>
   <script src="src/decodevin-integracao.js?v=5"></script>
   <script type="module" src="./src/app.js"></script>
   

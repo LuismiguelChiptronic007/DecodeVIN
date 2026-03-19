@@ -423,6 +423,7 @@ function setErrors(result) {
 }
 
 let currentHistoryPage = 1;
+let currentGroupHistoryPage = 1;
 const HISTORY_PAGE_SIZE = 10;
 
 function addHistoryEntry(input, plateOverride = "") {
@@ -439,7 +440,28 @@ function addHistoryEntry(input, plateOverride = "") {
   renderHistory();
 }
 
+function addGroupHistoryEntry(vins, plates) {
+  const key = "decodevin.groupHistory";
+  const list = JSON.parse(localStorage.getItem(key) || "[]");
+  if (!vins && !plates) return;
+  
+  const entry = { vins, plates, ts: Date.now() };
+  // Apenas salva se for diferente do último (simples)
+  const lastEntry = list[0];
+  if (lastEntry && lastEntry.vins === vins && lastEntry.plates === plates) return;
+
+  const newList = [entry, ...list].slice(0, 50); // Limite de 50 grupos
+  localStorage.setItem(key, JSON.stringify(newList));
+  currentGroupHistoryPage = 1;
+  renderHistory();
+}
+
 function renderHistory() {
+  renderSingleHistory();
+  renderGroupHistory();
+}
+
+function renderSingleHistory() {
   const key = "decodevin.history";
   const list = JSON.parse(localStorage.getItem(key) || "[]");
   const h = el("history");
@@ -498,7 +520,7 @@ function renderHistory() {
       const currentList = JSON.parse(localStorage.getItem(key) || "[]");
       currentList.splice(indexInFullList, 1);
       localStorage.setItem(key, JSON.stringify(currentList));
-      renderHistory();
+      renderSingleHistory();
     };
 
     row.appendChild(v);
@@ -516,7 +538,7 @@ function renderHistory() {
     btnPrev.textContent = "← Anterior";
     btnPrev.disabled = currentHistoryPage === 1;
     btnPrev.className = "btn-page";
-    btnPrev.onclick = () => { currentHistoryPage--; renderHistory(); };
+    btnPrev.onclick = () => { currentHistoryPage--; renderSingleHistory(); };
 
     const pageInfo = document.createElement("span");
     pageInfo.textContent = `Página ${currentHistoryPage} de ${totalPages}`;
@@ -527,7 +549,93 @@ function renderHistory() {
     btnNext.textContent = "Próximo →";
     btnNext.disabled = currentHistoryPage === totalPages;
     btnNext.className = "btn-page";
-    btnNext.onclick = () => { currentHistoryPage++; renderHistory(); };
+    btnNext.onclick = () => { currentHistoryPage++; renderSingleHistory(); };
+
+    pagination.appendChild(btnPrev);
+    pagination.appendChild(pageInfo);
+    pagination.appendChild(btnNext);
+    h.appendChild(pagination);
+  }
+}
+
+function renderGroupHistory() {
+  const key = "decodevin.groupHistory";
+  const list = JSON.parse(localStorage.getItem(key) || "[]");
+  const h = el("groupHistory");
+  if (!h) return;
+  h.innerHTML = "";
+
+  if (list.length === 0) {
+    h.innerHTML = `<div style="color:var(--muted); text-align:center; padding: 20px;">Nenhum item no histórico de grupo.</div>`;
+    return;
+  }
+
+  const totalPages = Math.ceil(list.length / HISTORY_PAGE_SIZE);
+  if (currentGroupHistoryPage > totalPages) currentGroupHistoryPage = totalPages;
+  if (currentGroupHistoryPage < 1) currentGroupHistoryPage = 1;
+
+  const start = (currentGroupHistoryPage - 1) * HISTORY_PAGE_SIZE;
+  const end = start + HISTORY_PAGE_SIZE;
+  const pageList = list.slice(start, end);
+
+  pageList.forEach((item, idx) => {
+    const indexInFullList = start + idx;
+    const row = document.createElement("div");
+    row.className = "item clickable";
+    
+    const v = document.createElement("div");
+    v.style.flex = "1";
+    const vCount = (item.vins || "").split("\n").filter(Boolean).length;
+    const pCount = (item.plates || "").split("\n").filter(Boolean).length;
+    v.textContent = `Lote: ${Math.max(vCount, pCount)} itens (${new Date(item.ts).toLocaleDateString()})`;
+    
+    v.onclick = () => {
+      const gInput = el("groupInput");
+      const gPlateInput = el("groupPlateInput");
+      const bGroup = el("btnGroupDecode");
+      if (gInput) gInput.value = item.vins || "";
+      if (gPlateInput) gPlateInput.value = item.plates || "";
+      if (bGroup) { bGroup.disabled = false; bGroup.click(); }
+    };
+
+    const btnDelete = document.createElement("button");
+    btnDelete.className = "btn-delete-item";
+    btnDelete.innerHTML = "&times;";
+    btnDelete.title = "Remover este lote";
+    btnDelete.onclick = (e) => {
+      e.stopPropagation();
+      const currentList = JSON.parse(localStorage.getItem(key) || "[]");
+      currentList.splice(indexInFullList, 1);
+      localStorage.setItem(key, JSON.stringify(currentList));
+      renderGroupHistory();
+    };
+
+    row.appendChild(v);
+    row.appendChild(btnDelete);
+    h.appendChild(row);
+  });
+
+  if (totalPages > 1) {
+    const pagination = document.createElement("div");
+    pagination.className = "history-pagination";
+    pagination.style.cssText = "display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 15px; padding: 10px;";
+
+    const btnPrev = document.createElement("button");
+    btnPrev.textContent = "← Anterior";
+    btnPrev.disabled = currentGroupHistoryPage === 1;
+    btnPrev.className = "btn-page";
+    btnPrev.onclick = () => { currentGroupHistoryPage--; renderGroupHistory(); };
+
+    const pageInfo = document.createElement("span");
+    pageInfo.textContent = `Página ${currentGroupHistoryPage} de ${totalPages}`;
+    pageInfo.style.fontSize = "14px";
+    pageInfo.style.color = "var(--muted)";
+
+    const btnNext = document.createElement("button");
+    btnNext.textContent = "Próximo →";
+    btnNext.disabled = currentGroupHistoryPage === totalPages;
+    btnNext.className = "btn-page";
+    btnNext.onclick = () => { currentGroupHistoryPage++; renderGroupHistory(); };
 
     pagination.appendChild(btnPrev);
     pagination.appendChild(pageInfo);
@@ -1292,6 +1400,9 @@ async function main() {
       const vLines = gInput.value.split("\n").map(l => l.trim()).filter(Boolean);
       const pLines = gPlateInput.value.split("\n").map(l => l.trim()).filter(Boolean);
       
+      // Salva no histórico de grupo
+      addGroupHistoryEntry(gInput.value, gPlateInput.value);
+
       window.currentGroupResults = [];
       currentGroupPage = 1; // Resetar para a primeira página
       
@@ -1392,104 +1503,6 @@ async function main() {
     }
 
     renderHistory();
-
-    // TOUR GUIDED LOGIC
-    let tourStep = 0;
-    const tourSteps = [
-      {
-        id: "optSingle",
-        title: "Consulta Individual",
-        text: "Aqui você pode decodificar um único chassi ou buscar informações por placa.",
-        pos: "bottom"
-      },
-      {
-        id: "optGroup",
-        title: "Consulta em Grupo",
-        text: "Processa múltiplos chassis ou placas de uma vez. Ideal para frotas!",
-        pos: "bottom"
-      },
-      {
-        id: "history",
-        title: "Histórico Local",
-        text: "Suas últimas consultas ficam salvas aqui para acesso rápido.",
-        pos: "top"
-      },
-      {
-        id: "helpFab",
-        title: "Dúvidas?",
-        text: "Sempre que precisar, clique aqui para rever este tour de ajuda.",
-        pos: "left"
-      }
-    ];
-
-    const showTourStep = () => {
-      const step = tourSteps[tourStep];
-      const target = el(step.id);
-      const tourCard = el("tourCard");
-      const tourOverlay = el("tourOverlay");
-
-      document.querySelectorAll(".tour-highlight").forEach(e => e.classList.remove("tour-highlight"));
-
-      if (!step || !target) {
-        endTour();
-        return;
-      }
-
-      tourOverlay.style.display = "block";
-      tourCard.style.display = "block";
-      target.classList.add("tour-highlight");
-
-      el("tourTitle").textContent = step.title;
-      el("tourText").textContent = step.text;
-      el("tourNext").textContent = tourStep === tourSteps.length - 1 ? "Finalizar" : "Próximo";
-
-      const rect = target.getBoundingClientRect();
-      const cardRect = tourCard.getBoundingClientRect();
-
-      let top, left;
-      if (step.pos === "bottom") {
-        top = rect.bottom + 15;
-        left = rect.left + (rect.width / 2) - (cardRect.width / 2);
-      } else if (step.pos === "top") {
-        top = rect.top - cardRect.height - 15;
-        left = rect.left + (rect.width / 2) - (cardRect.width / 2);
-      } else if (step.pos === "left") {
-        top = rect.top + (rect.height / 2) - (cardRect.height / 2);
-        left = rect.left - cardRect.width - 15;
-      }
-
-      left = Math.max(10, Math.min(left, window.innerWidth - cardRect.width - 10));
-      top = Math.max(10, Math.min(top, window.innerHeight - cardRect.height - 10));
-
-      tourCard.style.top = `${top}px`;
-      tourCard.style.left = `${left}px`;
-    };
-
-    const endTour = () => {
-      el("tourOverlay").style.display = "none";
-      el("tourCard").style.display = "none";
-      document.querySelectorAll(".tour-highlight").forEach(e => e.classList.remove("tour-highlight"));
-      localStorage.setItem("decodevin_tour_seen", "true");
-    };
-
-    el("tourNext").onclick = () => {
-      tourStep++;
-      if (tourStep < tourSteps.length) {
-        showTourStep();
-      } else {
-        endTour();
-      }
-    };
-
-    el("tourSkip").onclick = endTour;
-    el("helpFab").onclick = () => {
-      tourStep = 0;
-      showTourStep();
-    };
-
-    if (!localStorage.getItem("decodevin_tour_seen")) {
-      setTimeout(showTourStep, 1000);
-    }
 
   } catch (err) {
     console.error("Erro fatal na inicialização:", err);
