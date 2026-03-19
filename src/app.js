@@ -934,19 +934,21 @@ async function main() {
     if (btnPlateSingle) btnPlateSingle.disabled = true;
 
     let isPlateValidated = false;
+    let isValidating = false;
 
     const runVIN = async (force = false) => {
-      if (!vinInputSingle) return;
+      if (!vinInputSingle || isValidating) return;
       const text = vinInputSingle.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
       if (text.length === 0) return;
 
       const plate = plateInputSingle ? plateInputSingle.value.trim().toUpperCase() : "";
       
-      // ✅ NOVA LÓGICA: Só bloqueia se houver placa informada E ela não estiver validada
-      // Se o campo de placa estiver vazio, libera a decodificação do chassi normalmente
+      // ✅ NOVA LÓGICA: Se houver placa informada e não estiver validada, 
+      // dispara a busca da placa automaticamente em vez de mostrar erro.
       if (plate !== "" && !isPlateValidated && !force) {
-          el("errors").innerHTML = `<div class="error">Verifique a placa antes de decodificar ou corrija a divergência.</div>`;
-          return;
+          console.log("Placa presente mas não validada. Iniciando busca automática...");
+          await runPlate();
+          return; // runPlate já chama runVIN(true) ao finalizar com sucesso
       }
 
       el("errors").innerHTML = "";
@@ -983,7 +985,7 @@ async function main() {
     };
 
     const runPlate = async () => {
-      if (!plateInputSingle) return;
+      if (!plateInputSingle || isValidating) return;
       const p = plateInputSingle.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
       const vin = vinInputSingle ? vinInputSingle.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") : "";
       
@@ -991,6 +993,13 @@ async function main() {
         el("errors").innerHTML = `<div class="error">A placa deve ter 6 ou 7 caracteres.</div>`;
         return;
       }
+
+      isValidating = true;
+      const btnPlate = el("btnPlateSingle");
+      const btnDecode = el("btnDecodeSingle");
+      const oldBtnPlateText = btnPlate ? btnPlate.textContent : "";
+      if (btnPlate) { btnPlate.disabled = true; btnPlate.textContent = "⏳ Verificando..."; }
+      if (btnDecode) btnDecode.disabled = true;
 
       isPlateValidated = false; // Resetar estado ao iniciar nova busca
       window.currentSingleResult = { vin: vin, placa: p, ob: {}, result: null };
@@ -1022,8 +1031,6 @@ async function main() {
         if (apiResult.status === "ok") {
           isPlateValidated = true; // ✅ MARCAR COMO VALIDADO
           if (verifEl) verifEl.innerHTML = `<span style="color:#2ecc71">${apiResult.mensagem || "✔ Chassi confirmado"}</span>`;
-          const btnDecode = el("btnDecodeSingle");
-          if (btnDecode) btnDecode.disabled = false;
           
           // ✅ MOSTRAR RESULTADO AUTOMATICAMENTE
           runVIN(true); 
@@ -1097,12 +1104,10 @@ async function main() {
           } else if (String(apiResult.mensagem).includes("não pertence")) {
             errorMsg = `Este chassi (${chassiDigitado}) não pertence à placa (${p}).`;
           } else {
-            errorMsg = `Não foi possível localizar os dígitos do chassi para a placa ${p} em fontes públicas.`;
+            errorMsg = `Não foi possível localizar os dígitos do chassi para a placa ${p} in fontes públicas.`;
           }
 
           if (verifEl) verifEl.innerHTML = `<span style="color:#e74c3c">${errorMsg}</span>`;
-          const btnDecode = el("btnDecodeSingle");
-          if (btnDecode) btnDecode.disabled = true;
           
           if (obSec) obSec.style.display = "none";
           showReports("single", false);
@@ -1116,6 +1121,15 @@ async function main() {
       } catch (e) {
         console.error("Erro no fluxo de validação:", e);
         if (verifEl) verifEl.innerHTML = `<span style="color:#e74c3c">Erro de conexão</span>`;
+      } finally {
+        isValidating = false;
+        if (btnPlate) { 
+          btnPlate.disabled = false; 
+          btnPlate.textContent = oldBtnPlateText; 
+        }
+        if (btnDecode) {
+          btnDecode.disabled = vinInputSingle.value.length === 0;
+        }
       }
     };
 
@@ -1298,13 +1312,13 @@ async function main() {
         const batch = allItems.slice(currentIndex, currentIndex + BATCH_SIZE);
         
         if (batch.length === 0) {
+          gResults.innerHTML = ""; // Limpa a mensagem de processamento
           showReports("group", true);
           renderGroupResults(); // Renderização final com paginação
           return;
         }
 
         const batchResults = [];
-
         const apiCalls = batch.map(pair => (async () => {
           const { vin, plate } = pair;
           const res = vin ? decoder.decode(vin) : { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
@@ -1342,7 +1356,7 @@ async function main() {
                 }
               } else {
                 itemData.status = 'error';
-                itemData.error_detail = apiResult.mensagem; // ✅ Armazenar detalhe do erro
+                itemData.error_detail = apiResult.mensagem; 
               }
             } catch (e) { 
               itemData.status = 'error';
@@ -1355,14 +1369,14 @@ async function main() {
 
         await Promise.all(apiCalls);
         
-        // Renderizar o progresso (opcional, mas bom para feedback)
-        renderGroupResults();
-
         currentIndex += BATCH_SIZE;
         
-        // Pausa para o navegador respirar
+        // Atualiza apenas o contador de progresso, sem re-renderizar a lista toda
+        gResults.innerHTML = `<div style="text-align:center; padding: 20px; color: var(--accent);">⚙️ Processando frotas: ${Math.min(currentIndex, totalItems)} de ${totalItems}...</div>`;
+
+        // Pausa curta para manter a UI responsiva
         await new Promise(resolve => setTimeout(resolve, 50)); 
-        processBatch(); // Processa o próximo lote
+        processBatch(); 
       };
 
       processBatch(); // Inicia o processamento
