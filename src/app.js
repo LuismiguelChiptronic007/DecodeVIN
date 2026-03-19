@@ -445,15 +445,21 @@ function addGroupHistoryEntry(vins, plates) {
   const list = JSON.parse(localStorage.getItem(key) || "[]");
   if (!vins && !plates) return;
   
-  const entry = { vins, plates, ts: Date.now() };
+  const fInput = el("fleetName");
+  const fleetName = fInput ? fInput.value.trim() : "";
+  
+  const entry = { vins, plates, fleetName, ts: Date.now() };
   // Apenas salva se for diferente do último (simples)
   const lastEntry = list[0];
-  if (lastEntry && lastEntry.vins === vins && lastEntry.plates === plates) return;
+  if (lastEntry && lastEntry.vins === vins && lastEntry.plates === plates && lastEntry.fleetName === fleetName) return;
 
   const newList = [entry, ...list].slice(0, 50); // Limite de 50 grupos
   localStorage.setItem(key, JSON.stringify(newList));
   currentGroupHistoryPage = 1;
   renderHistory();
+  
+  // Limpa o nome da frota após salvar
+  if (fInput) fInput.value = "";
 }
 
 function renderHistory() {
@@ -488,14 +494,8 @@ function renderSingleHistory() {
     
     const v = document.createElement("div");
     v.style.flex = "1";
-    const dataHora = new Date(item.ts).toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    v.textContent = (item.input || "Placa: " + item.plate) + ` (${dataHora})`;
+    // Removida a hora conforme solicitação: "aqui eu não quero a hora, só na tela de grupo"
+    v.textContent = (item.input || "Placa: " + item.plate);
     if (item.input && item.plate) {
       const p = document.createElement("span");
       p.style.fontSize = "12px"; p.style.color = "var(--accent)"; p.style.marginLeft = "8px";
@@ -589,11 +589,18 @@ function renderGroupHistory() {
     const indexInFullList = start + idx;
     const row = document.createElement("div");
     row.className = "item clickable";
+    row.style.padding = "12px 15px";
     
     const v = document.createElement("div");
     v.style.flex = "1";
+    v.style.display = "flex";
+    v.style.flexDirection = "column";
+    v.style.gap = "4px";
+
     const vCount = (item.vins || "").split("\n").filter(Boolean).length;
     const pCount = (item.plates || "").split("\n").filter(Boolean).length;
+    const totalCount = Math.max(vCount, pCount);
+    
     const dataHora = new Date(item.ts).toLocaleString('pt-BR', {
       day: '2-digit',
       month: '2-digit',
@@ -601,7 +608,35 @@ function renderGroupHistory() {
       hour: '2-digit',
       minute: '2-digit'
     });
-    v.textContent = `Lote: ${Math.max(vCount, pCount)} itens (${dataHora})`;
+
+    // Título do Lote: Nome ou ID Sequencial
+    const title = document.createElement("div");
+    title.style.fontWeight = "600";
+    title.style.color = "var(--accent)";
+    title.textContent = item.fleetName ? `📦 ${item.fleetName}` : `📦 Lote #${list.length - indexInFullList}`;
+    
+    // Detalhes (Contagem e Data)
+    const details = document.createElement("div");
+    details.style.fontSize = "13px";
+    details.style.color = "var(--text)";
+    details.textContent = `${totalCount} itens • ${dataHora}`;
+
+    // Prévia dos dados (primeiros 2 itens)
+    const preview = document.createElement("div");
+    preview.style.fontSize = "11px";
+    preview.style.color = "var(--muted)";
+    preview.style.fontStyle = "italic";
+    const vList = (item.vins || "").split("\n").filter(Boolean);
+    const pList = (item.plates || "").split("\n").filter(Boolean);
+    const previewText = [];
+    for(let i=0; i<Math.min(2, totalCount); i++) {
+      previewText.push(`${vList[i] || ""}${pList[i] ? " ["+pList[i]+"]" : ""}`);
+    }
+    preview.textContent = previewText.join(", ") + (totalCount > 2 ? "..." : "");
+
+    v.appendChild(title);
+    v.appendChild(details);
+    if (previewText.length > 0) v.appendChild(preview);
     
     v.onclick = () => {
       const gInput = el("groupInput");
@@ -1048,6 +1083,8 @@ async function main() {
       if (excelInput) excelInput.value = "";
 
       if (!keepInputs) {
+        const fInput = el("fleetName");
+        if (fInput) fInput.value = "";
         [vinInputSingle, plateInputSingle, gInput, gPlateInput].forEach(e => { if (e) e.value = ""; });
       }
     };
