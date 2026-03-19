@@ -279,7 +279,7 @@ window.dvbCadastrar = async function() {
 
   if (senha.length < 6) { dvbMsg('Senha deve ter pelo menos 6 caracteres.', 'erro'); return; }
   if (!/[A-Z]/.test(senha) || !/[!@#$%^&*(),.?":{}|<>]/.test(senha)) {
-    dvbMsg('A senha deve conter uma letra maiúscula e um caractere especial.', 'erro');
+    dvbMsg('A senha deve conter uma letra maiúscula e um caracter especial.', 'erro');
     return;
   }
 
