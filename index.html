@@ -43,11 +43,17 @@
         <h1>DecodeVIN</h1>
       </div>
       <div class="bar">
-        <input id="plateInputSingle" type="text" placeholder="Placa (opcional)" autocomplete="off" maxlength="7">
+        <div class="input-wrapper">
+          <input id="plateInputSingle" type="text" placeholder="Placa (opcional)" autocomplete="off" maxlength="7">
+          <span class="input-counter" id="plateCounter">0/7</span>
+        </div>
         <button id="btnPlateSingle">Buscar  Placa</button>
       </div>
       <div class="bar">
-        <input id="vinInputSingle" type="text" placeholder="Digite VIN (17)" autocomplete="off" maxlength="17">
+        <div class="input-wrapper">
+          <input id="vinInputSingle" type="text" placeholder="Digite VIN (17)" autocomplete="off" maxlength="17">
+          <span class="input-counter" id="vinCounter">0/17</span>
+        </div>
         <button id="btnDecodeSingle">Decodificar</button>
       </div>
       <div class="bar" id="scaniaField" style="display:none">
@@ -124,8 +130,14 @@
       </div>
     </div>
     <div class="bar">
-      <button id="btnGroupDecode" style="width:100%" disabled>Decodificar Grupo</button>
-    </div>
+        <button id="btnGroupDecode" style="width:100%" disabled>Decodificar Grupo</button>
+      </div>
+
+      <!-- Progresso de Processamento -->
+      <div id="groupProgress" class="progress-text">Processando 0 de 0 itens...</div>
+      <div class="progress-container" id="progressContainer">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
 
     <!-- Importar Excel -->
     <div class="bar" style="margin-top: 10px;">

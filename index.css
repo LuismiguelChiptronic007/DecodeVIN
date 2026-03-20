@@ -389,6 +389,80 @@ a{color:#93c5fd;text-decoration:none}
   border-top: 1px solid var(--border);
 }
 
+/* Progress Bar */
+.progress-container {
+  width: 100%;
+  height: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  margin: 16px 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  display: none;
+}
+.progress-bar {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  transition: width 0.3s ease;
+}
+.progress-text {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+  margin-bottom: 8px;
+  display: none;
+}
+
+/* Input Validation */
+.input-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.input-counter {
+  position: absolute;
+  right: 12px;
+  bottom: -18px;
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.input-valid { border-color: var(--accent) !important; box-shadow: 0 0 0 3px rgba(34, 197, 148, 0.15) !important; }
+.input-invalid { border-color: var(--danger) !important; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .app-container { padding: 16px; }
+  h1 { font-size: 32px; }
+  .selection-screen h1 { font-size: 42px; }
+  .group-inputs { grid-template-columns: 1fr !important; }
+  .bar { flex-direction: column; align-items: stretch; }
+  .bar button { width: 100%; height: 48px; }
+  .cards { grid-template-columns: 1fr !important; }
+  .modal-content { width: 95%; padding: 16px; }
+  .header h1 { font-size: 24px; }
+  .selection-cards { grid-template-columns: 1fr; }
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--muted);
+  background: rgba(255,255,255,0.02);
+  border-radius: 20px;
+  border: 2px dashed var(--border);
+  margin: 20px 0;
+}
+.empty-state-icon { font-size: 64px; margin-bottom: 20px; opacity: 0.5; }
+.empty-state h3 { color: var(--text); margin-bottom: 8px; }
+
 .btn-page {
   background: var(--card) !important;
   color: var(--text) !important;

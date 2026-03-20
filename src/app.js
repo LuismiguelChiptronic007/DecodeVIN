@@ -465,234 +465,292 @@ function addGroupHistoryEntry(vins, plates) {
 function renderHistory() {
   renderSingleHistory();
   renderGroupHistory();
+
 }
 
-function renderSingleHistory() {
-  const key = "decodevin.history";
-  const list = JSON.parse(localStorage.getItem(key) || "[]");
-  const h = el("history");
-  if (!h) return;
-  h.innerHTML = "";
+  const renderSingleHistory = () => {
+    const key = "decodevin.history";
+    const list = JSON.parse(localStorage.getItem(key) || "[]");
+    const h = el("history");
+    if (!h) return;
+    h.innerHTML = "";
 
-  if (list.length === 0) {
-    h.innerHTML = `<div style="color:var(--muted); text-align:center; padding: 20px;">Nenhum item no histórico.</div>`;
-    return;
-  }
+    const searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "🔍 Buscar no histórico (chassi ou placa)...";
+    searchInput.style.marginBottom = "12px";
+    searchInput.style.fontSize = "13px";
+    searchInput.oninput = (e) => {
+      const term = e.target.value.toLowerCase();
+      renderSingleHistoryItems(list.filter(item => 
+        (item.input || "").toLowerCase().includes(term) ||
+        (item.plate || "").toLowerCase().includes(term)
+      ));
+    };
+    h.appendChild(searchInput);
 
-  const totalPages = Math.ceil(list.length / HISTORY_PAGE_SIZE);
-  if (currentHistoryPage > totalPages) currentHistoryPage = totalPages;
-  if (currentHistoryPage < 1) currentHistoryPage = 1;
+    const listContainer = document.createElement("div");
+    listContainer.id = "singleHistoryList";
+    h.appendChild(listContainer);
 
-  const start = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE;
-  const end = start + HISTORY_PAGE_SIZE;
-  const pageList = list.slice(start, end);
+    renderSingleHistoryItems(list);
+  };
 
-  pageList.forEach((item, idx) => {
-    const indexInFullList = start + idx;
-    const row = document.createElement("div");
-    row.className = "item clickable";
-    
-    const v = document.createElement("div");
-    v.style.flex = "1";
-    // Removida a hora conforme solicitação: "aqui eu não quero a hora, só na tela de grupo"
-    v.textContent = (item.input || "Placa: " + item.plate);
-    if (item.input && item.plate) {
-      const p = document.createElement("span");
-      p.style.fontSize = "12px"; p.style.color = "var(--accent)"; p.style.marginLeft = "8px";
-      p.textContent = `[${item.plate}]`;
-      v.appendChild(p);
+  const renderSingleHistoryItems = (list) => {
+    const h = el("singleHistoryList");
+    if (!h) return;
+    h.innerHTML = "";
+
+    if (list.length === 0) {
+      h.innerHTML = `<div style="color:var(--muted); text-align:center; padding: 20px;">Nenhum item encontrado.</div>`;
+      return;
     }
-    
-    v.onclick = () => {
-      const vInput = el("vinInputSingle");
-      const pInput = el("plateInputSingle");
-      const bSingle = el("btnDecodeSingle");
-      const bPlate = el("btnPlateSingle");
-      if (item.input && vInput) {
-        vInput.value = item.input;
-        if (bSingle) { bSingle.disabled = false; bSingle.click(); }
+
+    const totalPages = Math.ceil(list.length / HISTORY_PAGE_SIZE);
+    if (currentHistoryPage > totalPages) currentHistoryPage = totalPages;
+    if (currentHistoryPage < 1) currentHistoryPage = 1;
+
+    const start = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE;
+    const end = start + HISTORY_PAGE_SIZE;
+    const pageList = list.slice(start, end);
+
+    pageList.forEach((item, idx) => {
+      const indexInFullList = start + idx;
+      const row = document.createElement("div");
+      row.className = "item clickable";
+      
+      const v = document.createElement("div");
+      v.style.flex = "1";
+      // Removida a hora conforme solicitação: "aqui eu não quero a hora, só na tela de grupo"
+      v.textContent = (item.input || "Placa: " + item.plate);
+      if (item.input && item.plate) {
+        const p = document.createElement("span");
+        p.style.fontSize = "12px"; p.style.color = "var(--accent)"; p.style.marginLeft = "8px";
+        p.textContent = `[${item.plate}]`;
+        v.appendChild(p);
       }
-      if (item.plate && pInput) {
-        pInput.value = item.plate;
-        if (bPlate) { bPlate.disabled = false; bPlate.click(); }
-      }
-    };
+      
+      v.onclick = () => {
+        const vInput = el("vinInputSingle");
+        const pInput = el("plateInputSingle");
+        const bSingle = el("btnDecodeSingle");
+        const bPlate = el("btnPlateSingle");
+        if (item.input && vInput) {
+          vInput.value = item.input;
+          if (bSingle) { bSingle.disabled = false; bSingle.click(); }
+        }
+        if (item.plate && pInput) {
+          pInput.value = item.plate;
+          if (bPlate) { bPlate.disabled = false; bPlate.click(); }
+        }
+      };
 
-    const btnDelete = document.createElement("button");
-    btnDelete.className = "btn-delete-item";
-    btnDelete.innerHTML = "&times;";
-    btnDelete.title = "Remover este item";
-    btnDelete.onclick = (e) => {
-      e.stopPropagation();
-      const currentList = JSON.parse(localStorage.getItem(key) || "[]");
-      currentList.splice(indexInFullList, 1);
-      localStorage.setItem(key, JSON.stringify(currentList));
-      renderSingleHistory();
-    };
+      const btnDelete = document.createElement("button");
+      btnDelete.className = "btn-delete-item";
+      btnDelete.innerHTML = "&times;";
+      btnDelete.title = "Remover este item";
+      btnDelete.onclick = (e) => {
+        e.stopPropagation();
+        const currentList = JSON.parse(localStorage.getItem("decodevin.history") || "[]");
+        currentList.splice(indexInFullList, 1);
+        localStorage.setItem("decodevin.history", JSON.stringify(currentList));
+        renderSingleHistory();
+      };
 
-    row.appendChild(v);
-    row.appendChild(btnDelete);
-    h.appendChild(row);
-  });
-
-  // Controles de Paginação
-  if (totalPages > 1) {
-    const pagination = document.createElement("div");
-    pagination.className = "history-pagination";
-    pagination.style.cssText = "display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 15px; padding: 10px;";
-
-    const btnPrev = document.createElement("button");
-    btnPrev.textContent = "← Anterior";
-    btnPrev.disabled = currentHistoryPage === 1;
-    btnPrev.className = "btn-page";
-    btnPrev.onclick = () => { currentHistoryPage--; renderSingleHistory(); };
-
-    const pageInfo = document.createElement("span");
-    pageInfo.textContent = `Página ${currentHistoryPage} de ${totalPages}`;
-    pageInfo.style.fontSize = "14px";
-    pageInfo.style.color = "var(--muted)";
-
-    const btnNext = document.createElement("button");
-    btnNext.textContent = "Próximo →";
-    btnNext.disabled = currentHistoryPage === totalPages;
-    btnNext.className = "btn-page";
-    btnNext.onclick = () => { currentHistoryPage++; renderSingleHistory(); };
-
-    pagination.appendChild(btnPrev);
-    pagination.appendChild(pageInfo);
-    pagination.appendChild(btnNext);
-    h.appendChild(pagination);
-  }
-}
-
-function renderGroupHistory() {
-  const key = "decodevin.groupHistory";
-  const list = JSON.parse(localStorage.getItem(key) || "[]");
-  const h = el("groupHistory");
-  if (!h) return;
-  h.innerHTML = "";
-
-  if (list.length === 0) {
-    h.innerHTML = `<div style="color:var(--muted); text-align:center; padding: 20px;">Nenhum item no histórico de grupo.</div>`;
-    return;
-  }
-
-  const totalPages = Math.ceil(list.length / HISTORY_PAGE_SIZE);
-  if (currentGroupHistoryPage > totalPages) currentGroupHistoryPage = totalPages;
-  if (currentGroupHistoryPage < 1) currentGroupHistoryPage = 1;
-
-  const start = (currentGroupHistoryPage - 1) * HISTORY_PAGE_SIZE;
-  const end = start + HISTORY_PAGE_SIZE;
-  const pageList = list.slice(start, end);
-
-  pageList.forEach((item, idx) => {
-    const indexInFullList = start + idx;
-    const row = document.createElement("div");
-    row.className = "item clickable";
-    row.style.padding = "12px 15px";
-    
-    const v = document.createElement("div");
-    v.style.flex = "1";
-    v.style.display = "flex";
-    v.style.flexDirection = "column";
-    v.style.gap = "4px";
-
-    const vCount = (item.vins || "").split("\n").filter(Boolean).length;
-    const pCount = (item.plates || "").split("\n").filter(Boolean).length;
-    const totalCount = Math.max(vCount, pCount);
-    
-    const dataHora = new Date(item.ts).toLocaleString('pt-BR', {
-      timeZone: 'America/Sao_Paulo',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      row.appendChild(v);
+      row.appendChild(btnDelete);
+      h.appendChild(row);
     });
 
-    // Título do Lote: Nome ou ID Sequencial
-    const title = document.createElement("div");
-    title.style.fontWeight = "600";
-    title.style.color = "var(--accent)";
-    title.textContent = item.fleetName ? `📦 ${item.fleetName}` : `📦 Lote #${list.length - indexInFullList}`;
-    
-    // Detalhes (Contagem e Data)
-    const details = document.createElement("div");
-    details.style.fontSize = "13px";
-    details.style.color = "var(--text)";
-    details.textContent = `${totalCount} itens • ${dataHora}`;
+    // Controles de Paginação
+    if (totalPages > 1) {
+      const pagination = document.createElement("div");
+      pagination.className = "history-pagination";
+      pagination.style.cssText = "display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 15px; padding: 10px;";
 
-    // Prévia dos dados (primeiros 2 itens)
-    const preview = document.createElement("div");
-    preview.style.fontSize = "11px";
-    preview.style.color = "var(--muted)";
-    preview.style.fontStyle = "italic";
-    const vList = (item.vins || "").split("\n").filter(Boolean);
-    const pList = (item.plates || "").split("\n").filter(Boolean);
-    const previewText = [];
-    for(let i=0; i<Math.min(2, totalCount); i++) {
-      previewText.push(`${vList[i] || ""}${pList[i] ? " ["+pList[i]+"]" : ""}`);
+      const btnPrev = document.createElement("button");
+      btnPrev.textContent = "← Anterior";
+      btnPrev.disabled = currentHistoryPage === 1;
+      btnPrev.className = "btn-page";
+      btnPrev.onclick = () => { currentHistoryPage--; renderSingleHistory(); };
+
+      const pageInfo = document.createElement("span");
+      pageInfo.textContent = `Página ${currentHistoryPage} de ${totalPages}`;
+      pageInfo.style.fontSize = "14px";
+      pageInfo.style.color = "var(--muted)";
+
+      const btnNext = document.createElement("button");
+      btnNext.textContent = "Próximo →";
+      btnNext.disabled = currentHistoryPage === totalPages;
+      btnNext.className = "btn-page";
+      btnNext.onclick = () => { currentHistoryPage++; renderSingleHistory(); };
+
+      pagination.appendChild(btnPrev);
+      pagination.appendChild(pageInfo);
+      pagination.appendChild(btnNext);
+      h.appendChild(pagination);
     }
-    preview.textContent = previewText.join(", ") + (totalCount > 2 ? "..." : "");
+  };
 
-    v.appendChild(title);
-    v.appendChild(details);
-    if (previewText.length > 0) v.appendChild(preview);
-    
-    v.onclick = () => {
-      const gInput = el("groupInput");
-      const gPlateInput = el("groupPlateInput");
-      const bGroup = el("btnGroupDecode");
-      if (gInput) gInput.value = item.vins || "";
-      if (gPlateInput) gPlateInput.value = item.plates || "";
-      if (bGroup) { bGroup.disabled = false; bGroup.click(); }
+  window.renderSingleHistory = renderSingleHistory;
+
+  const renderGroupHistory = () => {
+    const key = "decodevin.groupHistory";
+    const list = JSON.parse(localStorage.getItem(key) || "[]");
+    const h = el("groupHistory");
+    if (!h) return;
+    h.innerHTML = "";
+
+    const searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "🔍 Buscar no histórico (nome, placa, chassi)...";
+    searchInput.style.marginBottom = "12px";
+    searchInput.style.fontSize = "13px";
+    searchInput.oninput = (e) => {
+      const term = e.target.value.toLowerCase();
+      renderGroupHistoryItems(list.filter(item => 
+        (item.fleetName || "").toLowerCase().includes(term) ||
+        (item.vins || "").toLowerCase().includes(term) ||
+        (item.plates || "").toLowerCase().includes(term)
+      ));
     };
+    h.appendChild(searchInput);
 
-    const btnDelete = document.createElement("button");
-    btnDelete.className = "btn-delete-item";
-    btnDelete.innerHTML = "&times;";
-    btnDelete.title = "Remover este lote";
-    btnDelete.onclick = (e) => {
-      e.stopPropagation();
-      const currentList = JSON.parse(localStorage.getItem(key) || "[]");
-      currentList.splice(indexInFullList, 1);
-      localStorage.setItem(key, JSON.stringify(currentList));
-      renderGroupHistory();
-    };
+    const listContainer = document.createElement("div");
+    listContainer.id = "groupHistoryList";
+    h.appendChild(listContainer);
 
-    row.appendChild(v);
-    row.appendChild(btnDelete);
-    h.appendChild(row);
-  });
+    renderGroupHistoryItems(list);
+  };
 
-  if (totalPages > 1) {
-    const pagination = document.createElement("div");
-    pagination.className = "history-pagination";
-    pagination.style.cssText = "display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 15px; padding: 10px;";
+  const renderGroupHistoryItems = (list) => {
+    const h = el("groupHistoryList");
+    if (!h) return;
+    h.innerHTML = "";
 
-    const btnPrev = document.createElement("button");
-    btnPrev.textContent = "← Anterior";
-    btnPrev.disabled = currentGroupHistoryPage === 1;
-    btnPrev.className = "btn-page";
-    btnPrev.onclick = () => { currentGroupHistoryPage--; renderGroupHistory(); };
+    if (list.length === 0) {
+      h.innerHTML = `<div style="color:var(--muted); text-align:center; padding: 20px;">Nenhum item encontrado.</div>`;
+      return;
+    }
 
-    const pageInfo = document.createElement("span");
-    pageInfo.textContent = `Página ${currentGroupHistoryPage} de ${totalPages}`;
-    pageInfo.style.fontSize = "14px";
-    pageInfo.style.color = "var(--muted)";
+    const totalPages = Math.ceil(list.length / HISTORY_PAGE_SIZE);
+    if (currentGroupHistoryPage > totalPages) currentGroupHistoryPage = totalPages;
+    if (currentGroupHistoryPage < 1) currentGroupHistoryPage = 1;
 
-    const btnNext = document.createElement("button");
-    btnNext.textContent = "Próximo →";
-    btnNext.disabled = currentGroupHistoryPage === totalPages;
-    btnNext.className = "btn-page";
-    btnNext.onclick = () => { currentGroupHistoryPage++; renderGroupHistory(); };
+    const start = (currentGroupHistoryPage - 1) * HISTORY_PAGE_SIZE;
+    const end = start + HISTORY_PAGE_SIZE;
+    const pageList = list.slice(start, end);
 
-    pagination.appendChild(btnPrev);
-    pagination.appendChild(pageInfo);
-    pagination.appendChild(btnNext);
-    h.appendChild(pagination);
-  }
-}
+    pageList.forEach((item, idx) => {
+      const indexInFullList = start + idx;
+      const row = document.createElement("div");
+      row.className = "item clickable";
+      row.style.padding = "12px 15px";
+      
+      const v = document.createElement("div");
+      v.style.flex = "1";
+      v.style.display = "flex";
+      v.style.flexDirection = "column";
+      v.style.gap = "4px";
+
+      const vCount = (item.vins || "").split("\n").filter(Boolean).length;
+      const pCount = (item.plates || "").split("\n").filter(Boolean).length;
+      const totalCount = Math.max(vCount, pCount);
+      
+      const dataHora = new Date(item.ts).toLocaleString('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      // Título do Lote: Nome ou ID Sequencial
+      const title = document.createElement("div");
+      title.style.fontWeight = "600";
+      title.style.color = "var(--accent)";
+      title.textContent = item.fleetName ? `📦 ${item.fleetName}` : `📦 Lote #${list.length - indexInFullList}`;
+      
+      // Detalhes (Contagem e Data)
+      const details = document.createElement("div");
+      details.style.fontSize = "13px";
+      details.style.color = "var(--text)";
+      details.textContent = `${totalCount} itens • ${dataHora}`;
+
+      // Prévia dos dados (primeiros 2 itens)
+      const preview = document.createElement("div");
+      preview.style.fontSize = "11px";
+      preview.style.color = "var(--muted)";
+      preview.style.fontStyle = "italic";
+      const vList = (item.vins || "").split("\n").filter(Boolean);
+      const pList = (item.plates || "").split("\n").filter(Boolean);
+      const previewText = [];
+      for(let i=0; i<Math.min(2, totalCount); i++) {
+        previewText.push(`${vList[i] || ""}${pList[i] ? " ["+pList[i]+"]" : ""}`);
+      }
+      preview.textContent = previewText.join(", ") + (totalCount > 2 ? "..." : "");
+
+      v.appendChild(title);
+      v.appendChild(details);
+      if (previewText.length > 0) v.appendChild(preview);
+      
+      v.onclick = () => {
+        const gInput = el("groupInput");
+        const gPlateInput = el("groupPlateInput");
+        const bGroup = el("btnGroupDecode");
+        if (gInput) gInput.value = item.vins || "";
+        if (gPlateInput) gPlateInput.value = item.plates || "";
+        if (bGroup) { bGroup.disabled = false; bGroup.click(); }
+      };
+
+      const btnDelete = document.createElement("button");
+      btnDelete.className = "btn-delete-item";
+      btnDelete.innerHTML = "&times;";
+      btnDelete.title = "Remover este lote";
+      btnDelete.onclick = (e) => {
+        e.stopPropagation();
+        const currentList = JSON.parse(localStorage.getItem(key) || "[]");
+        currentList.splice(indexInFullList, 1);
+        localStorage.setItem(key, JSON.stringify(currentList));
+        renderGroupHistory();
+      };
+
+      row.appendChild(v);
+      row.appendChild(btnDelete);
+      h.appendChild(row);
+    });
+
+    if (totalPages > 1) {
+      const pagination = document.createElement("div");
+      pagination.className = "history-pagination";
+      pagination.style.cssText = "display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 15px; padding: 10px;";
+
+      const btnPrev = document.createElement("button");
+      btnPrev.textContent = "← Anterior";
+      btnPrev.disabled = currentGroupHistoryPage === 1;
+      btnPrev.className = "btn-page";
+      btnPrev.onclick = () => { currentGroupHistoryPage--; renderGroupHistory(); };
+
+      const pageInfo = document.createElement("span");
+      pageInfo.textContent = `Página ${currentGroupHistoryPage} de ${totalPages}`;
+      pageInfo.style.fontSize = "14px";
+      pageInfo.style.color = "var(--muted)";
+
+      const btnNext = document.createElement("button");
+      btnNext.textContent = "Próximo →";
+      btnNext.disabled = currentGroupHistoryPage === totalPages;
+      btnNext.className = "btn-page";
+      btnNext.onclick = () => { currentGroupHistoryPage++; renderGroupHistory(); };
+
+      pagination.appendChild(btnPrev);
+      pagination.appendChild(pageInfo);
+      pagination.appendChild(btnNext);
+      h.appendChild(pagination);
+    }
+  };
+
+  window.renderGroupHistory = renderGroupHistory;
 
 const exportCSV = (data, name) => {
   // Cabeçalhos solicitados anteriormente, organizados conforme o modelo visual
@@ -817,10 +875,9 @@ function renderGroupResults() {
 
     item.innerHTML = `${layout}<div class="info"><span>${itemData.fabricante || "—"}</span><span class="status-msg">${statusHtml}</span></div>`;
     
-    // Garantir que o modal abre na primeira tentativa usando addEventListener e parando propagação
     item.addEventListener('click', (e) => {
       e.stopPropagation();
-      openModal(vin ? itemData.result : null, vin || plate, !vin, vin && plate ? plate : null, itemData);
+      openModal(itemData.result, vin || plate, !vin, vin && plate ? plate : null, itemData);
     });
 
     fragment.appendChild(item);
@@ -1300,74 +1357,54 @@ async function main() {
 
     // CORRIGIDO: usar addEventListener em vez de oninput para evitar sobrescrita
     if (vinInputSingle) {
-      let vinTimeout;
       vinInputSingle.addEventListener('input', () => {
-        const pos = vinInputSingle.selectionStart;
         const val = vinInputSingle.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17);
         vinInputSingle.value = val;
-        vinInputSingle.setSelectionRange(pos, pos);
         
-        // Se o campo de chassi tiver algo, libera o botão de decodificar
-        // A trava de segurança só agirá dentro da função runVIN se houver placa
+        const counter = el("vinCounter");
+        if (counter) {
+          counter.textContent = `${val.length}/17`;
+          if (val.length === 17 || val.length === 8) {
+            vinInputSingle.classList.add("input-valid");
+            vinInputSingle.classList.remove("input-invalid");
+          } else if (val.length > 0) {
+            vinInputSingle.classList.add("input-invalid");
+            vinInputSingle.classList.remove("input-valid");
+          } else {
+            vinInputSingle.classList.remove("input-valid", "input-invalid");
+          }
+        }
+
         if (btnSingle) btnSingle.disabled = val.length === 0;
 
-        // Se o campo estiver vazio, limpar os resultados exibidos
         if (val.length === 0) {
-          ["segments", "cards", "errors"].forEach(id => {
-            const e = el(id);
-            if (e) { e.innerHTML = ""; if (id === "segments") e.style.display = "none"; }
-          });
-          showReports("single", false);
-          const rt = el("resultTitle"); if (rt) rt.style.display = "none";
-          const ob = el("secao-onibusbrasil"); if (ob) ob.style.display = "none";
+          clearUI(true);
           const verif = el("ob_verificacao"); if (verif) verif.innerHTML = "";
           window.currentSingleResult = null;
           return;
-        }
-
-        // REVALIDAÇÃO AUTOMÁTICA AO ALTERAR O CHASSI
-        const plate = plateInputSingle ? plateInputSingle.value.trim() : "";
-        if (plate.length >= 6) {
-          clearTimeout(vinTimeout);
-          const verifEl = el("ob_verificacao");
-          if (verifEl) verifEl.innerHTML = `<span style="color:var(--muted); font-weight:normal">Validando alteração...</span>`;
-          
-          vinTimeout = setTimeout(() => {
-            if (val.length === 17) {
-              runPlate(); // Re-executa a validação completa se o VIN estiver completo
-            } else {
-              if (verifEl) verifEl.innerHTML = `<span style="color:#e74c3c">⚠ VIN incompleto para validação</span>`;
-              const btnDecode = el("btnDecodeSingle");
-              if (btnDecode) btnDecode.disabled = true;
-            }
-          }, 800); // Pequeno delay para não sobrecarregar enquanto digita
         }
       });
     }
 
     if (plateInputSingle) {
-      let plateTimeout;
       plateInputSingle.addEventListener('input', () => {
-        const pos = plateInputSingle.selectionStart;
         const val = plateInputSingle.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7);
         plateInputSingle.value = val;
-        plateInputSingle.setSelectionRange(pos, pos);
-        if (btnPlateSingle) btnPlateSingle.disabled = val.length < 3;
         
-        if (val.length === 0) {
-          const obSec = el("secao-onibusbrasil");
-          if (obSec) obSec.style.display = "none";
-          const verif = el("ob_verificacao");
-          if (verif) verif.innerHTML = "";
-          return;
+        const counter = el("plateCounter");
+        if (counter) {
+          counter.textContent = `${val.length}/7`;
+          if (val.length >= 6) {
+            plateInputSingle.classList.add("input-valid");
+            plateInputSingle.classList.remove("input-invalid");
+          } else if (val.length > 0) {
+            plateInputSingle.classList.add("input-invalid");
+            plateInputSingle.classList.remove("input-valid");
+          } else {
+            plateInputSingle.classList.remove("input-valid", "input-invalid");
+          }
         }
-
-        //  REVALIDAÇÃO AUTOMÁTICA AO ALTERAR A PLACA
-        const vin = vinInputSingle ? vinInputSingle.value.trim() : "";
-        if (vin.length === 17 && val.length >= 6) {
-          clearTimeout(plateTimeout);
-          plateTimeout = setTimeout(() => runPlate(), 800);
-        }
+        if (btnPlateSingle) btnPlateSingle.disabled = val.length < 3;
       });
     }
 
@@ -1452,6 +1489,17 @@ async function main() {
       const vLines = gInput.value.split("\n").map(l => l.trim()).filter(Boolean);
       const pLines = gPlateInput.value.split("\n").map(l => l.trim()).filter(Boolean);
       
+      const totalItems = Math.max(vLines.length, pLines.length);
+      if (totalItems === 0) return;
+
+      // Feedback Visual de Progresso
+      const progressContainer = el("progressContainer");
+      const progressBar = el("progressBar");
+      const groupProgress = el("groupProgress");
+      if (progressContainer) progressContainer.style.display = "block";
+      if (groupProgress) groupProgress.style.display = "block";
+      if (progressBar) progressBar.style.width = "0%";
+
       // Salva no histórico de grupo
       addGroupHistoryEntry(gInput.value, gPlateInput.value);
 
@@ -1460,28 +1508,30 @@ async function main() {
       
       // Processamento em Lotes para não travar a UI
       const allItems = [];
-      const totalItems = Math.max(vLines.length, pLines.length);
       for (let i = 0; i < totalItems; i++) {
         allItems.push({ vin: vLines[i] || "", plate: pLines[i] || "" });
       }
 
-      const BATCH_SIZE = 10;
+      const BATCH_SIZE = 5; 
       let currentIndex = 0;
-
-      // Mostrar mensagem de carregamento inicial
-      gResults.innerHTML = `<div style="text-align:center; padding: 20px; color: var(--accent);">⚙️ Processando frotas em lotes...</div>`;
 
       const processBatch = async () => {
         const batch = allItems.slice(currentIndex, currentIndex + BATCH_SIZE);
         
         if (batch.length === 0) {
-          gResults.innerHTML = ""; // Limpa a mensagem de processamento
+          if (progressContainer) progressContainer.style.display = "none";
+          if (groupProgress) groupProgress.style.display = "none";
+          gResults.innerHTML = ""; 
           showReports("group", true);
-          renderGroupResults(); // Renderização final com paginação
+          renderGroupResults(); 
           return;
         }
 
-        const batchResults = [];
+        // Atualizar barra de progresso
+        const progressPercent = (currentIndex / totalItems) * 100;
+        if (progressBar) progressBar.style.width = `${progressPercent}%`;
+        if (groupProgress) groupProgress.textContent = `Processando ${currentIndex} de ${totalItems} itens...`;
+
         const apiCalls = batch.map(pair => (async () => {
           const { vin, plate } = pair;
           const res = vin ? decoder.decode(vin) : { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
@@ -1534,15 +1584,12 @@ async function main() {
         
         currentIndex += BATCH_SIZE;
         
-        // Atualiza apenas o contador de progresso, sem re-renderizar a lista toda
-        gResults.innerHTML = `<div style="text-align:center; padding: 20px; color: var(--accent);">⚙️ Processando frotas: ${Math.min(currentIndex, totalItems)} de ${totalItems}...</div>`;
-
-        // Pausa curta para manter a UI responsiva
+        // Pequena pausa para a UI respirar e mostrar o progresso
         await new Promise(resolve => setTimeout(resolve, 50)); 
         processBatch(); 
       };
 
-      processBatch(); // Inicia o processamento
+      processBatch(); 
     };
 
     el("closeModal").onclick = () => el("detailModal").style.display = "none";
