@@ -642,7 +642,7 @@ window.dvbDeletar = async function(event, id, nome) {
   });
 };
 
-// ---------- Inatividade (Auto Logout) ----------
+//  Inatividade (Auto Logout)
 
 let inatividadeTimer;
 const TEMPO_INATIVIDADE = 10 * 60 * 1000; // 10 minutos em milissegundos
