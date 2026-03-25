@@ -517,11 +517,14 @@ function renderHistory() {
       btnDelete.className = "btn-delete-item";
       btnDelete.innerHTML = "&times;";
       btnDelete.title = "Remover este item";
+      btnDelete.style.zIndex = "10";
       btnDelete.onclick = (e) => {
+        e.preventDefault();
         e.stopPropagation();
         const currentList = JSON.parse(localStorage.getItem("decodevin.history") || "[]");
-        currentList.splice(indexInFullList, 1);
-        localStorage.setItem("decodevin.history", JSON.stringify(currentList));
+        // Filtra removendo o item que possui o mesmo timestamp (ID único)
+        const newList = currentList.filter(x => x.ts !== item.ts);
+        localStorage.setItem("decodevin.history", JSON.stringify(newList));
         renderSingleHistory();
       };
 
@@ -674,11 +677,15 @@ function renderHistory() {
       btnDelete.className = "btn-delete-item";
       btnDelete.innerHTML = "&times;";
       btnDelete.title = "Remover este lote";
+      btnDelete.style.zIndex = "10";
       btnDelete.onclick = (e) => {
+        e.preventDefault();
         e.stopPropagation();
-        const currentList = JSON.parse(localStorage.getItem(key) || "[]");
-        currentList.splice(indexInFullList, 1);
-        localStorage.setItem(key, JSON.stringify(currentList));
+        const storageKey = "decodevin.groupHistory";
+        const currentList = JSON.parse(localStorage.getItem(storageKey) || "[]");
+        // Filtra removendo o item que possui o mesmo timestamp (ID único)
+        const newList = currentList.filter(x => x.ts !== item.ts);
+        localStorage.setItem(storageKey, JSON.stringify(newList));
         renderGroupHistory();
       };
 
