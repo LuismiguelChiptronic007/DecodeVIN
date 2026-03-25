@@ -141,12 +141,33 @@ try {
   }
 }
 
+// ── Função auxiliar para remover skeletons ────────────────
+function removerSkeleton(el) { 
+  if (!el) return; 
+
+  el.classList.remove("loading"); 
+  el.classList.remove("skeleton"); 
+  el.classList.remove("skeleton-value"); 
+} 
+
 // ── Função auxiliar para preencher a UI ──────────────────
 function preencherUI(dados, elCarroceria, elEncarrocadeira, elChassi, elFabChassi, elFoto, elFonte, elStatus, isFallback = false) {
-  if (elCarroceria)     elCarroceria.textContent     = dados.carroceria     || "—";
-  if (elEncarrocadeira) elEncarrocadeira.textContent = dados.encarrocadeira || "—";
-  if (elChassi)         elChassi.textContent         = dados.chassi         || "—";
-  if (elFabChassi)      elFabChassi.textContent      = dados.fabricante     || "—";
+  if (elCarroceria) { 
+    elCarroceria.textContent = dados.carroceria || "—"; 
+    removerSkeleton(elCarroceria); 
+  }
+  if (elEncarrocadeira) { 
+    elEncarrocadeira.textContent = dados.encarrocadeira || "—"; 
+    removerSkeleton(elEncarrocadeira); 
+  }
+  if (elChassi) { 
+    elChassi.textContent = dados.chassi || "—"; 
+    removerSkeleton(elChassi); 
+  }
+  if (elFabChassi) { 
+    elFabChassi.textContent = dados.fabricante || "—"; 
+    removerSkeleton(elFabChassi); 
+  }
 
   if (elFoto && dados.foto_url) {
     elFoto.src = dados.foto_url;

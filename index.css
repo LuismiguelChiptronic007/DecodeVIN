@@ -432,6 +432,48 @@ a{color:#93c5fd;text-decoration:none}
 .input-valid { border-color: var(--accent) !important; box-shadow: 0 0 0 3px rgba(34, 197, 148, 0.15) !important; }
 .input-invalid { border-color: var(--danger) !important; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important; }
 
+.card:hover .copy-btn { 
+  opacity: 1; 
+  transform: scale(1); 
+} 
+
+.copy-btn { 
+  position: absolute; 
+  top: 8px; 
+  right: 8px; 
+  background: rgba(0,0,0,0.3); 
+  color: white; 
+  border: 1px solid var(--border); 
+  border-radius: 6px; 
+  padding: 4px 8px; 
+  font-size: 14px; 
+  cursor: pointer; 
+  opacity: 0; 
+  transform: scale(0.8); 
+  transition: all 0.2s ease; 
+  z-index: 3; 
+} 
+
+.copy-btn:hover { 
+  background: var(--accent); 
+  color: black; 
+  border-color: var(--accent); 
+} 
+
+.copy-btn:active { 
+  transform: scale(0.95); 
+} 
+
+/* Ajuste para o ícone de ajuda não sobrepor o botão de cópia */ 
+.help-icon { 
+  right: 40px; /* Afasta o ícone de ajuda para a esquerda */ 
+} 
+
+.card:hover .help-icon { 
+  /* Garante que o ícone de ajuda também apareça no hover */ 
+  opacity: 1; 
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .app-container { padding: 16px; }

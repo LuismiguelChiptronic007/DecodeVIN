@@ -27,7 +27,7 @@
         <div class="selection-card" id="optSingle">
           <div class="selection-icon">🔍</div>
           <h3>Decodificar um único Chassi e uma única Placa</h3>
-          <p>Insira um VIN ou a placa do Onibus</p>
+          <p>Insira um VIN ou uma placa </p>
         </div>
         <div class="selection-card" id="optGroup">
           <div class="selection-icon">📚</div>
@@ -94,6 +94,24 @@
             <a id="ob_fonte" href="#" target="_blank" style="display:none; padding: 12px 24px; border-radius: 8px; background: rgba(56,189,248,0.1); border: 1px solid var(--accent-2); color: var(--accent-2); text-decoration: none; font-size: 14px; font-weight: 600; transition: all 0.2s;">🔗 Ver ficha completa no Ônibus Brasil</a>
           </div>
         </div>
+      </div>
+
+      <div id="secao-veiculo-generico" style="margin-top: 24px; display: none; border-top: 1px solid var(--border); padding-top: 24px;">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;"> 
+          <img id="gen_logo" src="" alt="" loading="lazy" style="display:none; height:36px; object-fit:contain; filter: brightness(0) invert(1); opacity: 0.8;"> 
+          <h3 style="font-size: 16px; color: var(--accent); margin:0;">🚗 Dados do Veículo</h3> 
+        </div> 
+        <div id="cards-genericos" class="cards"> 
+          <div class="card card-generic" id="card_gen_montadora"><div class="label">Montadora</div><div class="value" id="gen_montadora">—</div></div> 
+          <div class="card card-generic" id="card_gen_modelo"><div class="label">Modelo</div><div class="value" id="gen_modelo">—</div></div> 
+          <div class="card card-generic" id="card_gen_chassi"><div class="label">Chassi</div><div class="value" id="gen_chassi">—</div><button class="copy-btn" id="copy_chassi_btn" title="Copiar Chassi" style="display: none;">📋</button></div> 
+          <div class="card card-generic" id="card_fipe_codigo"><div class="label">Código FIPE</div><div class="value" id="gen_fipe_codigo">—</div><button class="copy-btn" id="copy_fipe_btn" title="Copiar Código FIPE" style="display: none;">📋</button></div> 
+          <div class="card card-generic" id="card_fipe_modelo"><div class="label">Modelo FIPE</div><div class="value" id="gen_fipe_modelo">—</div></div> 
+          <div class="card card-generic" id="card_gen_ano"><div class="label">Ano Fab./Modelo</div><div class="value" id="gen_ano">—</div></div> 
+          <div class="card card-generic" id="card_gen_combustivel"><div class="label">Combustível</div><div class="value" id="gen_combustivel">—</div></div> 
+          <div class="card card-generic" id="card_gen_cor"><div class="label">Cor</div><div class="value" id="gen_cor">—</div></div> 
+          <div class="card card-generic" id="card_gen_cidade"><div class="label">Município / UF</div><div class="value" id="gen_cidade">—</div></div> 
+        </div> 
       </div>
 
       <div id="errors" class="row"></div>

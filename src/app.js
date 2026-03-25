@@ -17,7 +17,6 @@ async function fetchWithTimeout(resource, options = {}) {
     return response;
   } catch (error) {
     clearTimeout(id);
-    // Se for erro de timeout (AbortError), tratamos como erro de conexão
     if (error.name === 'AbortError') {
       throw new Error('Timeout na requisição');
     }
@@ -25,10 +24,8 @@ async function fetchWithTimeout(resource, options = {}) {
   }
 }
 
-// Função para consultar API externa do keplaca.com (Simulação de integração REST)
 async function consultarKePlaca(placa) {
   try {
-    // Agora chama a função do arquivo keplaca-integracao.js
     if (window.consultarKePlaca) {
       return await window.consultarKePlaca(placa);
     }
@@ -39,48 +36,36 @@ async function consultarKePlaca(placa) {
   }
 }
 
-// Função para verificar placa e chassi via API direta (Worker Cloudflare) - BYPASS PHP
 async function consultarPlacaPHP(placa, chassiDigitado = "") {
   try {
-    console.log("Iniciando consulta de placa direta (Worker) para:", placa);
+    console.log("Consultando Worker para placa:", placa);
 
-    // ✅ Chamada direta ao Worker do KePlaca (evita problemas de PHP/XAMPP/PNA)
-    const workerUrl = `https://keplaca-proxy.luismiguelgomesoliveira-014.workers.dev/?placa=${placa}`;
-    const resp = await fetch(workerUrl);
-    const data = await resp.json();
-
-    console.log("Dados recebidos do Worker:", data);
-
-    if (data && data.status === 'ok') {
-      // ✅ Prioriza chassi_completo (17 chars) para validação exata, caso disponível
-      const final_site = (data.chassi_completo || data.final_chassi || "").toUpperCase();
-      
-      if (final_site) {
-        // ✅ VALIDAÇÃO: Se o chassi foi fornecido, verifica se coincide com os dados da placa
-        if (chassiDigitado && !isChassisMatch(chassiDigitado, final_site)) {
-          return {
-            status: "erro",
-            mensagem: `Divergência: Este chassi (${chassiDigitado}) não pertence à placa (${placa}).`,
-            final: final_site
-          };
-        }
-
-        return {
-          status: "ok",
-          final: final_site,
-          mensagem: `Chassi final encontrado: ${final_site}`,
-          fonte: "worker_keplaca"
-        };
-      }
+    let workerUrl = `https://keplaca-proxy.luismiguelgomesoliveira-014.workers.dev/?placa=${placa}`;
+    if (chassiDigitado) {
+      workerUrl += `&chassi=${chassiDigitado}`;
     }
 
-    throw new Error("Placa não encontrada ou erro no Worker.");
+    const resp = await fetchWithTimeout(workerUrl, { timeout: 15000 });
+    const data = await resp.json();
+
+    console.log("Resposta do Worker:", data);
+
+    if (data.status !== "ok") {
+      return {
+        status: "erro",
+        mensagem: data.mensagem || "Placa não encontrada."
+      };
+    }
+
+    return data;
 
   } catch (e) {
-    console.error("Erro na verificação direta:", e);
-    return { 
-      status: "erro", 
-      mensagem: "Não foi possível localizar os dígitos do chassi para esta placa em fontes públicas." 
+    console.error("Erro ao consultar Worker:", e);
+    return {
+      status: "erro",
+      mensagem: e.message === "Timeout na requisição"
+        ? "Tempo limite excedido."
+        : "Erro de conexão com o servidor."
     };
   }
 }
@@ -111,18 +96,15 @@ const TOOLTIPS = {
   "CHASSI (OB)": "Modelo do chassi conforme registrado no Ônibus Brasil."
 };
 
-// Função auxiliar para validar se dois nomes de fabricantes são compatíveis
 function isMfrMatch(m1, m2) {
   if (!m1 || !m2 || m1 === "—" || m2 === "—") return true; 
   const s1 = m1.toLowerCase();
   const s2 = m2.toLowerCase();
   
-  // Normalização básica (remover acentos, espaços extras, etc.)
   const norm = (s) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   const n1 = norm(s1);
   const n2 = norm(s2);
 
-  // Atalhos comuns para marcas de ônibus e caminhões
   const brands = [
     { keys: ["mercedes", "mb", "daimler"], label: "mercedes" },
     { keys: ["volks", "vw", "man"], label: "volkswagen" },
@@ -151,16 +133,12 @@ function isChassisMatch(vin, partial) {
      const v = vin.toUpperCase().replace(/[^A-Z0-9]/g, "");
      const p = partial.toUpperCase().replace(/[^A-Z0-9]/g, "");
      
-     // ✅ NOVA LÓGICA DE DETECÇÃO DE MODELO: 
-     // Só ignoramos a validação se a string parecer um nome puramente alfabético (ex: "BUS", "SCANIA").
-     // Se contiver NÚMEROS e tiver pelo menos 4 caracteres, deve ser validado.
      const hasNumbers = /[0-9]/.test(p);
      const isLikelySerial = hasNumbers && p.length >= 4;
      
-     // Consideramos modelo se não parecer um serial e tiver características de nome
      const isModel = !isLikelySerial && p.length < 17 && (
-       p.length < 4 || // Muito curto
-       /^[A-Z]+$/.test(p) || // Só letras
+       p.length < 4 ||
+       /^[A-Z]+$/.test(p) ||
        p.includes("-") || p.includes(" ")
      );
 
@@ -171,21 +149,18 @@ function isChassisMatch(vin, partial) {
  
      console.log(`[Validando Chassi] Digitado: ${v} | Retornado da API: ${p}`);
  
-     // Comparação exata para VIN completo
      if (p.length === 17) {
        const match = v === p;
        console.log(`[Validando Chassi] Comparação 17 chars: ${match ? "OK" : "DIVERGENTE"}`);
        return match;
      }
 
-     // Comparação final para VIS (8 chars)
      if (p.length === 8) {
        const match = v.endsWith(p);
        console.log(`[Validando Chassi] Comparação 8 chars (final): ${match ? "OK" : "DIVERGENTE"}`);
        return match;
      }
      
-     // Se for um pedaço menor (ex: 7 dígitos), verifica se está contido no VIN
      const match = v.includes(p);
      console.log(`[Validando Chassi] Comparação parcial (${p.length} chars): ${match ? "OK" : "DIVERGENTE"}`);
      return match;
@@ -194,6 +169,11 @@ function isChassisMatch(vin, partial) {
 function card(label, value) {
   const d = document.createElement("div");
   d.className = "card";
+  
+  const exists = value && value !== "—" && value !== "undefined";
+  const displayValue = exists ? String(value) : "Não encontrado na API";
+  if (!exists) d.style.opacity = "0.5";
+
   const tooltipText = TOOLTIPS[label.toUpperCase()];
   if (tooltipText) {
     const icon = document.createElement("div");
@@ -207,7 +187,7 @@ function card(label, value) {
   l.textContent = label;
   const v = document.createElement("div");
   v.className = "value";
-  v.textContent = value == null ? "—" : String(value);
+  v.textContent = displayValue;
   d.appendChild(l);
   d.appendChild(v);
   return d;
@@ -235,7 +215,6 @@ function showToast(message, type = "success") {
   const toast = document.createElement("div");
   toast.className = "custom-toast";
   
-  // Estilização via JS para garantir o tema
   toast.style.cssText = `
     position: fixed;
     top: 50%;
@@ -264,7 +243,6 @@ function showToast(message, type = "success") {
 
   document.body.appendChild(toast);
 
-  // Keyframes para animação se não existirem
   if (!document.getElementById("toast-styles")) {
     const style = document.createElement("style");
     style.id = "toast-styles";
@@ -286,18 +264,12 @@ function showSkeletons(container, count = 4) {
   for (let i = 0; i < count; i++) {
     container.appendChild(cardSkeleton());
   }
-  // Garante que o grid esteja centralizado
   centerGrid(container);
 }
 
-/**
- * Centraliza os cartões dentro de um container grid.
- * @param {HTMLElement} container 
- */
 function centerGrid(container) {
   if (!container) return;
   container.style.display = "grid";
-  // Usamos auto-fit para centralizar melhor quando há poucos cards
   container.style.gridTemplateColumns = "repeat(auto-fit, minmax(220px, 280px))";
   container.style.justifyContent = "center";
   container.style.gap = "15px";
@@ -350,7 +322,6 @@ function renderResult(result, text) {
       }
     });
     cards.appendChild(fragment);
-    // Centraliza os cartões na tela principal
     centerGrid(cards);
   }
 
@@ -433,10 +404,9 @@ function addHistoryEntry(input, plateOverride = "") {
   const plate = plateOverride || (pInput ? pInput.value.trim().toUpperCase() : "");
   if (!input && !plate) return;
   const entry = { input, plate, ts: Date.now() };
-  // Aumentado para 100 itens no histórico total
   const newList = [entry, ...list.filter(x => x.input !== input || (input === "" && x.plate !== plate))].slice(0, 100);
   localStorage.setItem(key, JSON.stringify(newList));
-  currentHistoryPage = 1; // Volta para a primeira página ao adicionar novo
+  currentHistoryPage = 1;
   renderHistory();
 }
 
@@ -449,23 +419,20 @@ function addGroupHistoryEntry(vins, plates) {
   const fleetName = fInput ? fInput.value.trim() : "";
   
   const entry = { vins, plates, fleetName, ts: Date.now() };
-  // Apenas salva se for diferente do último (simples)
   const lastEntry = list[0];
   if (lastEntry && lastEntry.vins === vins && lastEntry.plates === plates && lastEntry.fleetName === fleetName) return;
 
-  const newList = [entry, ...list].slice(0, 50); // Limite de 50 grupos
+  const newList = [entry, ...list].slice(0, 50);
   localStorage.setItem(key, JSON.stringify(newList));
   currentGroupHistoryPage = 1;
   renderHistory();
   
-  // Limpa o nome da frota após salvar
   if (fInput) fInput.value = "";
 }
 
 function renderHistory() {
   renderSingleHistory();
   renderGroupHistory();
-
 }
 
   const renderSingleHistory = () => {
@@ -480,6 +447,8 @@ function renderHistory() {
     searchInput.placeholder = "🔍 Buscar no histórico (chassi ou placa)...";
     searchInput.style.marginBottom = "12px";
     searchInput.style.fontSize = "13px";
+    searchInput.style.width = "100%";
+    searchInput.style.boxSizing = "border-box";
     searchInput.oninput = (e) => {
       const term = e.target.value.toLowerCase();
       renderSingleHistoryItems(list.filter(item => 
@@ -521,7 +490,6 @@ function renderHistory() {
       
       const v = document.createElement("div");
       v.style.flex = "1";
-      // Removida a hora conforme solicitação: "aqui eu não quero a hora, só na tela de grupo"
       v.textContent = (item.input || "Placa: " + item.plate);
       if (item.input && item.plate) {
         const p = document.createElement("span");
@@ -562,7 +530,6 @@ function renderHistory() {
       h.appendChild(row);
     });
 
-    // Controles de Paginação
     if (totalPages > 1) {
       const pagination = document.createElement("div");
       pagination.className = "history-pagination";
@@ -606,6 +573,8 @@ function renderHistory() {
     searchInput.placeholder = "🔍 Buscar no histórico (nome, placa, chassi)...";
     searchInput.style.marginBottom = "12px";
     searchInput.style.fontSize = "13px";
+    searchInput.style.width = "100%";
+    searchInput.style.boxSizing = "border-box";
     searchInput.oninput = (e) => {
       const term = e.target.value.toLowerCase();
       renderGroupHistoryItems(list.filter(item => 
@@ -666,19 +635,16 @@ function renderHistory() {
         minute: '2-digit'
       });
 
-      // Título do Lote: Nome ou ID Sequencial
       const title = document.createElement("div");
       title.style.fontWeight = "600";
       title.style.color = "var(--accent)";
       title.textContent = item.fleetName ? `📦 ${item.fleetName}` : `📦 Lote #${list.length - indexInFullList}`;
       
-      // Detalhes (Contagem e Data)
       const details = document.createElement("div");
       details.style.fontSize = "13px";
       details.style.color = "var(--text)";
       details.textContent = `${totalCount} itens • ${dataHora}`;
 
-      // Prévia dos dados (primeiros 2 itens)
       const preview = document.createElement("div");
       preview.style.fontSize = "11px";
       preview.style.color = "var(--muted)";
@@ -753,7 +719,6 @@ function renderHistory() {
   window.renderGroupHistory = renderGroupHistory;
 
 const exportCSV = (data, name) => {
-  // Cabeçalhos solicitados anteriormente, organizados conforme o modelo visual
   const columns = [
     "MONTADORA",
     "CHASSI",
@@ -762,30 +727,75 @@ const exportCSV = (data, name) => {
     "CARROCERIA",
     "ENCARROÇADEIRA",
     "MOTOR",
-    "MODELO CHASSI"
+    "MODELO CHASSI",
+    "CODIGO FIPE",
+    "MODELO FIPE",
+    "COMBUSTIVEL",
+    "COR",
+    "CIDADE/UF"
   ];
 
-  // Cabeçalho com BOM para Excel reconhecer acentos
   let csv = "\ufeff" + columns.join(";") + "\n";
 
   data.forEach(item => {
     const tokens = item.result?.tokens || [];
     const ob = item.ob_data || item.ob || {};
+    const api = item.apiResult || {};
     
     const findToken = (label) => {
       const t = tokens.find(t => t.label === label || t.key === label.toLowerCase().replace(/ /g, "_"));
       return t ? t.value : "—";
     };
 
+    let bestFipe = null;
+    
+    const findFipeDeepCSV = (obj) => {
+      if (!obj || typeof obj !== 'object') return null;
+      if (Array.isArray(obj)) {
+        for (const item of obj) {
+          const res = findFipeDeepCSV(item);
+          if (res) return res;
+        }
+        return null;
+      }
+      if (obj.codigo_fipe || obj.fipe_codigo || obj.CODIGO_FIPE || obj.FIPE_CODIGO) return [obj];
+      const keys = ["fipe", "fipe_data", "dados_fipe", "fipe_valor", "results", "data", "list", "FIPE", "FIPE_DATA", "DADOS_FIPE"];
+      for (const k of keys) {
+        if (obj[k]) {
+          const val = obj[k];
+          const list = Array.isArray(val) ? val : [val];
+          if (list.some(f => f && (f.codigo_fipe || f.fipe_codigo || f.CODIGO_FIPE || f.FIPE_CODIGO))) return list;
+        }
+      }
+      for (const k in obj) {
+        if (obj[k] && typeof obj[k] === 'object' && !keys.includes(k)) {
+          const res = findFipeDeepCSV(obj[k]);
+          if (res) return res;
+        }
+      }
+      return null;
+    };
+
+    const potentialList = findFipeDeepCSV(api) || [];
+    if (potentialList.length > 0) {
+      const valid = potentialList.filter(f => f && (f.codigo_fipe || f.fipe_codigo || f.texto_modelo || f.modelo || f.CODIGO_FIPE || f.FIPE_CODIGO || f.MODELO));
+      bestFipe = valid.sort((a, b) => (b.score || 0) - (a.score || 0))[0];
+    }
+
     const row = [
-      item.fabricante || findToken("Fabricante") || "—",  // MONTADORA
-      item.vin || "—",                                   // CHASSI
-      item.placa || "—",                                  // PLACA
-      findToken("Ano Modelo") || "—",                    // ANO
-      ob.carroceria || "—",                              // CARROCERIA
-      ob.encarrocadeira || ob.encarrocadora || "—",      // ENCARROÇADEIRA
-      findToken("Motor") || "—",                         // MOTOR
-      ob.modelo_chassi || ob.chassi || findToken("Modelo") || "—" // MODELO CHASSI
+      item.fabricante || api.marca || api.fabricante || findToken("Fabricante") || "—",
+      item.vin || api.chassi || "—",
+      item.placa || api.placa || "—",
+      api.ano_modelo || api.ano || findToken("Ano Modelo") || "—",
+      ob.carroceria || "—",
+      ob.encarrocadeira || ob.encarrocadora || "—",
+      api.combustivel || findToken("Motor") || "—",
+      api.modelo || ob.modelo_chassi || ob.chassi || findToken("Modelo") || "—",
+      bestFipe ? (bestFipe.codigo_fipe || bestFipe.fipe_codigo || "—") : "—",
+      bestFipe ? (bestFipe.texto_modelo || bestFipe.modelo || "—") : "—",
+      api.combustivel || "—",
+      api.cor || "—",
+      (api.municipio && api.uf) ? `${api.municipio} / ${api.uf}` : (api.cidade || "—")
     ];
 
     csv += row.map(val => {
@@ -831,7 +841,6 @@ function renderGroupResults() {
     const item = document.createElement("div");
     item.className = "group-item";
     
-    // Configurar o estilo com base no status
     if (itemData.status === 'ok') {
       item.style.borderLeft = "4px solid #2ecc71";
     } else if (itemData.status === 'error') {
@@ -873,11 +882,27 @@ function renderGroupResults() {
       statusHtml = `<span style="color:#f1c40f">Item Órfão</span>`;
     }
 
-    item.innerHTML = `${layout}<div class="info"><span>${itemData.fabricante || "—"}</span><span class="status-msg">${statusHtml}</span></div>`;
+    let modelInfo = "";
+    if (itemData.apiResult) {
+      const api = itemData.apiResult;
+      const mBasico = api.modelo || api.model || api.texto_modelo || "";
+      const vBasico = api.versao || api.version || "";
+      const mod = (mBasico && vBasico && !mBasico.includes(vBasico)) ? `${mBasico} ${vBasico}` : (mBasico || vBasico || "");
+      if (mod) modelInfo = ` • <span class="model-val">${mod}</span>`;
+    } else if (itemData.ob && itemData.ob.ob_chassi) {
+      modelInfo = ` • <span class="model-val">${itemData.ob.ob_chassi}</span>`;
+    }
+
+    item.innerHTML = `${layout}<div class="info"><span>${itemData.fabricante || "—"}${modelInfo}</span><span class="status-msg">${statusHtml}</span></div>`;
     
     item.addEventListener('click', (e) => {
       e.stopPropagation();
-      openModal(itemData.result, vin || plate, !vin, vin && plate ? plate : null, itemData);
+      // Prioridade para o chassi retornado pela API se o original estiver vazio
+      const chassiParaModal = (vin && vin !== "") ? vin : (itemData.apiResult?.chassi_completo || itemData.apiResult?.chassi || "");
+      const isPlateOnly = !chassiParaModal;
+      const linked = (chassiParaModal && plate) ? plate : null;
+      
+      openModal(itemData.result, chassiParaModal || plate, isPlateOnly, linked, itemData);
     });
 
     fragment.appendChild(item);
@@ -885,7 +910,6 @@ function renderGroupResults() {
 
   gResults.appendChild(fragment);
 
-  // Controles de Paginação do Grupo
   if (totalPages > 1) {
     const pagination = document.createElement("div");
     pagination.className = "group-pagination";
@@ -915,7 +939,10 @@ function renderGroupResults() {
   }
 }
 
-// MODAL LOGIC — corrigido: não substitui document.getElementById
+// ============================================================
+// MODAL LOGIC — openModal (VERSÃO CORRIGIDA)
+// Exibe dados completos do veículo genérico no modal do grupo
+// ============================================================
 async function openModal(result, code, isPlate = false, linkedPlate = null, itemData = null) {
   const mTitle = el("modalTitle");
   const mSegs = el("modalSegments");
@@ -924,14 +951,32 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
 
   if (!modal) return;
 
-  // Limpar e mostrar modal IMEDIATAMENTE para feedback visual
-  mTitle.textContent = linkedPlate ? `Análise Completa: ${code} + ${linkedPlate}` : (isPlate ? `Dados OB: ${code}` : `Detalhes: ${code}`);
-  mSegs.innerHTML = ""; 
+  // Se temos itemData com apiResult e chassi, mas abriu como "apenas placa", corrigimos para modo vinculado
+  if (itemData && itemData.apiResult && (itemData.apiResult.chassi_completo || itemData.apiResult.chassi)) {
+    const apiChassi = itemData.apiResult.chassi_completo || itemData.apiResult.chassi;
+    if (itemData.placa && isPlate) {
+      code = apiChassi;
+      linkedPlate = itemData.placa;
+      isPlate = false;
+      // Se não tínhamos resultado de decodificação (porque não tinha VIN original), tentamos decodificar o chassi da API
+      if (!result || result.type === "UNKNOWN") {
+        if (window.currentDecoder) {
+           result = window.currentDecoder.decode(apiChassi);
+           if (itemData) itemData.result = result; // Atualiza o itemData para cliques futuros
+        }
+      }
+    }
+  }
+
+  mTitle.textContent = linkedPlate
+    ? `Análise Completa: ${code} + ${linkedPlate}`
+    : (isPlate ? `Dados OB: ${code}` : `Detalhes: ${code}`);
+  mSegs.innerHTML = "";
   mCards.innerHTML = "";
-  mCards.removeAttribute("style"); // Limpa o display: grid do caso anterior
+  mCards.removeAttribute("style");
   modal.style.display = "flex";
 
-  // Se houver erro de verificação no itemData, mostramos o erro no modal e bloqueamos os detalhes
+  // ── Bloco de erro de verificação ──────────────────────────
   if (itemData && itemData.status === 'error') {
     const isNoBalance = String(itemData.error_detail || "").includes("402");
     
@@ -957,6 +1002,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     return;
   }
 
+  // ── Helper: injeta dados do Ônibus Brasil ─────────────────
   const injectOB = (p, container) => {
     const obWrapper = document.createElement("div");
     obWrapper.style.marginTop = "16px";
@@ -973,9 +1019,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     obCards.className = "cards";
     obWrapper.appendChild(obCards);
     
-    // Centraliza os cartões da carroceria
     centerGrid(obCards);
-    
     showSkeletons(obCards, 4);
 
     const mediaBox = document.createElement("div");
@@ -995,7 +1039,6 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
         if (id === "ob_status") return {
           set textContent(v) { 
             statusDiv.textContent = v; 
-            // Limpa esqueletos em caso de sucesso (✅) ou erro (⚠️/❌/sem ficha)
             if (v.includes("✅") || v.includes("Aviso") || v.includes("Erro") || v.includes("sem ficha") || v.includes("Não encontrada")) {
               checkClear();
             }
@@ -1015,34 +1058,148 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     window.buscarDadosOnibusBrasil(p, true, mockUI);
   };
 
+  // ── Renderização principal ────────────────────────────────
   if (linkedPlate) {
     mSegs.innerHTML = `<div class="seg">${code}</div><div class="seg" style="background:var(--accent);color:black">${linkedPlate}</div>`;
     
-    // Container para os cartões do chassi
+    // Container para os cards de decodificação do chassi (WMI/VDS/VIS)
     const c1 = document.createElement("div");
     c1.className = "cards";
     centerGrid(c1);
     mCards.appendChild(c1);
     setCards(result, c1);
     
-    // Título da seção Ônibus Brasil
-    const h = document.createElement("h3"); 
-    h.textContent = "🚌 Dados Carroceria"; 
-    h.style.cssText = "font-size: 18px; color: var(--accent-2); margin: 24px 0 16px; border-top: 1px solid var(--border); padding-top: 24px; text-align: center; width: 100%;";
-    mCards.appendChild(h);
+    const apiResult = itemData ? itemData.apiResult : (window.currentSingleResult ? window.currentSingleResult.apiResult : null);
+
+    // ── Detecção robusta de ônibus ────────────────────────
+    const apiTipo = String(apiResult?.tipo || apiResult?.category || "").toLowerCase();
     
-    injectOB(linkedPlate, mCards);
+    // Diagnóstico para depuração no console
+    console.log("[Modal] Diagnóstico:", {
+      placa: linkedPlate,
+      chassi: code,
+      hasApiResult: !!apiResult,
+      is_onibus: apiResult?.is_onibus,
+      ob_success: apiResult?.ob_data?.success,
+      apiTipo: apiTipo
+    });
+
+    // O fix real: isBus só é true se houver evidência POSITIVA de ônibus
+     const isBus = apiResult 
+       ? (apiResult.is_onibus === true || 
+          (apiResult.ob_data && apiResult.ob_data.success === true) || 
+          apiTipo.includes("onibus") || 
+          apiTipo.includes("ônibus"))
+       : true; // Se não tem apiResult (ex: modo individual sem consulta placa), assume ônibus por padrão
+
+    if (isBus) {
+      // ── ÔNIBUS: dados do Ônibus Brasil ──────────────────
+      const h = document.createElement("h3");
+      h.textContent = "🚌 Dados Carroceria";
+      h.style.cssText = "font-size: 18px; color: var(--accent-2); margin: 24px 0 16px; border-top: 1px solid var(--border); padding-top: 24px; text-align: center; width: 100%;";
+      mCards.appendChild(h);
+      injectOB(linkedPlate, mCards);
+
+    } else {
+      // ── VEÍCULO GENÉRICO: mesma apresentação da tela individual ──
+      const h = document.createElement("h3");
+      h.textContent = "🚗 Dados do Veículo";
+      h.style.cssText = "font-size: 18px; color: var(--accent); margin: 24px 0 16px; border-top: 1px solid var(--border); padding-top: 24px; text-align: center; width: 100%;";
+      mCards.appendChild(h);
+
+      const genCards = document.createElement("div");
+      genCards.className = "cards";
+      centerGrid(genCards);
+      mCards.appendChild(genCards);
+
+      const api = apiResult || {};
+
+      // Logo da montadora
+      if (api.logo) {
+        const logoWrapper = document.createElement("div");
+        logoWrapper.style.cssText = "grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; margin-bottom: 8px;";
+        const logoImg = document.createElement("img");
+        logoImg.src = api.logo;
+        logoImg.style.cssText = "height: 32px; object-fit: contain; filter: brightness(0) invert(1); opacity: 0.8;";
+        logoWrapper.appendChild(logoImg);
+        genCards.appendChild(logoWrapper);
+      }
+
+      // Campos calculados
+      const mBasico = api.modelo || api.model || api.texto_modelo || "";
+      const vBasico  = api.versao  || api.version || "";
+      const modeloCompleto = (mBasico && vBasico && !mBasico.includes(vBasico))
+        ? `${mBasico} ${vBasico}`
+        : (mBasico || vBasico || "—");
+
+      const anoFab = api.ano || api.ano_fabricacao;
+      const anoMod = api.ano_modelo;
+      const anoCompleto = (anoFab && anoMod && anoFab !== anoMod)
+        ? `${anoFab}/${anoMod}`
+        : (anoFab || anoMod || "—");
+
+      // Tentar localizar dados FIPE de forma profunda
+      const findFipe = (obj) => {
+        if (!obj || typeof obj !== 'object') return null;
+        if (obj.fipe_codigo || obj.codigo_fipe || obj.FIPE_CODIGO) return obj;
+        const keys = ["fipe", "fipe_data", "dados_fipe", "results", "data"];
+        for (let k of keys) {
+          if (obj[k]) {
+            const val = obj[k];
+            const list = Array.isArray(val) ? val : [val];
+            const found = list.find(f => f && (f.fipe_codigo || f.codigo_fipe || f.FIPE_CODIGO));
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+      
+      const fData   = findFipe(api);
+      const fipeCod = fData ? (fData.fipe_codigo || fData.codigo_fipe || fData.FIPE_CODIGO) : (api.fipe_codigo || api.codigo_fipe);
+      const fipeMod = fData ? (fData.fipe_modelo || fData.modelo || fData.texto_modelo || fData.MODELO) : (api.fipe_modelo || api.modelo_fipe);
+      const temFipe = fipeCod && fipeCod !== "—";
+
+      const mfr        = api.marca        || api.fabricante || api.brand || api.texto_marca || "—";
+      const chassiReal = api.chassi_completo || api.chassi   || api.vin  || "—";
+      const combustivel= api.combustivel  || api.fuel        || api.texto_combustivel || "—";
+      const cor        = api.cor          || api.color       || "—";
+      const cidade     = (api.municipio && api.uf)
+        ? `${api.municipio} / ${api.uf}`
+        : (api.cidade || api.municipio || "—");
+      const situacao   = api.situacao     || "—";
+
+      // Cards — mesma ordem da tela individual
+      genCards.appendChild(card("Montadora",       mfr));
+      genCards.appendChild(card("Modelo",          modeloCompleto));
+      genCards.appendChild(card("Chassi",          chassiReal));
+      genCards.appendChild(card("Código FIPE",     temFipe ? fipeCod : "Não encontrado na API"));
+      genCards.appendChild(card("Modelo FIPE",     temFipe ? fipeMod : "Não encontrado na API"));
+      genCards.appendChild(card("Ano Fab./Modelo", anoCompleto));
+      genCards.appendChild(card("Combustível",     combustivel));
+      genCards.appendChild(card("Cor",             cor));
+      genCards.appendChild(card("Município / UF",  cidade));
+      genCards.appendChild(card("Situação",        situacao));
+
+      // Reduz opacidade nos cards FIPE quando indisponível
+      if (!temFipe) {
+        const allCards = genCards.querySelectorAll(".card");
+        Array.from(allCards)
+          .filter(c => {
+            const lbl = c.querySelector(".label");
+            return lbl && (lbl.textContent.includes("FIPE") || lbl.textContent.includes("Código"));
+          })
+          .forEach(c => c.style.opacity = "0.5");
+      }
+    }
+
   } else if (isPlate) {
     mSegs.innerHTML = `<div class="seg">${code}</div>`;
     injectOB(code, mCards);
   } else {
     setSegments(result, mSegs);
     setCards(result, mCards);
-    // Centraliza os cartões principais do modal
     centerGrid(mCards);
   }
-
-  /* Código da API externa removido a pedido do usuário */
 }
 
 window.renderGroupResults = renderGroupResults;
@@ -1050,7 +1207,6 @@ window.openModal = openModal;
 
 async function main() {
 
-  // PWA: Registrar Service Worker
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js')
@@ -1064,6 +1220,7 @@ async function main() {
     const rules = await loadRules();
     console.log("Regras carregadas:", rules ? "Sim" : "Não");
     const decoder = createDecoder(rules);
+    window.currentDecoder = decoder;
 
     const selectionScreen = el("selectionScreen");
     const singleDecoder = el("singleDecoder");
@@ -1086,12 +1243,10 @@ async function main() {
         }
       });
       
-      // Passar true para manter os valores dos inputs ao alternar entre telas de decodificação
       clearUI(true);
       
       if (screen) {
         screen.style.display = screen === selectionScreen ? "flex" : "block";
-        // Forçar reflow para reiniciar a animação
         void screen.offsetWidth;
         screen.classList.add("screen-fade-in");
       }
@@ -1107,16 +1262,15 @@ async function main() {
     };
     el("backFromSingle").onclick = () => {
       showScreen(selectionScreen);
-      clearUI(false); // Limpa tudo ao voltar para a home
+      clearUI(false);
     };
     el("backFromGroup").onclick = () => {
       showScreen(selectionScreen);
-      clearUI(false); // Limpa tudo ao voltar para a home
+      clearUI(false);
     };
 
     const showReports = (mode, show) => {
       const id = mode === "single" ? "singleReportButtons" : "reportButtons";
-      // Ocultar sempre no modo individual conforme solicitação
       if (mode === "single") {
         const e = el("singleReportButtons");
         if (e) e.style.display = "none";
@@ -1135,8 +1289,14 @@ async function main() {
       showReports("group", false);
       const rt = el("resultTitle"); if (rt) rt.style.display = "none";
       const ob = el("secao-onibusbrasil"); if (ob) ob.style.display = "none";
+      const gen = el("secao-veiculo-generico"); if (gen) gen.style.display = "none";
       
-      // Sempre limpar o valor do input de arquivo para permitir novas importações
+      const genericCards = ["card_gen_montadora", "card_gen_modelo", "card_gen_chassi", "card_gen_ano", "card_gen_combustivel", "card_gen_cor", "card_gen_cidade", "card_fipe_codigo", "card_fipe_modelo"];
+      genericCards.forEach(id => {
+        const e = el(id);
+        if (e) e.style.opacity = "1";
+      });
+      
       const excelInput = el("excelFileInput");
       if (excelInput) excelInput.value = "";
 
@@ -1160,12 +1320,10 @@ async function main() {
 
       const plate = plateInputSingle ? plateInputSingle.value.trim().toUpperCase() : "";
       
-     
-      // dispara a busca da placa automaticamente em vez de mostrar erro.
       if (plate !== "" && !isPlateValidated && !force) {
           console.log("Placa presente mas não validada. Iniciando busca automática...");
           await runPlate();
-          return; // runPlate já chama runVIN(true) ao finalizar com sucesso
+          return;
       }
 
       el("errors").innerHTML = "";
@@ -1182,21 +1340,28 @@ async function main() {
         return;
       }
 
-      // Exibir título e seções de resultado
       const rt = el("resultTitle"); if (rt) rt.style.display = "block";
       const segs = el("segments"); if (segs) { segs.innerHTML = ""; segs.style.display = "flex"; }
       
       renderResult(result, text);
       
-      //  ATUALIZA O OBJETO GLOBAL AO DECODIFICAR
-      window.currentSingleResult = {
-        tipo: result.type,
-        vin: text,
-        placa: plate,
-        fabricante: result.manufacturerName || "Desconhecido",
-        result: result,
-        ob: {}
-      };
+      if (!window.currentSingleResult) {
+        window.currentSingleResult = {
+          tipo: result.type,
+          vin: text,
+          placa: plate,
+          fabricante: result.manufacturerName || "Desconhecido",
+          result: result,
+          ob: {}
+        };
+      } else {
+        window.currentSingleResult.tipo = result.type;
+        window.currentSingleResult.vin = text;
+        window.currentSingleResult.result = result;
+        if (!window.currentSingleResult.fabricante || window.currentSingleResult.fabricante === "Desconhecido") {
+          window.currentSingleResult.fabricante = result.manufacturerName || "Desconhecido";
+        }
+      }
 
       addHistoryEntry(text);
     };
@@ -1218,77 +1383,210 @@ async function main() {
       if (btnPlate) { btnPlate.disabled = true; btnPlate.textContent = "⏳ Verificando..."; }
       if (btnDecode) btnDecode.disabled = true;
 
-      isPlateValidated = false; // Resetar estado ao iniciar nova busca
+      const copyChassiBtn = el("copy_chassi_btn");
+      const copyFipeBtn = el("copy_fipe_btn");
+      if (copyChassiBtn) copyChassiBtn.style.display = "none";
+      if (copyFipeBtn) copyFipeBtn.style.display = "none";
+
+      isPlateValidated = false;
       window.currentSingleResult = { vin: vin, placa: p, ob: {}, result: null };
 
-      // Limpar resultados anteriores ao iniciar nova busca de placa
       ["segments", "cards", "errors"].forEach(id => {
         const e = el(id);
         if (e) { e.innerHTML = ""; if (id === "segments") e.style.display = "none"; }
       });
       const rt = el("resultTitle"); if (rt) rt.style.display = "none";
       const obSec = el("secao-onibusbrasil"); if (obSec) obSec.style.display = "none";
+      const genSec = el("secao-veiculo-generico"); if (genSec) genSec.style.display = "none";
       const verifEl = el("ob_verificacao"); if (verifEl) verifEl.innerHTML = "";
       showReports("single", false);
 
       el("errors").innerHTML = "";
       
-      if (obSec) obSec.style.display = "block";
-      el("ob_status").textContent = "Buscando...";
-      toggleValueSkeletons(el("ob_container"), true);
-      
       const chassiDigitado = vinInputSingle ? vinInputSingle.value.trim().toUpperCase() : "";
       if (verifEl) verifEl.innerHTML = `<span style="color:var(--muted); font-weight:normal">Verificando placa...</span>`;
 
       try {
-        // . Aguarda a validação da placa pelo PHP
         const apiResult = await consultarPlacaPHP(p, chassiDigitado);
         console.log("Resultado da verificação de placa:", apiResult);
 
         if (apiResult.status === "ok") {
-          isPlateValidated = true; //  MARCAR COMO VALIDADO
-          if (verifEl) verifEl.innerHTML = `<span style="color:#2ecc71">${apiResult.mensagem || "✔ Chassi confirmado"}</span>`;
+          isPlateValidated = true;
           
-          //  MOSTRAR RESULTADO AUTOMATICAMENTE
-          runVIN(true); 
-          showReports("single", true);
-
-          //  Tentar usar os dados do OB que vieram no cache da API de placa
           let obData = apiResult.ob_data;
           
-          if (obData && obData.success) {
-            console.log("Usando dados do Ônibus Brasil vindos do cache DB");
-            // Preencher a UI com os dados do cache
-            if (el("ob_container")) {
-              el("ob_status").textContent = "Dados carregados do cache local.";
+          const apiTipo = String(apiResult.tipo || apiResult.category || "").toLowerCase();
+          const isBus = apiResult.is_onibus === true || (obData && obData.success) || apiTipo.includes("onibus") || apiTipo.includes("ônibus");
+
+          if (isBus) {
+            if (verifEl) verifEl.innerHTML = `<span style="color:#2ecc71">${apiResult.mensagem || "✔ Veículo identificado (Ônibus)"}</span>`;
+            if (obSec) obSec.style.display = "block";
+
+            if (obData && obData.success === true && 
+                (obData.encarrocadeira || obData.carroceria || obData.fabricante_chassi || obData.modelo_chassi)) {
+
+              // ✅ TEM CACHE — preenche direto, sem skeleton
+              el("ob_status").textContent = "✅ Dados encontrados! (cache)";
               el("ob_status").style.color = "var(--accent)";
-              el("ob_encarrocadeira").textContent = obData.encarrocadeira || obData.encarrocadora || "—";
-              el("ob_carroceria").textContent = obData.carroceria || "—";
-              el("ob_fabricante_chassi").textContent = obData.fabricante_chassi || obData.fabricante || "—";
-              el("ob_chassi").textContent = obData.modelo_chassi || obData.chassi || "—";
+
+              const camposOB = [
+                { id: "ob_encarrocadeira",    valor: obData.encarrocadeira    || obData.encarrocadora || "—" },
+                { id: "ob_carroceria",        valor: obData.carroceria        || "—"                        },
+                { id: "ob_fabricante_chassi", valor: obData.fabricante_chassi || obData.fabricante   || "—" },
+                { id: "ob_chassi",            valor: obData.modelo_chassi     || obData.chassi        || "—" },
+              ];
+
+              camposOB.forEach(({ id, valor }) => {
+                const campo = el(id);
+                if (campo) campo.textContent = valor;
+              });
+
               if (obData.foto_url && el("ob_foto")) {
                 el("ob_foto").src = obData.foto_url;
                 el("ob_foto").style.display = "block";
               }
-              const fonte = el("ob_fonte");
-              if (fonte) {
-                fonte.href = `https://onibusbrasil.com/placa/${p}`;
-                fonte.style.display = "inline-block";
+              const fonteEl = el("ob_fonte");
+              if (fonteEl) {
+                fonteEl.href = `https://onibusbrasil.com/placa/${p}`;
+                fonteEl.style.display = "inline-block";
               }
-              toggleValueSkeletons(el("ob_container"), false, false);
-            }
-          } else if (window.buscarDadosOnibusBrasil) { 
-            obData = await window.buscarDadosOnibusBrasil(p); 
-            toggleValueSkeletons(el("ob_container"), false, false); 
-          
-            //  Se o fallback retornou chassi via KePlaca, preenche manualmente 
-            if (obData && obData.final_chassi && !obData.carroceria) { 
-              el("ob_chassi").textContent = obData.chassi || obData.final_chassi || "—"; 
-              el("ob_status").textContent = "Dados parciais via KePlaca."; 
-              el("ob_status").style.color = "#f0a500"; 
-            } 
-          } 
 
+            } else {
+              // SEM CACHE — mostra skeleton e busca ao vivo
+              el("ob_status").textContent = "Buscando...";
+              toggleValueSkeletons(el("ob_container"), true);
+              if (window.buscarDadosOnibusBrasil) {
+                await window.buscarDadosOnibusBrasil(p);
+              }
+            }
+          } else {
+            if (verifEl) verifEl.innerHTML = `<span style="color:var(--accent-2)">✔ Veículo identificado</span>`;
+            if (genSec) genSec.style.display = "block";
+
+            if (el("card_fipe_codigo")) {
+              el("card_fipe_codigo").style.display = "block";
+              if (el("gen_fipe_codigo")) el("gen_fipe_codigo").textContent = "—";
+            }
+            if (el("card_fipe_modelo")) {
+              el("card_fipe_modelo").style.display = "block";
+              if (el("gen_fipe_modelo")) el("gen_fipe_modelo").textContent = "—";
+            }
+
+            const mBasico = apiResult.modelo || apiResult.model || apiResult.texto_modelo || "";
+            const vBasico = apiResult.versao || apiResult.version || "";
+            const modeloCompleto = (mBasico && vBasico && !mBasico.includes(vBasico)) 
+              ? `${mBasico} ${vBasico}` 
+              : (mBasico || vBasico || "—");
+
+            const anoFab = apiResult.ano || apiResult.ano_fabricacao || apiResult.year;
+            const anoMod = apiResult.ano_modelo || apiResult.model_year;
+            const anoCompleto = (anoFab && anoMod && anoFab !== anoMod)
+              ? `${anoFab}/${anoMod}`
+              : (anoFab || anoMod || "—");
+
+            const mfr = apiResult.marca || apiResult.fabricante || apiResult.brand || apiResult.texto_marca || apiResult.MARCA || apiResult.FABRICANTE || "—";
+            const chassiReal = apiResult.chassi_completo || apiResult.chassi || apiResult.final_chassi || apiResult.vin || apiResult.CHASSI || "—";
+            const combustivelReal = apiResult.combustivel || apiResult.fuel || apiResult.texto_combustivel || apiResult.COMBUSTIVEL || "—";
+            const corReal = apiResult.cor || apiResult.color || apiResult.COR || "—";
+            const cidadeReal = (apiResult.municipio && apiResult.uf) ? `${apiResult.municipio} / ${apiResult.uf}` : (apiResult.cidade || apiResult.municipio || apiResult.MUNICIPIO || apiResult.CIDADE || "—");
+
+            const setValWithStyle = (id, cardId, value) => {
+              const elVal = el(id);
+              const elCard = el(cardId);
+              const exists = value && value !== "—" && value !== "undefined";
+              if (elVal) elVal.textContent = exists ? value : "Não encontrado na API";
+              if (elCard) elCard.style.opacity = exists ? "1" : "0.5";
+            };
+
+            setValWithStyle("gen_montadora", "card_gen_montadora", mfr);
+            setValWithStyle("gen_modelo", "card_gen_modelo", modeloCompleto);
+            setValWithStyle("gen_chassi", "card_gen_chassi", chassiReal);
+            setValWithStyle("gen_ano", "card_gen_ano", anoCompleto);
+            setValWithStyle("gen_combustivel", "card_gen_combustivel", combustivelReal);
+            setValWithStyle("gen_cor", "card_gen_cor", corReal);
+            setValWithStyle("gen_cidade", "card_gen_cidade", cidadeReal);
+
+            if (copyChassiBtn) {
+              if (chassiReal && chassiReal.length === 17) {
+                copyChassiBtn.style.display = "block";
+                copyChassiBtn.onclick = () => {
+                  navigator.clipboard.writeText(chassiReal);
+                  showToast("Chassi copiado para a área de transferência!");
+                };
+              } else {
+                copyChassiBtn.style.display = "none";
+              }
+            }
+
+            const genLogo = el("gen_logo");
+            if (genLogo) {
+              if (apiResult.logo) {
+                genLogo.src = apiResult.logo;
+                genLogo.style.display = "block";
+              } else {
+                genLogo.style.display = "none";
+              }
+            }
+          }
+          
+          runVIN(true); 
+          showReports("single", true);
+
+          if (!window.currentSingleResult) {
+            window.currentSingleResult = { tipo: 'PLATE', placa: p, ob: {}, ob_data: obData || {}, apiResult: apiResult };
+          } else {
+            window.currentSingleResult.placa = p;
+            window.currentSingleResult.ob_data = obData || {};
+            window.currentSingleResult.apiResult = apiResult;
+          }
+
+          if (!isBus) {
+            const genSituacao = el("gen_situacao"); 
+            const cardSituacao = el("card_situacao");
+            const sitReal = apiResult.situacao;
+            const sitExists = sitReal && sitReal !== "—";
+            if (genSituacao) genSituacao.textContent = sitExists ? sitReal : "Não encontrado na API"; 
+            if (cardSituacao) cardSituacao.style.opacity = sitExists ? "1" : "0.5";
+            
+            const temFipe = apiResult.fipe_codigo && apiResult.fipe_codigo !== "—"; 
+            
+            const genFipeCodigo = el("gen_fipe_codigo"); 
+            if (genFipeCodigo) genFipeCodigo.textContent = temFipe 
+              ? apiResult.fipe_codigo 
+              : "Não encontrado na API"; 
+            
+            const genFipeModelo = el("gen_fipe_modelo"); 
+            if (genFipeModelo) genFipeModelo.textContent = temFipe 
+              ? apiResult.fipe_modelo 
+              : "Não encontrado na API"; 
+            
+            const cardFipeCodigo = el("card_fipe_codigo"); 
+            const cardFipeModelo = el("card_fipe_modelo"); 
+            if (!temFipe) { 
+              if (cardFipeCodigo) cardFipeCodigo.style.opacity = "0.5"; 
+              if (cardFipeModelo) cardFipeModelo.style.opacity = "0.5"; 
+              if (copyFipeBtn) copyFipeBtn.style.display = "none";
+            } else { 
+              if (cardFipeCodigo) cardFipeCodigo.style.opacity = "1"; 
+              if (cardFipeModelo) cardFipeModelo.style.opacity = "1"; 
+              if (copyFipeBtn) {
+                copyFipeBtn.style.display = "block";
+                copyFipeBtn.onclick = () => {
+                  navigator.clipboard.writeText(apiResult.fipe_codigo);
+                  showToast("Código FIPE copiado para a área de transferência!");
+                };
+              }
+            } 
+
+            if (!apiResult.fipe_codigo && !apiResult.fipe_modelo && !apiResult.marca && !apiResult.modelo) {
+              const errorArea = el("errors");
+              if (errorArea) {
+                errorArea.innerHTML = `<div class="error" style="background: rgba(56, 189, 248, 0.1); border: 1px solid var(--accent-2); color: var(--accent-2); padding: 15px; border-radius: 8px; margin-top: 10px; text-align: center;">
+                  ℹ️ Algumas informações técnicas não foram retornadas pela API para este veículo.
+                </div>`;
+              }
+            }
+          }
 
           addHistoryEntry(vinInputSingle.value, p);
           
@@ -1299,7 +1597,6 @@ async function main() {
             window.currentSingleResult.ob_data = obData || {};
           }
           
-          // Atualizar objeto global para relatórios
           if (el("ob_container")) {
             window.currentSingleResult.ob = {
               ob_encarrocadeira: el("ob_encarrocadeira").textContent,
@@ -1309,7 +1606,6 @@ async function main() {
             };
           }
         } else {
-          //  ERRO DE VALIDAÇÃO
           isPlateValidated = false;
           
           let errorMsg = "";
@@ -1329,7 +1625,6 @@ async function main() {
           if (obSec) obSec.style.display = "none";
           showReports("single", false);
 
-          //  Exibir a mensagem formatada conforme as imagens do usuário
           el("errors").innerHTML = `<div class="error" style="background: rgba(231, 76, 60, 0.1); border: 1px solid #e74c3c; color: #e74c3c; padding: 20px; border-radius: 8px; margin-top: 15px; font-weight: 600; text-align: center; width: 100%;">
             ${errorMsg}
             <br><small style="font-weight: normal; opacity: 0.8; margin-top: 5px; display: block;">${subMsg}</small>
@@ -1355,7 +1650,6 @@ async function main() {
     if (vinInputSingle) vinInputSingle.addEventListener('keydown', e => e.key === "Enter" && runVIN());
     if (plateInputSingle) plateInputSingle.addEventListener('keydown', e => e.key === "Enter" && runPlate());
 
-    // CORRIGIDO: usar addEventListener em vez de oninput para evitar sobrescrita
     if (vinInputSingle) {
       vinInputSingle.addEventListener('input', () => {
         const val = vinInputSingle.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17);
@@ -1492,7 +1786,6 @@ async function main() {
       const totalItems = Math.max(vLines.length, pLines.length);
       if (totalItems === 0) return;
 
-      // Feedback Visual de Progresso
       const progressContainer = el("progressContainer");
       const progressBar = el("progressBar");
       const groupProgress = el("groupProgress");
@@ -1500,13 +1793,11 @@ async function main() {
       if (groupProgress) groupProgress.style.display = "block";
       if (progressBar) progressBar.style.width = "0%";
 
-      // Salva no histórico de grupo
       addGroupHistoryEntry(gInput.value, gPlateInput.value);
 
       window.currentGroupResults = [];
-      currentGroupPage = 1; // Resetar para a primeira página
+      currentGroupPage = 1;
       
-      // Processamento em Lotes para não travar a UI
       const allItems = [];
       for (let i = 0; i < totalItems; i++) {
         allItems.push({ vin: vLines[i] || "", plate: pLines[i] || "" });
@@ -1527,7 +1818,6 @@ async function main() {
           return;
         }
 
-        // Atualizar barra de progresso
         const progressPercent = (currentIndex / totalItems) * 100;
         if (progressBar) progressBar.style.width = `${progressPercent}%`;
         if (groupProgress) groupProgress.textContent = `Processando ${currentIndex} de ${totalItems} itens...`;
@@ -1549,13 +1839,28 @@ async function main() {
           
           window.currentGroupResults.push(itemData);
 
-          if (vin && plate) {
+          if (plate) {
             try {
-              const apiResult = await consultarPlacaPHP(plate, vin);
+              const apiResult = await consultarPlacaPHP(plate, vin || "");
               if (apiResult.status === "ok") {
                 itemData.status = 'ok';
+                itemData.apiResult = apiResult;
                 
-                if (plate) {
+                itemData.fabricante = apiResult.marca || apiResult.fabricante || apiResult.brand || apiResult.texto_marca || itemData.fabricante;
+                
+                // Se a API trouxe o chassi, atualizamos o vin e o result
+                if (apiResult.chassi_completo || apiResult.chassi) {
+                  const apiChassi = apiResult.chassi_completo || apiResult.chassi;
+                  itemData.vin = apiChassi;
+                  if (window.currentDecoder) {
+                    itemData.result = window.currentDecoder.decode(apiChassi);
+                  }
+                }
+                
+                const apiTipo = String(apiResult.tipo || apiResult.category || "").toLowerCase();
+                const isBus = apiResult.is_onibus === true || (apiResult.ob_data && apiResult.ob_data.success) || apiTipo.includes("onibus") || apiTipo.includes("ônibus");
+                
+                if (isBus) {
                    const obData = await window.buscarDadosOnibusBrasil(plate, false);
                    if (obData && !obData.erro) {
                      itemData.ob_data = obData;
@@ -1575,6 +1880,9 @@ async function main() {
               itemData.status = 'error';
               console.error("Erro no par do grupo:", e); 
             }
+          } else if (vin) {
+            // Apenas VIN, sem consulta de placa
+            itemData.status = 'ok';
           } else {
             itemData.status = 'orphan';
           }
@@ -1584,7 +1892,6 @@ async function main() {
         
         currentIndex += BATCH_SIZE;
         
-        // Pequena pausa para a UI respirar e mostrar o progresso
         await new Promise(resolve => setTimeout(resolve, 50)); 
         processBatch(); 
       };
