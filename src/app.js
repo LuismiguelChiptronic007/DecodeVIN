@@ -8,7 +8,7 @@ async function loadRules() {
 }
 
 async function fetchWithTimeout(resource, options = {}) {
-  const { timeout = 30000 } = options; // Aumentado para 30s
+  const { timeout = 30000 } = options;
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   try {
@@ -50,7 +50,6 @@ async function consultarPlacaPHP(placa, chassiDigitado = "") {
 
     console.log("Resposta do Worker:", data);
 
-    // Se não tem status "ok" mas tem marca/modelo/chassi, consideramos ok
     if (data.status !== "ok" && !(data.marca || data.modelo || data.chassi_completo || data.chassi_raw_api)) {
       return {
         status: "erro",
@@ -58,7 +57,6 @@ async function consultarPlacaPHP(placa, chassiDigitado = "") {
       };
     }
 
-    // Garante que o status seja "ok" se tivermos dados
     if (data.marca || data.modelo || data.chassi_completo || data.chassi_raw_api) {
       data.status = "ok";
     }
@@ -73,6 +71,22 @@ async function consultarPlacaPHP(placa, chassiDigitado = "") {
         ? "Tempo limite excedido."
         : "Erro de conexão com o servidor."
     };
+  }
+}
+
+// ✅ NOVO: busca dados da KePlaca como fallback quando OnibusBrasil não tem campos
+async function buscarFallbackKePlaca(placa) {
+  try {
+    const workerUrl = `https://keplaca-proxy.luismiguelgomesoliveira-014.workers.dev/?placa=${placa}`;
+    const resp = await fetchWithTimeout(workerUrl, { timeout: 10000 });
+    const data = await resp.json();
+    if (data.status === "ok" || data.marca || data.modelo) {
+      return data;
+    }
+    return null;
+  } catch (e) {
+    console.error("Erro ao buscar fallback KePlaca:", e);
+    return null;
   }
 }
 
@@ -135,50 +149,59 @@ function isMfrMatch(m1, m2) {
 }
 
 function isChassisMatch(vin, partial) {
-     if (!vin || !partial || partial === "—") return true;
-     const v = vin.toUpperCase().replace(/[^A-Z0-9]/g, "");
-     const p = partial.toUpperCase().replace(/[^A-Z0-9]/g, "");
-     
-     const hasNumbers = /[0-9]/.test(p);
-     const isLikelySerial = hasNumbers && p.length >= 4;
-     
-     const isModel = !isLikelySerial && p.length < 17 && (
-       p.length < 4 ||
-       /^[A-Z]+$/.test(p) ||
-       p.includes("-") || p.includes(" ")
-     );
+  if (!vin || !partial || partial === "—") return true;
+  const v = vin.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const p = partial.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  
+  const hasNumbers = /[0-9]/.test(p);
+  const isLikelySerial = hasNumbers && p.length >= 4;
+  
+  const isModel = !isLikelySerial && p.length < 17 && (
+    p.length < 4 ||
+    /^[A-Z]+$/.test(p) ||
+    p.includes("-") || p.includes(" ")
+  );
 
-     if (isModel) {
-       console.log(`[Validando Chassi] Ignorando validação estrita: '${p}' parece ser um NOME DE MODELO.`);
-       return true; 
-     }
- 
-     console.log(`[Validando Chassi] Digitado: ${v} | Retornado da API: ${p}`);
- 
-     if (p.length === 17) {
-       const match = v === p;
-       console.log(`[Validando Chassi] Comparação 17 chars: ${match ? "OK" : "DIVERGENTE"}`);
-       return match;
-     }
+  if (isModel) {
+    console.log(`[Validando Chassi] Ignorando validação estrita: '${p}' parece ser um NOME DE MODELO.`);
+    return true; 
+  }
 
-     if (p.length === 8) {
-       const match = v.endsWith(p);
-       console.log(`[Validando Chassi] Comparação 8 chars (final): ${match ? "OK" : "DIVERGENTE"}`);
-       return match;
-     }
-     
-     const match = v.includes(p);
-     console.log(`[Validando Chassi] Comparação parcial (${p.length} chars): ${match ? "OK" : "DIVERGENTE"}`);
-     return match;
-   }
+  console.log(`[Validando Chassi] Digitado: ${v} | Retornado da API: ${p}`);
 
-function card(label, value) {
+  if (p.length === 17) {
+    const match = v === p;
+    console.log(`[Validando Chassi] Comparação 17 chars: ${match ? "OK" : "DIVERGENTE"}`);
+    return match;
+  }
+
+  if (p.length === 8) {
+    const match = v.endsWith(p);
+    console.log(`[Validando Chassi] Comparação 8 chars (final): ${match ? "OK" : "DIVERGENTE"}`);
+    return match;
+  }
+  
+  const match = v.includes(p);
+  console.log(`[Validando Chassi] Comparação parcial (${p.length} chars): ${match ? "OK" : "DIVERGENTE"}`);
+  return match;
+}
+
+function card(label, value, badge = null) {
   const d = document.createElement("div");
   d.className = "card";
   
   const exists = value && value !== "—" && value !== "undefined";
   const displayValue = exists ? String(value) : "Não encontrado na API";
   if (!exists) d.style.opacity = "0.5";
+
+  // ✅ Badge opcional (ex: "KePlaca" para indicar fonte do fallback)
+  if (badge) {
+    const b = document.createElement("div");
+    b.style.cssText = "position:absolute;top:6px;right:6px;font-size:9px;background:rgba(56,189,248,0.15);color:var(--accent-2);border:1px solid var(--accent-2);border-radius:4px;padding:1px 5px;font-weight:600;";
+    b.textContent = badge;
+    d.style.position = "relative";
+    d.appendChild(b);
+  }
 
   const tooltipText = TOOLTIPS[label.toUpperCase()];
   if (tooltipText) {
@@ -308,15 +331,7 @@ function renderResult(result, text) {
 
   if (segs) {
     segs.innerHTML = "";
-    if (result.type === "VIN") {
-      const parts = [text.slice(0, 3), text.slice(3, 9), text.slice(9)];
-      parts.forEach(p => {
-        const d = document.createElement("div");
-        d.className = "seg";
-        d.textContent = p;
-        segs.appendChild(d);
-      });
-    }
+    segs.style.display = "none";
   }
 
   if (cards) {
@@ -352,25 +367,6 @@ function setSegments(result, container) {
   if (!container) return;
   container.innerHTML = "";
   container.style.display = "none";
-  if (!result || result.type === "UNKNOWN") return;
-
-  if (result.input && result.input.replace(/[^A-Z0-9]/g, "").length === 17) {
-    const v = result.input.replace(/[^A-Z0-9]/g, "").toUpperCase();
-    const wmi = document.createElement("div"); wmi.className = "seg"; wmi.textContent = v.slice(0, 3);
-    const vds = document.createElement("div"); vds.className = "seg"; vds.textContent = v.slice(3, 9);
-    const vis = document.createElement("div"); vis.className = "seg"; vis.textContent = v.slice(9);
-    container.appendChild(wmi); container.appendChild(vds); container.appendChild(vis);
-    container.style.display = "flex";
-  } else if (result.type === "MODEL") {
-    const parts = (result.tokens.find(t => t.key === "modeloChassi")?.value || "").match(/([KFN])|(\d{3})|([AB])|((?:\d)X\d|\d)|([HLN][BIE]?)/g) || [];
-    parts.forEach(p => {
-      const d = document.createElement("div");
-      d.className = "seg";
-      d.textContent = p;
-      container.appendChild(d);
-    });
-    if (parts.length) container.style.display = "flex";
-  }
 }
 
 function setCards(result, targetContainer) {
@@ -509,13 +505,17 @@ function renderHistory() {
         const pInput = el("plateInputSingle");
         const bSingle = el("btnDecodeSingle");
         const bPlate = el("btnPlateSingle");
-        if (item.input && vInput) {
-          vInput.value = item.input;
-          if (bSingle) { bSingle.disabled = false; bSingle.click(); }
-        }
-        if (item.plate && pInput) {
-          pInput.value = item.plate;
-          if (bPlate) { bPlate.disabled = false; bPlate.click(); }
+        
+        if (item.input && vInput) vInput.value = item.input;
+        if (item.plate && pInput) pInput.value = item.plate;
+
+        // Dispara os cliques nos botões para usar o fluxo padrão do sistema
+        if (item.plate && bPlate) {
+          bPlate.disabled = false;
+          bPlate.click();
+        } else if (item.input && bSingle) {
+          bSingle.disabled = false;
+          bSingle.click();
         }
       };
 
@@ -528,7 +528,6 @@ function renderHistory() {
         e.preventDefault();
         e.stopPropagation();
         const currentList = JSON.parse(localStorage.getItem("decodevin.history") || "[]");
-        // Filtra removendo o item que possui o mesmo timestamp (ID único)
         const newList = currentList.filter(x => x.ts !== item.ts);
         localStorage.setItem("decodevin.history", JSON.stringify(newList));
         renderSingleHistory();
@@ -689,7 +688,6 @@ function renderHistory() {
         e.stopPropagation();
         const storageKey = "decodevin.groupHistory";
         const currentList = JSON.parse(localStorage.getItem(storageKey) || "[]");
-        // Filtra removendo o item que possui o mesmo timestamp (ID único)
         const newList = currentList.filter(x => x.ts !== item.ts);
         localStorage.setItem(storageKey, JSON.stringify(newList));
         renderGroupHistory();
@@ -731,22 +729,38 @@ function renderHistory() {
 
   window.renderGroupHistory = renderGroupHistory;
 
-const exportCSV = (data, name) => {
-  const columns = [
-    "MONTADORA",
-    "CHASSI",
-    "PLACA",
-    "ANO",
-    "CARROCERIA",
-    "ENCARROÇADEIRA",
-    "MOTOR",
-    "MODELO CHASSI",
-    "CODIGO FIPE",
-    "MODELO FIPE",
-    "COMBUSTIVEL",
-    "COR",
-    "CIDADE/UF"
-  ];
+const exportCSV = (data, name, includeFipe = true) => {
+  let columns = [];
+  
+  if (includeFipe) {
+    columns = [
+      "MONTADORA",
+      "CHASSI",
+      "PLACA",
+      "ANO",
+      "CARROCERIA",
+      "ENCARROÇADEIRA",
+      "MOTOR",
+      "MODELO CHASSI",
+      "CODIGO FIPE",
+      "MODELO FIPE",
+      "COMBUSTIVEL",
+      "COR",
+      "CIDADE/UF"
+    ];
+  } else {
+    columns = [
+      "MONTADORA",
+      "CHASSI",
+      "PLACA",
+      "ANO",
+      "MOTOR",
+      "CARROCERIA",
+      "ENCARROÇADEIRA",
+      "MODELO CHASSI",
+      "CIDADE/UF"
+    ];
+  }
 
   let csv = "\ufeff" + columns.join(";") + "\n";
 
@@ -795,21 +809,40 @@ const exportCSV = (data, name) => {
       bestFipe = valid.sort((a, b) => (b.score || 0) - (a.score || 0))[0];
     }
 
-    const row = [
-      item.fabricante || api.marca || api.fabricante || findToken("Fabricante") || "—",
-      item.vin || api.chassi || "—",
-      item.placa || api.placa || "—",
-      api.ano_modelo || api.ano || findToken("Ano Modelo") || "—",
-      ob.carroceria || "—",
-      ob.encarrocadeira || ob.encarrocadora || "—",
-      api.combustivel || findToken("Motor") || "—",
-      api.modelo || ob.modelo_chassi || ob.chassi || findToken("Modelo") || "—",
-      bestFipe ? (bestFipe.codigo_fipe || bestFipe.fipe_codigo || "—") : "—",
-      bestFipe ? (bestFipe.texto_modelo || bestFipe.modelo || "—") : "—",
-      api.combustivel || "—",
-      api.cor || "—",
-      (api.municipio && api.uf) ? `${api.municipio} / ${api.uf}` : (api.cidade || "—")
-    ];
+    // ✅ Fallback FIPE da KePlaca
+    const fipeCodFinal = bestFipe ? (bestFipe.codigo_fipe || bestFipe.fipe_codigo || "—") : (api.fipe_codigo || "—");
+    const fipeModFinal = bestFipe ? (bestFipe.texto_modelo || bestFipe.modelo || "—") : (api.fipe_modelo || "—");
+
+    let row = [];
+    if (includeFipe) {
+      row = [
+        item.fabricante || api.marca || api.fabricante || findToken("Fabricante") || "—",
+        item.vin || api.chassi_completo || api.chassi || "—",
+        item.placa || api.placa || "—",
+        api.ano_modelo || api.ano || findToken("Ano Modelo") || "—",
+        ob.carroceria || "—",
+        ob.encarrocadeira || ob.encarrocadora || "—",
+        findToken("Motor") || "—",
+        ob.modelo_chassi || ob.chassi || api.modelo || findToken("Modelo") || "—",
+        fipeCodFinal,
+        fipeModFinal,
+        api.combustivel || "—",
+        api.cor || "—",
+        (api.municipio && api.uf) ? `${api.municipio} / ${api.uf}` : (api.cidade || "—")
+      ];
+    } else {
+      row = [
+        item.fabricante || api.marca || api.fabricante || findToken("Fabricante") || "—",
+        item.vin || api.chassi_completo || api.chassi || "—",
+        item.placa || api.placa || "—",
+        api.ano_modelo || api.ano || findToken("Ano Modelo") || "—",
+        findToken("Motor") || "—",
+        ob.carroceria || "—",
+        ob.encarrocadeira || ob.encarrocadora || "—",
+        ob.modelo_chassi || ob.chassi || api.modelo || findToken("Modelo") || "—",
+        (api.municipio && api.uf) ? `${api.municipio} / ${api.uf}` : (api.cidade || "—")
+      ];
+    }
 
     csv += row.map(val => {
       let s = String(val).trim();
@@ -826,9 +859,37 @@ const exportCSV = (data, name) => {
 };
 
   const btnExportCSV = el("btnExportCSV");
+  const reportModal = el("reportModal");
+  let exportDataBuffer = null;
+  let exportNameBuffer = "";
+
+  const openReportOptions = (data, name) => {
+    exportDataBuffer = data;
+    exportNameBuffer = name;
+    if (reportModal) reportModal.style.display = "flex";
+  };
+
+  if (el("closeReportModal")) {
+    el("closeReportModal").onclick = () => { if (reportModal) reportModal.style.display = "none"; };
+  }
+
+  if (el("btnExportFull")) {
+    el("btnExportFull").onclick = () => {
+      if (exportDataBuffer) exportCSV(exportDataBuffer, exportNameBuffer, true);
+      if (reportModal) reportModal.style.display = "none";
+    };
+  }
+
+  if (el("btnExportBasic")) {
+    el("btnExportBasic").onclick = () => {
+      if (exportDataBuffer) exportCSV(exportDataBuffer, exportNameBuffer, false);
+      if (reportModal) reportModal.style.display = "none";
+    };
+  }
+
   if (btnExportCSV) {
     btnExportCSV.onclick = () => {
-      if (window.currentGroupResults) exportCSV(window.currentGroupResults, "Relatorio_Frota");
+      if (window.currentGroupResults) openReportOptions(window.currentGroupResults, "Relatorio_Frota");
     };
   }
 
@@ -910,7 +971,6 @@ function renderGroupResults() {
     
     item.addEventListener('click', (e) => {
       e.stopPropagation();
-      // Prioridade para o chassi retornado pela API se o original estiver vazio
       const chassiParaModal = (vin && vin !== "") ? vin : (itemData.apiResult?.chassi_completo || itemData.apiResult?.chassi || "");
       const isPlateOnly = !chassiParaModal;
       const linked = (chassiParaModal && plate) ? plate : null;
@@ -953,8 +1013,7 @@ function renderGroupResults() {
 }
 
 // ============================================================
-// MODAL LOGIC — openModal (VERSÃO CORRIGIDA)
-// Exibe dados completos do veículo genérico no modal do grupo
+// MODAL LOGIC — openModal
 // ============================================================
 async function openModal(result, code, isPlate = false, linkedPlate = null, itemData = null) {
   const mTitle = el("modalTitle");
@@ -964,18 +1023,21 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
 
   if (!modal) return;
 
-  // Se temos itemData com apiResult e chassi, mas abriu como "apenas placa", corrigimos para modo vinculado
   if (itemData && itemData.apiResult && (itemData.apiResult.chassi_completo || itemData.apiResult.chassi)) {
     const apiChassi = itemData.apiResult.chassi_completo || itemData.apiResult.chassi;
-    if (itemData.placa && isPlate) {
+    
+    // ✅ No Modal de Grupo/Histórico, só promove para "Análise Completa" se o item
+    // já tinha um chassi vinculado (vin) no input inicial. 
+    // Se o usuário mandou só placa, mantemos o modal focado na placa.
+    const hasVin = itemData.vin && itemData.vin !== "";
+    if (itemData.placa && isPlate && hasVin) {
       code = apiChassi;
       linkedPlate = itemData.placa;
       isPlate = false;
-      // Se não tínhamos resultado de decodificação (porque não tinha VIN original), tentamos decodificar o chassi da API
       if (!result || result.type === "UNKNOWN") {
         if (window.currentDecoder) {
            result = window.currentDecoder.decode(apiChassi);
-           if (itemData) itemData.result = result; // Atualiza o itemData para cliques futuros
+           if (itemData) itemData.result = result;
         }
       }
     }
@@ -989,7 +1051,6 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
   mCards.removeAttribute("style");
   modal.style.display = "flex";
 
-  // ── Bloco de erro de verificação ──────────────────────────
   if (itemData && itemData.status === 'error') {
     const isNoBalance = String(itemData.error_detail || "").includes("402");
     
@@ -1015,23 +1076,78 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     return;
   }
 
-  // ── Helper: injeta dados do Ônibus Brasil ─────────────────
-  const injectOB = (p, container) => {
+  // ✅ Helper que renderiza fallback da KePlaca quando o OnibusBrasil não tem dados
+  const renderKePlacaFallback = (container, kpData, titulo = "📋 Dados do Veículo (KePlaca)") => {
+    const h = document.createElement("h3");
+    h.textContent = titulo;
+    h.style.cssText = "font-size: 16px; color: var(--accent-2); margin: 20px 0 12px; border-top: 1px solid var(--border); padding-top: 20px; text-align: center; width: 100%;";
+    container.appendChild(h);
+
+    const kpCards = document.createElement("div");
+    kpCards.className = "cards";
+    centerGrid(kpCards);
+    container.appendChild(kpCards);
+
+    const kp = kpData || {};
+    const mBasico  = kp.modelo  || "";
+    const vBasico  = kp.versao  || "";
+    const modeloFull = (mBasico && vBasico && !mBasico.includes(vBasico))
+      ? `${mBasico} ${vBasico}` : (mBasico || "—");
+    const anoFab = kp.ano || "";
+    const anoMod = kp.ano_modelo || "";
+    const anoFull = (anoFab && anoMod && anoFab !== anoMod)
+      ? `${anoFab}/${anoMod}` : (anoFab || anoMod || "—");
+    const temFipe = kp.fipe_codigo && kp.fipe_codigo !== "—";
+
+    if (kp.logo) {
+      const logoWrapper = document.createElement("div");
+      logoWrapper.style.cssText = "grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin-bottom: 4px;";
+      const logoImg = document.createElement("img");
+      logoImg.src = kp.logo;
+      logoImg.style.cssText = "height: 28px; object-fit: contain; filter: brightness(0) invert(1); opacity: 0.75;";
+      logoWrapper.appendChild(logoImg);
+      kpCards.appendChild(logoWrapper);
+    }
+
+    kpCards.appendChild(card("Montadora",       kp.marca       || "—", "KePlaca"));
+    kpCards.appendChild(card("Modelo",          modeloFull,              "KePlaca"));
+    kpCards.appendChild(card("Ano Fab./Modelo", anoFull,                 "KePlaca"));
+    kpCards.appendChild(card("Código FIPE",     temFipe ? kp.fipe_codigo : "—", "KePlaca"));
+    kpCards.appendChild(card("Modelo FIPE",     temFipe ? kp.fipe_modelo : "—", "KePlaca"));
+    kpCards.appendChild(card("Combustível",     kp.combustivel || "—",   "KePlaca"));
+    kpCards.appendChild(card("Cor",             kp.cor         || "—",   "KePlaca"));
+    const cidade = (kp.municipio && kp.uf) ? `${kp.municipio} / ${kp.uf}` : "—";
+    kpCards.appendChild(card("Município / UF",  cidade,                  "KePlaca"));
+    kpCards.appendChild(card("Situação",        kp.situacao    || "—",   "KePlaca"));
+
+    if (!temFipe) {
+      kpCards.querySelectorAll(".card").forEach(c => {
+        const lbl = c.querySelector(".label");
+        if (lbl && (lbl.textContent.includes("FIPE") || lbl.textContent.includes("Código"))) {
+          c.style.opacity = "0.5";
+        }
+      });
+    }
+  };
+
+  // ── Helper: injeta dados do Ônibus Brasil + fallback KePlaca ─────────────
+  const injectOB = (p, container, kpFallback = null) => {
     const obWrapper = document.createElement("div");
     obWrapper.style.marginTop = "16px";
     obWrapper.style.borderTop = "1px solid var(--border)";
     obWrapper.style.paddingTop = "20px";
     container.appendChild(obWrapper);
+
     const statusDiv = document.createElement("div");
     statusDiv.style.textAlign = "center";
     statusDiv.style.marginBottom = "16px";
     statusDiv.style.fontSize = "14px";
     statusDiv.textContent = `Buscando ${p}...`;
     obWrapper.appendChild(statusDiv);
+
     const obCards = document.createElement("div");
     obCards.className = "cards";
     obWrapper.appendChild(obCards);
-    
     centerGrid(obCards);
     showSkeletons(obCards, 4);
 
@@ -1043,31 +1159,139 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     mediaBox.style.marginTop = "20px";
     obWrapper.appendChild(mediaBox);
 
-    let hasLoaded = false;
-    const checkClear = () => { if(!hasLoaded) { obCards.innerHTML = ""; hasLoaded = true; } };
+    // Fallback container (renderizado após OB terminar, se necessário)
+    const fallbackContainer = document.createElement("div");
+    fallbackContainer.style.width = "100%";
+    obWrapper.appendChild(fallbackContainer);
+
+    let obFieldsPresent = {
+      encarrocadeira: false,
+      carroceria: false,
+      fabricante: false
+    };
+
+    let obFieldCount = 0;
+    let cleared = false;
+    let fipeAdded = false;
+
+    const checkClear = () => {
+      if (!cleared) {
+        obCards.innerHTML = "";
+        cleared = true;
+      }
+    };
+
+    const addFipe = () => {
+      if (!fipeAdded && kpFallback && kpFallback.fipe_codigo && kpFallback.fipe_codigo !== "—") {
+        checkClear();
+        obCards.appendChild(card("Código FIPE", kpFallback.fipe_codigo));
+        obCards.appendChild(card("Modelo FIPE", kpFallback.fipe_modelo || "—"));
+        fipeAdded = true;
+      }
+    };
 
     const mockUI = {
       getElementById: (id) => {
         if (id === "secao-onibusbrasil") return obWrapper;
         if (id === "ob_status") return {
-          set textContent(v) { 
-            statusDiv.textContent = v; 
+          set textContent(v) {
+            statusDiv.textContent = v;
+            // ✅ Quando OB termina, verifica se precisamos injetar FIPE
             if (v.includes("✅") || v.includes("Aviso") || v.includes("Erro") || v.includes("sem ficha") || v.includes("Não encontrada")) {
+              addFipe();
               checkClear();
+              if (obFieldCount === 0 && kpFallback) {
+                statusDiv.textContent = "ℹ️ OnibusBrasil sem dados — exibindo dados da KePlaca";
+                statusDiv.style.color = "var(--accent-2)";
+                renderKePlacaFallback(fallbackContainer, kpFallback, "📋 Dados do Veículo");
+              }
             }
           },
           style: { set color(c) { statusDiv.style.color = c; } }
         };
-        if (id === "ob_encarrocadeira") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Encarroçadora", v)); if (itemData) itemData.ob.ob_encarrocadeira = v; } } };
-        if (id === "ob_carroceria") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Carroceria", v)); if (itemData) itemData.ob.ob_carroceria = v; } } };
-        if (id === "ob_fabricante_chassi") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Fabricante Chassi", v)); if (itemData) itemData.ob.ob_fabricante_chassi = v; } } };
-        if (id === "ob_chassi") return { set textContent(v) { if(v && v!=="—") { checkClear(); obCards.appendChild(card("Modelo Chassi", v)); if (itemData) itemData.ob.ob_chassi = v; } } };
+        if (id === "ob_encarrocadeira") return { set textContent(v) {
+          if (v && v !== "—") { 
+            checkClear(); obFieldCount++; obFieldsPresent.encarrocadeira = true;
+            obCards.appendChild(card("Encarroçadora", v)); 
+            if (itemData) {
+               if (!itemData.ob) itemData.ob = {};
+               itemData.ob.ob_encarrocadeira = v; 
+            }
+          }
+        }};
+        if (id === "ob_carroceria") return { set textContent(v) {
+          if (v && v !== "—") { 
+            checkClear(); obFieldCount++; obFieldsPresent.carroceria = true;
+            obCards.appendChild(card("Carroceria", v)); 
+            if (itemData) {
+               if (!itemData.ob) itemData.ob = {};
+               itemData.ob.ob_carroceria = v; 
+            }
+          }
+        }};
+        if (id === "ob_fabricante_chassi") return { set textContent(v) {
+          const fab = (v && v !== "—") ? v : null;
+          if (fab) { 
+            checkClear(); obFieldCount++; obFieldsPresent.fabricante = true;
+            obCards.appendChild(card("Fabricante Chassi", fab)); 
+            if (itemData) {
+               if (!itemData.ob) itemData.ob = {};
+               itemData.ob.ob_fabricante_chassi = fab; 
+            }
+          }
+        }};
+        if (id === "ob_chassi") return { set textContent(v) {
+          const chassiOB = (v && v !== "—") ? v : (kpFallback?.modelo || "—");
+          if (chassiOB !== "—") { 
+            checkClear(); obFieldCount++; 
+            obCards.appendChild(card("Modelo Chassi", chassiOB)); 
+            if (itemData) {
+               if (!itemData.ob) itemData.ob = {};
+               itemData.ob.ob_chassi = chassiOB; 
+            }
+          }
+        }};
         if (id === "ob_foto") return { set src(v) { if(v) { const i=document.createElement("img"); i.src=v; i.loading="lazy"; i.decoding="async"; i.style.width="100%"; i.style.maxWidth="600px"; i.style.borderRadius="12px"; i.style.boxShadow="var(--shadow)"; i.style.border="1px solid var(--border)"; mediaBox.prepend(i); } }, style: { set display(v) {} } };
         if (id === "ob_fonte") return { set href(v) { if(v) { const a=document.createElement("a"); a.href=v; a.target="_blank"; a.textContent="🔗 Ficha Completa no Ônibus Brasil"; a.style.cssText="display:inline-block;padding:12px 24px;border-radius:8px;background:rgba(56,189,248,0.1);border:1px solid var(--accent-2);color:var(--accent-2);font-size:14px;font-weight:600;"; mediaBox.appendChild(a); } }, style: { set display(v) {} } };
         if (id === "singleReportButtons") return { style: { set display(v) {} } };
         return null;
       }
     };
+
+    // ✅ Se já temos dados no itemData (vindo do grupo ou histórico), usa eles diretamente
+    const d = itemData ? (itemData.ob_data || itemData.ob) : null;
+    const hasExistingData = d && (d.success === true || (d.ob_encarrocadeira && d.ob_encarrocadeira !== "—"));
+
+    if (hasExistingData) {
+      statusDiv.textContent = "✅ Dados carregados!";
+      statusDiv.style.color = "var(--accent)";
+      
+      const obDataObj = itemData.ob_data || {};
+      const obObj = itemData.ob || {};
+
+      const enc = obDataObj.encarrocadeira || obDataObj.encarrocadora || obObj.ob_encarrocadeira;
+      const carr = obDataObj.carroceria || obObj.ob_carroceria;
+      const fab = obDataObj.fabricante_chassi || obDataObj.fabricante || obObj.ob_fabricante_chassi || kpFallback?.marca;
+      const mod = obDataObj.modelo_chassi || obDataObj.chassi || obObj.ob_chassi || kpFallback?.modelo;
+
+      if (enc && enc !== "—") { checkClear(); obFieldCount++; obFieldsPresent.encarrocadeira = true; obCards.appendChild(card("Encarroçadora", enc)); }
+      if (carr && carr !== "—") { checkClear(); obFieldCount++; obFieldsPresent.carroceria = true; obCards.appendChild(card("Carroceria", carr)); }
+      if (fab && fab !== "—") { checkClear(); obFieldCount++; obFieldsPresent.fabricante = true; obCards.appendChild(card("Fabricante Chassi", fab)); }
+      if (mod && mod !== "—") { checkClear(); obFieldCount++; obCards.appendChild(card("Modelo Chassi", mod)); }
+
+      addFipe();
+
+      const foto = obDataObj.foto_url || obDataObj.foto;
+      if (foto) {
+        const i=document.createElement("img"); i.src=foto; i.loading="lazy"; i.decoding="async"; i.style.width="100%"; i.style.maxWidth="600px"; i.style.borderRadius="12px"; i.style.boxShadow="var(--shadow)"; i.style.border="1px solid var(--border)"; mediaBox.prepend(i);
+      }
+      
+      const linkOB = obDataObj.fonte || `https://onibusbrasil.com/placa/${p}`;
+      const a=document.createElement("a"); a.href=linkOB; a.target="_blank"; a.textContent="🔗 Ficha Completa no Ônibus Brasil"; a.style.cssText="display:inline-block;padding:12px 24px;border-radius:8px;background:rgba(56,189,248,0.1);border:1px solid var(--accent-2);color:var(--accent-2);font-size:14px;font-weight:600;"; mediaBox.appendChild(a);
+      
+      return;
+    }
+
     window.buscarDadosOnibusBrasil(p, true, mockUI);
   };
 
@@ -1075,7 +1299,6 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
   if (linkedPlate) {
     mSegs.innerHTML = `<div class="seg">${code}</div><div class="seg" style="background:var(--accent);color:black">${linkedPlate}</div>`;
     
-    // Container para os cards de decodificação do chassi (WMI/VDS/VIS)
     const c1 = document.createElement("div");
     c1.className = "cards";
     centerGrid(c1);
@@ -1084,10 +1307,8 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     
     const apiResult = itemData ? itemData.apiResult : (window.currentSingleResult ? window.currentSingleResult.apiResult : null);
 
-    // ── Detecção robusta de ônibus ────────────────────────
     const apiTipo = String(apiResult?.tipo || apiResult?.category || "").toLowerCase();
     
-    // Diagnóstico para depuração no console
     console.log("[Modal] Diagnóstico:", {
       placa: linkedPlate,
       chassi: code,
@@ -1097,24 +1318,24 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
       apiTipo: apiTipo
     });
 
-    // O fix real: isBus só é true se houver evidência POSITIVA de ônibus
-     const isBus = apiResult 
-       ? (apiResult.is_onibus === true || 
-          (apiResult.ob_data && apiResult.ob_data.success === true) || 
-          apiTipo.includes("onibus") || 
-          apiTipo.includes("ônibus"))
-       : true; // Se não tem apiResult (ex: modo individual sem consulta placa), assume ônibus por padrão
+    const isBus = apiResult 
+      ? (apiResult.is_onibus === true || 
+         (apiResult.ob_data && apiResult.ob_data.success === true) || 
+         apiTipo.includes("onibus") || 
+         apiTipo.includes("ônibus"))
+      : true;
 
     if (isBus) {
-      // ── ÔNIBUS: dados do Ônibus Brasil ──────────────────
       const h = document.createElement("h3");
       h.textContent = "🚌 Dados Carroceria";
       h.style.cssText = "font-size: 18px; color: var(--accent-2); margin: 24px 0 16px; border-top: 1px solid var(--border); padding-top: 24px; text-align: center; width: 100%;";
       mCards.appendChild(h);
-      injectOB(linkedPlate, mCards);
+
+      // ✅ Passa apiResult como fallback para injectOB usar quando OB não tem dados
+      injectOB(linkedPlate, mCards, apiResult);
 
     } else {
-      // ── VEÍCULO GENÉRICO: mesma apresentação da tela individual ──
+      // Veículo genérico — usa dados da KePlaca (apiResult já é a KePlaca)
       const h = document.createElement("h3");
       h.textContent = "🚗 Dados do Veículo";
       h.style.cssText = "font-size: 18px; color: var(--accent); margin: 24px 0 16px; border-top: 1px solid var(--border); padding-top: 24px; text-align: center; width: 100%;";
@@ -1127,7 +1348,6 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
 
       const api = apiResult || {};
 
-      // Logo da montadora
       if (api.logo) {
         const logoWrapper = document.createElement("div");
         logoWrapper.style.cssText = "grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; margin-bottom: 8px;";
@@ -1138,20 +1358,16 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
         genCards.appendChild(logoWrapper);
       }
 
-      // Campos calculados
       const mBasico = api.modelo || api.model || api.texto_modelo || "";
       const vBasico  = api.versao  || api.version || "";
       const modeloCompleto = (mBasico && vBasico && !mBasico.includes(vBasico))
-        ? `${mBasico} ${vBasico}`
-        : (mBasico || vBasico || "—");
+        ? `${mBasico} ${vBasico}` : (mBasico || vBasico || "—");
 
       const anoFab = api.ano || api.ano_fabricacao;
       const anoMod = api.ano_modelo;
       const anoCompleto = (anoFab && anoMod && anoFab !== anoMod)
-        ? `${anoFab}/${anoMod}`
-        : (anoFab || anoMod || "—");
+        ? `${anoFab}/${anoMod}` : (anoFab || anoMod || "—");
 
-      // Tentar localizar dados FIPE de forma profunda
       const findFipe = (obj) => {
         if (!obj || typeof obj !== 'object') return null;
         if (obj.fipe_codigo || obj.codigo_fipe || obj.FIPE_CODIGO) return obj;
@@ -1177,11 +1393,9 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
       const combustivel= api.combustivel  || api.fuel        || api.texto_combustivel || "—";
       const cor        = api.cor          || api.color       || "—";
       const cidade     = (api.municipio && api.uf)
-        ? `${api.municipio} / ${api.uf}`
-        : (api.cidade || api.municipio || "—");
+        ? `${api.municipio} / ${api.uf}` : (api.cidade || api.municipio || "—");
       const situacao   = api.situacao     || "—";
 
-      // Cards — mesma ordem da tela individual
       genCards.appendChild(card("Montadora",       mfr));
       genCards.appendChild(card("Modelo",          modeloCompleto));
       genCards.appendChild(card("Chassi",          chassiReal));
@@ -1193,7 +1407,6 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
       genCards.appendChild(card("Município / UF",  cidade));
       genCards.appendChild(card("Situação",        situacao));
 
-      // Reduz opacidade nos cards FIPE quando indisponível
       if (!temFipe) {
         const allCards = genCards.querySelectorAll(".card");
         Array.from(allCards)
@@ -1207,7 +1420,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
 
   } else if (isPlate) {
     mSegs.innerHTML = `<div class="seg">${code}</div>`;
-    injectOB(code, mCards);
+    injectOB(code, mCards, null);
   } else {
     setSegments(result, mSegs);
     setCards(result, mCards);
@@ -1326,8 +1539,8 @@ async function main() {
     let isPlateValidated = false;
     let isValidating = false;
 
-    const runVIN = async (force = false) => {
-      if (!vinInputSingle || isValidating) return;
+    async function runVIN(force = false) {
+      if (!vinInputSingle || (isValidating && !force)) return;
       const text = vinInputSingle.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
       if (text.length === 0) return;
 
@@ -1354,7 +1567,7 @@ async function main() {
       }
 
       const rt = el("resultTitle"); if (rt) rt.style.display = "block";
-      const segs = el("segments"); if (segs) { segs.innerHTML = ""; segs.style.display = "flex"; }
+      const segs = el("segments"); if (segs) { segs.innerHTML = ""; segs.style.display = "none"; }
       
       renderResult(result, text);
       
@@ -1377,9 +1590,9 @@ async function main() {
       }
 
       addHistoryEntry(text);
-    };
+    }
 
-    const runPlate = async () => {
+    async function runPlate() {
       if (!plateInputSingle || isValidating) return;
       const p = plateInputSingle.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
       const vin = vinInputSingle ? vinInputSingle.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") : "";
@@ -1438,20 +1651,33 @@ async function main() {
             if (obData && obData.success === true && 
                 (obData.encarrocadeira || obData.carroceria || obData.fabricante_chassi || obData.modelo_chassi)) {
 
-              // ✅ TEM CACHE — preenche direto, sem skeleton
               el("ob_status").textContent = "✅ Dados encontrados! (cache)";
               el("ob_status").style.color = "var(--accent)";
 
+              // Limpa o container antes de adicionar os novos cards para evitar duplicatas
+              const obContainer = el("ob_container");
+              if (obContainer) {
+                // Remove todos os cards existentes para reconstruir
+                const cardsParaLimpar = obContainer.querySelectorAll(".card.card-plate");
+                cardsParaLimpar.forEach(c => c.remove());
+              }
+
               const camposOB = [
-                { id: "ob_encarrocadeira",    valor: obData.encarrocadeira    || obData.encarrocadora || "—" },
-                { id: "ob_carroceria",        valor: obData.carroceria        || "—"                        },
-                { id: "ob_fabricante_chassi", valor: obData.fabricante_chassi || obData.fabricante   || "—" },
-                { id: "ob_chassi",            valor: obData.modelo_chassi     || obData.chassi        || "—" },
+                { label: "Encarroçadora",    valor: obData.encarrocadeira    || obData.encarrocadora || "—", id: "ob_encarrocadeira" },
+                { label: "Carroceria",        valor: obData.carroceria        || "—",                        id: "ob_carroceria" },
+                { label: "Fabricante Chassi", valor: obData.fabricante_chassi || obData.fabricante   || apiResult.marca || "—", id: "ob_fabricante_chassi" },
+                { label: "Modelo Chassi",     valor: obData.modelo_chassi     || obData.chassi        || apiResult.modelo || "—", id: "ob_chassi" },
+                { label: "Código FIPE",       valor: apiResult.fipe_codigo,   id: "ob_fipe_codigo" },
+                { label: "Modelo FIPE",       valor: apiResult.fipe_modelo,   id: "ob_fipe_modelo" }
               ];
 
-              camposOB.forEach(({ id, valor }) => {
-                const campo = el(id);
-                if (campo) campo.textContent = valor;
+              camposOB.forEach(({ label, valor, id }) => {
+                if (valor && valor !== "—") {
+                  const newCard = document.createElement("div");
+                  newCard.className = "card card-plate";
+                  newCard.innerHTML = `<div class="label">${label}</div><div class="value" id="${id}">${valor}</div>`;
+                  obContainer.insertBefore(newCard, el("ob_media_container"));
+                }
               });
 
               if (obData.foto_url && el("ob_foto")) {
@@ -1465,13 +1691,50 @@ async function main() {
               }
 
             } else {
-              // SEM CACHE — mostra skeleton e busca ao vivo
+              // ✅ SEM CACHE — busca ao vivo
               el("ob_status").textContent = "Buscando...";
               toggleValueSkeletons(el("ob_container"), true);
               if (window.buscarDadosOnibusBrasil) {
-                await window.buscarDadosOnibusBrasil(p);
+                const obLive = await window.buscarDadosOnibusBrasil(p);
+                
+                // Limpa skeletons e reconstrói cards baseados no resultado
+                const obContainer = el("ob_container");
+                if (obContainer) {
+                  const cardsParaLimpar = obContainer.querySelectorAll(".card.card-plate");
+                  cardsParaLimpar.forEach(c => c.remove());
+                  
+                  const camposLive = [
+                    { label: "Encarroçadora",    valor: obLive?.encarrocadeira    || "—", id: "ob_encarrocadeira" },
+                    { label: "Carroceria",        valor: obLive?.carroceria        || "—", id: "ob_carroceria" },
+                    { label: "Fabricante Chassi", valor: obLive?.fabricante_chassi || obLive?.fabricante || apiResult.marca || "—", id: "ob_fabricante_chassi" },
+                    { label: "Modelo Chassi",     valor: obLive?.modelo_chassi     || obLive?.chassi     || apiResult.modelo || "—", id: "ob_chassi" },
+                    { label: "Código FIPE",       valor: apiResult.fipe_codigo,   id: "ob_fipe_codigo" },
+                    { label: "Modelo FIPE",       valor: apiResult.fipe_modelo,   id: "ob_fipe_modelo" }
+                  ];
+
+                  let hasAnyDataLive = false;
+                  camposLive.forEach(({ label, valor, id }) => {
+                    if (valor && valor !== "—") {
+                      if (["ob_encarrocadeira", "ob_carroceria", "ob_fabricante_chassi"].includes(id)) {
+                        hasAnyDataLive = true;
+                      }
+                      const newCard = document.createElement("div");
+                      newCard.className = "card card-plate";
+                      newCard.innerHTML = `<div class="label">${label}</div><div class="value" id="${id}">${valor}</div>`;
+                      obContainer.insertBefore(newCard, el("ob_media_container"));
+                    }
+                  });
+
+                  if (el("ob_status")) {
+                    el("ob_status").textContent = hasAnyDataLive ? "✅ Dados encontrados!" : "ℹ️ OnibusBrasil sem dados — exibindo dados da KePlaca";
+                    el("ob_status").style.color = hasAnyDataLive ? "var(--accent)" : "var(--accent-2)";
+                  }
+                }
               }
             }
+
+            // ✅ Remoção da seção duplicada de FIPE abaixo da foto
+            // A lógica de injeção unificada acima já cuida de exibir FIPE na grade principal
           } else {
             if (verifEl) verifEl.innerHTML = `<span style="color:var(--accent-2)">✔ Veículo identificado</span>`;
             if (genSec) genSec.style.display = "block";
@@ -1542,7 +1805,7 @@ async function main() {
             }
           }
           
-          runVIN(true); 
+          await runVIN(true); 
           showReports("single", true);
 
           if (!window.currentSingleResult) {
@@ -1612,10 +1875,10 @@ async function main() {
           
           if (el("ob_container")) {
             window.currentSingleResult.ob = {
-              ob_encarrocadeira: el("ob_encarrocadeira").textContent,
-              ob_carroceria: el("ob_carroceria").textContent,
-              ob_fabricante_chassi: el("ob_fabricante_chassi").textContent,
-              ob_chassi: el("ob_chassi").textContent
+              ob_encarrocadeira: el("ob_encarrocadeira")?.textContent || "",
+              ob_carroceria: el("ob_carroceria")?.textContent || "",
+              ob_fabricante_chassi: el("ob_fabricante_chassi")?.textContent || "",
+              ob_chassi: el("ob_chassi")?.textContent || ""
             };
           }
         } else {
@@ -1630,7 +1893,7 @@ async function main() {
           } else if (String(apiResult.mensagem).includes("não pertence")) {
             errorMsg = `Este chassi (${chassiDigitado}) não pertence à placa (${p}).`;
           } else {
-            errorMsg = `Não foi possível localizar os dígitos do chassi para a placa ${p} in fontes públicas.`;
+            errorMsg = `Não foi possível localizar os dígitos do chassi para a placa ${p} em fontes públicas.`;
           }
 
           if (verifEl) verifEl.innerHTML = `<span style="color:#e74c3c">${errorMsg}</span>`;
@@ -1656,7 +1919,7 @@ async function main() {
           btnDecode.disabled = vinInputSingle.value.length === 0;
         }
       }
-    };
+    }
 
     if (btnSingle) btnSingle.addEventListener('click', runVIN);
     if (btnPlateSingle) btnPlateSingle.addEventListener('click', runPlate);
@@ -1721,7 +1984,7 @@ async function main() {
     const btnExportCSVSingle = el("btnExportCSVSingle");
     if (btnExportCSVSingle) {
       btnExportCSVSingle.onclick = () => {
-        if (window.currentSingleResult) exportCSV([window.currentSingleResult], "Relatorio_Veiculo_" + window.currentSingleResult.vin);
+        if (window.currentSingleResult) openReportOptions([window.currentSingleResult], "Relatorio_Veiculo_" + window.currentSingleResult.vin);
       };
     }
 
@@ -1861,12 +2124,17 @@ async function main() {
                 
                 itemData.fabricante = apiResult.marca || apiResult.fabricante || apiResult.brand || apiResult.texto_marca || itemData.fabricante;
                 
-                // Se a API trouxe o chassi, atualizamos o vin e o result
                 if (apiResult.chassi_completo || apiResult.chassi) {
                   const apiChassi = apiResult.chassi_completo || apiResult.chassi;
-                  itemData.vin = apiChassi;
-                  if (window.currentDecoder) {
-                    itemData.result = window.currentDecoder.decode(apiChassi);
+                  
+                  // ✅ Só preenche o VIN se o usuário forneceu um OU se o Modo Combinado está ativo
+                  // Se o usuário mandou apenas uma lista de placas, ele quer apenas os dados OB/KePlaca delas.
+                  const isCombined = el("combinedMode") && el("combinedMode").checked;
+                  if (vin || isCombined) {
+                    itemData.vin = apiChassi;
+                    if (window.currentDecoder) {
+                      itemData.result = window.currentDecoder.decode(apiChassi);
+                    }
                   }
                 }
                 
@@ -1874,16 +2142,25 @@ async function main() {
                 const isBus = apiResult.is_onibus === true || (apiResult.ob_data && apiResult.ob_data.success) || apiTipo.includes("onibus") || apiTipo.includes("ônibus");
                 
                 if (isBus) {
-                   const obData = await window.buscarDadosOnibusBrasil(plate, false);
-                   if (obData && !obData.erro) {
-                     itemData.ob_data = obData;
-                     itemData.ob = {
-                        ob_carroceria: obData.carroceria || "—",
-                        ob_encarrocadeira: obData.encarrocadeira || obData.encarrocadora || "—",
-                        ob_fabricante_chassi: obData.fabricante_chassi || obData.fabricante || "—",
-                        ob_chassi: obData.modelo_chassi || obData.chassi || "—"
-                     };
-                   }
+                  const obData = await window.buscarDadosOnibusBrasil(plate, false);
+                  if (obData && !obData.erro) {
+                    itemData.ob_data = obData;
+                    itemData.ob = {
+                      ob_carroceria:        obData.carroceria        || "—",
+                      ob_encarrocadeira:    obData.encarrocadeira    || obData.encarrocadora || "—",
+                      // ✅ Fallback: se OB não tiver fabricante/chassi, usa KePlaca
+                      ob_fabricante_chassi: obData.fabricante_chassi || obData.fabricante || apiResult.marca  || "—",
+                      ob_chassi:            obData.modelo_chassi     || obData.chassi     || apiResult.modelo || "—"
+                    };
+                  } else {
+                    // OB não retornou nada — usa KePlaca como fallback completo
+                    itemData.ob = {
+                      ob_carroceria:        "—",
+                      ob_encarrocadeira:    "—",
+                      ob_fabricante_chassi: apiResult.marca  || "—",
+                      ob_chassi:            apiResult.modelo || "—"
+                    };
+                  }
                 }
               } else {
                 itemData.status = 'error';
@@ -1894,7 +2171,6 @@ async function main() {
               console.error("Erro no par do grupo:", e); 
             }
           } else if (vin) {
-            // Apenas VIN, sem consulta de placa
             itemData.status = 'ok';
           } else {
             itemData.status = 'orphan';
@@ -1917,7 +2193,7 @@ async function main() {
     const btnExportCSV = el("btnExportCSV");
     if (btnExportCSV) {
       btnExportCSV.onclick = () => {
-        if (window.currentGroupResults) exportCSV(window.currentGroupResults, "Relatorio_Frota");
+        if (window.currentGroupResults) openReportOptions(window.currentGroupResults, "Relatorio_Frota");
       };
     }
 

@@ -190,6 +190,27 @@
   </div>
 </div>
 
+  <!-- Modal de Opções de Relatório -->
+  <div id="reportModal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h2>Opções de Relatório</h2>
+        <button class="close-modal" id="closeReportModal">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 20px; text-align: center;">
+        <p style="margin-bottom: 20px; color: var(--text); font-size: 15px;">Deseja incluir informações da FIPE no relatório?</p>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <button id="btnExportFull" class="btn" style="background: var(--accent); color: black; font-weight: 600; padding: 12px;">
+            📄 Sim, com FIPE e Completo
+          </button>
+          <button id="btnExportBasic" class="btn" style="background: var(--card); border: 1px solid var(--border); color: var(--text); font-weight: 600; padding: 12px;">
+            📄 Não, apenas dados técnicos
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- SheetJS para importação de Excel -->
   <script src="auth.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
