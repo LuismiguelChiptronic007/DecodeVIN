@@ -50,11 +50,17 @@ async function consultarPlacaPHP(placa, chassiDigitado = "") {
 
     console.log("Resposta do Worker:", data);
 
-    if (data.status !== "ok") {
+    // Se não tem status "ok" mas tem marca/modelo/chassi, consideramos ok
+    if (data.status !== "ok" && !(data.marca || data.modelo || data.chassi_completo || data.chassi_raw_api)) {
       return {
         status: "erro",
         mensagem: data.mensagem || "Placa não encontrada."
       };
+    }
+
+    // Garante que o status seja "ok" se tivermos dados
+    if (data.marca || data.modelo || data.chassi_completo || data.chassi_raw_api) {
+      data.status = "ok";
     }
 
     return data;
@@ -1485,17 +1491,17 @@ async function main() {
               ? `${mBasico} ${vBasico}` 
               : (mBasico || vBasico || "—");
 
-            const anoFab = apiResult.ano || apiResult.ano_fabricacao || apiResult.year;
-            const anoMod = apiResult.ano_modelo || apiResult.model_year;
+            const anoFab = apiResult.ano || apiResult.ano_fabricacao || apiResult.year || apiResult.anoFabricacao;
+            const anoMod = apiResult.ano_modelo || apiResult.model_year || apiResult.anoModelo;
             const anoCompleto = (anoFab && anoMod && anoFab !== anoMod)
               ? `${anoFab}/${anoMod}`
               : (anoFab || anoMod || "—");
 
-            const mfr = apiResult.marca || apiResult.fabricante || apiResult.brand || apiResult.texto_marca || apiResult.MARCA || apiResult.FABRICANTE || "—";
-            const chassiReal = apiResult.chassi_completo || apiResult.chassi || apiResult.final_chassi || apiResult.vin || apiResult.CHASSI || "—";
-            const combustivelReal = apiResult.combustivel || apiResult.fuel || apiResult.texto_combustivel || apiResult.COMBUSTIVEL || "—";
-            const corReal = apiResult.cor || apiResult.color || apiResult.COR || "—";
-            const cidadeReal = (apiResult.municipio && apiResult.uf) ? `${apiResult.municipio} / ${apiResult.uf}` : (apiResult.cidade || apiResult.municipio || apiResult.MUNICIPIO || apiResult.CIDADE || "—");
+            const mfr = apiResult.marca || apiResult.fabricante || apiResult.brand || apiResult.texto_marca || apiResult.MARCA || apiResult.FABRICANTE || apiResult.marcaNome || "—";
+            const chassiReal = apiResult.chassi_completo || apiResult.chassi || apiResult.final_chassi || apiResult.vin || apiResult.CHASSI || apiResult.vin_completo || "—";
+            const combustivelReal = apiResult.combustivel || apiResult.fuel || apiResult.texto_combustivel || apiResult.COMBUSTIVEL || apiResult.tipo_combustivel || "—";
+            const corReal = apiResult.cor || apiResult.color || apiResult.COR || apiResult.cor_veiculo || "—";
+            const cidadeReal = (apiResult.municipio && apiResult.uf) ? `${apiResult.municipio} / ${apiResult.uf}` : (apiResult.cidade || apiResult.municipio || apiResult.MUNICIPIO || apiResult.CIDADE || apiResult.nome_cidade || "—");
 
             const setValWithStyle = (id, cardId, value) => {
               const elVal = el(id);

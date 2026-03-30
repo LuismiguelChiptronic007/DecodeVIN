@@ -143,7 +143,7 @@ try {
 
 // ── Função auxiliar para remover skeletons ────────────────
 function removerSkeleton(el) { 
-  if (!el) return; 
+  if (!el || !el.classList) return; 
 
   el.classList.remove("loading"); 
   el.classList.remove("skeleton"); 

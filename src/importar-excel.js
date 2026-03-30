@@ -60,29 +60,7 @@ function lerExcelEPopularGrupo(file) {
       const combined    = document.getElementById('combinedMode'); 
       const gBtn        = document.getElementById('btnGroupDecode'); 
   
-      if (!gInput || !gPlateInput) { //  Trecho alterado em app.js, dentro da função injectOB:
-
-const obCards = document.createElement("div");
-obCards.className = "cards";//  Trecho corrigido em app.js, dentro da função injectOB:
-
-const injectOB = (p, container, itemData) => {
-  // ... (código anterior)
-
-  const obCards = document.createElement("div");
-  obCards.className = "cards";
-
-  //  ESTILO DE GRID APLICADO NO LUGAR CERTO:
-  obCards.style.cssText = "display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:15px;";
-  
-  obWrapper.appendChild(obCards);
-
-  // ... (resto da função)
-};
-
-//  ESTILO DE GRID ADICIONADO AQUI:
-obCards.style.cssText = "display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:15px;";
-
-obWrapper.appendChild(obCards);
+      if (!gInput || !gPlateInput) { 
         if (window.showToast) {
           window.showToast('Navegue para a tela de Consulta em Grupo antes de importar.', 'error');
         } else {
