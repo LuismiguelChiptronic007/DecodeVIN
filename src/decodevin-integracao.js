@@ -84,16 +84,30 @@ try {
   const naoEncontrado = !dados.success || (dados.erro && dados.erro.length > 0);
 
   if (!naoEncontrado) { 
-    preencherUI({ 
-      carroceria:     dados.carroceria    || "—", 
-      encarrocadeira: dados.encarrocadora || "—", 
-      chassi:         dados.chassi        || "—", 
-      fabricante:     dados.fabricante    || "—", 
-      foto_url:       dados.foto_url      || null, 
-      fonte:          dados.fonte         || null, 
-      fonte_cache:    dados.fonte_cache   || false, 
-    }, elCarroceria, elEncarrocadeira, elChassi, elFabChassi, elFoto, elFonte, elStatus); 
-    return dados; 
+    const encarro = dados.encarrocadeira || dados.encarrocadora || "—";
+    const dadosNormalizados = {
+      ...dados,
+      carroceria:     dados.carroceria  || "—",
+      encarrocadeira: encarro,
+      encarrocadora:  encarro,
+      chassi:         dados.chassi      || "—",
+      fabricante:     dados.fabricante  || "—",
+      foto_url:       dados.foto_url    || null,
+      fonte:          dados.fonte       || null,
+      fonte_cache:    dados.fonte_cache || false
+    };
+
+    preencherUI(
+      dadosNormalizados,
+      elCarroceria,
+      elEncarrocadeira,
+      elChassi,
+      elFabChassi,
+      elFoto,
+      elFonte,
+      elStatus
+    );
+    return dadosNormalizados; 
   } 
   
   //  Não achou no OnibusBrasil — tenta o keplaca-proxy com Timeout

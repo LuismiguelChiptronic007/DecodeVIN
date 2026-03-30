@@ -1704,7 +1704,7 @@ async function main() {
                   cardsParaLimpar.forEach(c => c.remove());
                   
                   const camposLive = [
-                    { label: "Encarroçadora",    valor: obLive?.encarrocadeira    || "—", id: "ob_encarrocadeira" },
+                    { label: "Encarroçadora",    valor: obLive?.encarrocadeira    || obLive?.encarrocadora || "—", id: "ob_encarrocadeira" },
                     { label: "Carroceria",        valor: obLive?.carroceria        || "—", id: "ob_carroceria" },
                     { label: "Fabricante Chassi", valor: obLive?.fabricante_chassi || obLive?.fabricante || apiResult.marca || "—", id: "ob_fabricante_chassi" },
                     { label: "Modelo Chassi",     valor: obLive?.modelo_chassi     || obLive?.chassi     || apiResult.modelo || "—", id: "ob_chassi" },
