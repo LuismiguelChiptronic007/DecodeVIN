@@ -10,6 +10,20 @@ const AUTH_WORKER = 'https://decodevinbus-auth.luismiguelgomesoliveira-014.worke
 function getToken() { return localStorage.getItem('dvb_token'); }
 function getUser()  { return JSON.parse(localStorage.getItem('dvb_user') || 'null'); }
 
+function sanitizeNomeInput(value) {
+  if (!value) return "";
+  return value
+    .replace(/[^\p{L}\s'-]/gu, "")
+    .replace(/\s{2,}/g, " ")
+    .trimStart();
+}
+
+function isNomeValido(value) {
+  if (!value) return false;
+  const nome = value.trim();
+  return /^[\p{L}][\p{L}\s'-]*$/u.test(nome);
+}
+
 function salvarSessao(token, nome, setor, email, admin) {
   localStorage.setItem('dvb_token', token);
   localStorage.setItem('dvb_user', JSON.stringify({ nome, setor, email, admin }));
@@ -182,6 +196,14 @@ function mostrarTelaLogin() {
   `;
   document.body.appendChild(overlay);
   document.body.style.display = '';
+
+  const nomeInput = document.getElementById('cad-nome');
+  if (nomeInput) {
+    nomeInput.addEventListener('input', () => {
+      const sanitized = sanitizeNomeInput(nomeInput.value);
+      if (sanitized !== nomeInput.value) nomeInput.value = sanitized;
+    });
+  }
 }
 
 function inputStyle() {
@@ -217,6 +239,19 @@ window.dvbShowTab = function(tab) {
   tabCad.style.background   = isLogin ? 'transparent' : 'var(--accent-2)';
   tabCad.style.color        = isLogin ? 'var(--muted)' : '#000';
   tabCad.style.fontWeight   = isLogin ? '600' : '700';
+
+  // Limpa campos do cadastro ao voltar para a aba "Criar Conta"
+  if (!isLogin) {
+    const cadNome = document.getElementById('cad-nome');
+    const cadSetor = document.getElementById('cad-setor');
+    const cadEmail = document.getElementById('cad-email');
+    const cadSenha = document.getElementById('cad-senha');
+    if (cadNome) cadNome.value = '';
+    if (cadSetor) cadSetor.selectedIndex = 0;
+    if (cadEmail) cadEmail.value = '';
+    if (cadSenha) cadSenha.value = '';
+  }
+
   dvbMsg('', '');
 };
 
@@ -266,11 +301,17 @@ window.dvbLogin = async function() {
 };
 
 window.dvbCadastrar = async function() {
-  const nome  = document.getElementById('cad-nome').value.trim();
+  const nomeInput = document.getElementById('cad-nome');
+  const nome  = sanitizeNomeInput((nomeInput?.value || '').trim());
   const setor = document.getElementById('cad-setor').value.trim();
   const email = document.getElementById('cad-email').value.trim();
   const senha = document.getElementById('cad-senha').value;
   if (!nome || !setor || !email || !senha) { dvbMsg('Preencha todos os campos.', 'erro'); return; }
+  if (!isNomeValido(nome)) {
+    dvbMsg('O nome deve conter apenas letras e espaços (sem caracteres especiais).', 'erro');
+    return;
+  }
+  if (nomeInput) nomeInput.value = nome;
 
   if (!email.toLowerCase().endsWith('@chiptronic.com.br')) {
     dvbMsg('Apenas e-mails @chiptronic.com.br são permitidos.', 'erro');
