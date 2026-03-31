@@ -1666,6 +1666,20 @@ async function main() {
           isPlateValidated = true;
           
           let obData = apiResult.ob_data;
+
+          // ✅ Sempre tenta ÔnibusBrasil (há placas que a API não classifica como ônibus)
+          // Só assume "Ônibus" se o retorno do OB vier com success:true
+          if ((!obData || !obData.success) && window.buscarDadosOnibusBrasil) {
+            try {
+              const obTry = await window.buscarDadosOnibusBrasil(p, false);
+              if (obTry && obTry.success === true) {
+                obData = obTry;
+                apiResult.ob_data = obTry;
+              }
+            } catch (e) {
+              console.warn("Falha ao consultar ÔnibusBrasil (fallback):", e);
+            }
+          }
           
           const apiTipo = String(apiResult.tipo || apiResult.category || "").toLowerCase();
           const isBus = apiResult.is_onibus === true || (obData && obData.success) || apiTipo.includes("onibus") || apiTipo.includes("ônibus");
