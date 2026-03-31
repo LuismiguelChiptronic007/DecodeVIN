@@ -1,12 +1,12 @@
 import { createDecoder } from "./decoder.js";
 
-
-
+// Carrega as regras de decodificação usadas para interpretar chassi e VIN.
 async function loadRules() {
   const res = await fetch("./data/manufacturers.json");
   return await res.json();
 }
 
+// Faz requisições com timeout para evitar que a interface fique travada.
 async function fetchWithTimeout(resource, options = {}) {
   const { timeout = 30000 } = options;
   const controller = new AbortController();
@@ -36,6 +36,7 @@ async function consultarKePlaca(placa) {
   }
 }
 
+// Consulta a API de placa e normaliza a resposta para o fluxo da tela.
 async function consultarPlacaPHP(placa, chassiDigitado = "") {
   try {
     console.log("Consultando Worker para placa:", placa);
@@ -74,7 +75,6 @@ async function consultarPlacaPHP(placa, chassiDigitado = "") {
   }
 }
 
-// ✅ NOVO: busca dados da KePlaca como fallback quando OnibusBrasil não tem campos
 async function buscarFallbackKePlaca(placa) {
   try {
     const workerUrl = `https://keplaca-proxy.luismiguelgomesoliveira-014.workers.dev/?placa=${placa}`;
@@ -194,7 +194,6 @@ function card(label, value, badge = null) {
   const displayValue = exists ? String(value) : "Não encontrado na API";
   if (!exists) d.style.opacity = "0.5";
 
-  // ✅ Badge opcional (ex: "KePlaca" para indicar fonte do fallback)
   if (badge) {
     const b = document.createElement("div");
     b.style.cssText = "position:absolute;top:6px;right:6px;font-size:9px;background:rgba(56,189,248,0.15);color:var(--accent-2);border:1px solid var(--accent-2);border-radius:4px;padding:1px 5px;font-weight:600;";
@@ -509,7 +508,6 @@ function renderHistory() {
         if (item.input && vInput) vInput.value = item.input;
         if (item.plate && pInput) pInput.value = item.plate;
 
-        // Dispara os cliques nos botões para usar o fluxo padrão do sistema
         if (item.plate && bPlate) {
           bPlate.disabled = false;
           bPlate.click();
@@ -809,7 +807,6 @@ const exportCSV = (data, name, includeFipe = true) => {
       bestFipe = valid.sort((a, b) => (b.score || 0) - (a.score || 0))[0];
     }
 
-    // ✅ Fallback FIPE da KePlaca
     const fipeCodFinal = bestFipe ? (bestFipe.codigo_fipe || bestFipe.fipe_codigo || "—") : (api.fipe_codigo || "—");
     const fipeModFinal = bestFipe ? (bestFipe.texto_modelo || bestFipe.modelo || "—") : (api.fipe_modelo || "—");
 
@@ -1017,9 +1014,6 @@ function renderGroupResults() {
   }
 }
 
-// ============================================================
-// MODAL LOGIC — openModal
-// ============================================================
 async function openModal(result, code, isPlate = false, linkedPlate = null, itemData = null) {
   const mTitle = el("modalTitle");
   const mSegs = el("modalSegments");
@@ -1030,10 +1024,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
 
   if (itemData && itemData.apiResult && (itemData.apiResult.chassi_completo || itemData.apiResult.chassi)) {
     const apiChassi = itemData.apiResult.chassi_completo || itemData.apiResult.chassi;
-    
-    // ✅ No Modal de Grupo/Histórico, só promove para "Análise Completa" se o item
-    // já tinha um chassi vinculado (vin) no input inicial. 
-    // Se o usuário mandou só placa, mantemos o modal focado na placa.
+
     const hasVin = itemData.vin && itemData.vin !== "";
     if (itemData.placa && isPlate && hasVin) {
       code = apiChassi;
@@ -1081,7 +1072,6 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     return;
   }
 
-  // ✅ Helper que renderiza fallback da KePlaca quando o OnibusBrasil não tem dados
   const renderKePlacaFallback = (container, kpData, titulo = "📋 Dados do Veículo (KePlaca)") => {
     const h = document.createElement("h3");
     h.textContent = titulo;
@@ -1135,7 +1125,6 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     }
   };
 
-  // ── Helper: injeta dados do Ônibus Brasil + fallback KePlaca ─────────────
   const injectOB = (p, container, kpFallback = null) => {
     const obWrapper = document.createElement("div");
     obWrapper.style.marginTop = "16px";
@@ -1164,7 +1153,6 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     mediaBox.style.marginTop = "20px";
     obWrapper.appendChild(mediaBox);
 
-    // Fallback container (renderizado após OB terminar, se necessário)
     const fallbackContainer = document.createElement("div");
     fallbackContainer.style.width = "100%";
     obWrapper.appendChild(fallbackContainer);
@@ -1220,7 +1208,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
         if (id === "ob_status") return {
           set textContent(v) {
             statusDiv.textContent = v;
-            // ✅ Quando OB termina, verifica se precisamos injetar FIPE
+
             if (v.includes("✅") || v.includes("Aviso") || v.includes("Erro") || v.includes("sem ficha") || v.includes("Não encontrada")) {
               addFipe();
               addApiExtras();
@@ -1283,7 +1271,6 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
       }
     };
 
-    // ✅ Se já temos dados no itemData (vindo do grupo ou histórico), usa eles diretamente
     const d = itemData ? (itemData.ob_data || itemData.ob) : null;
     const hasExistingData = d && (d.success === true || (d.ob_encarrocadeira && d.ob_encarrocadeira !== "—"));
 
@@ -1321,7 +1308,6 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     window.buscarDadosOnibusBrasil(p, true, mockUI);
   };
 
-  // ── Renderização principal ────────────────────────────────
   if (linkedPlate) {
     mSegs.innerHTML = `<div class="seg" style="background:var(--accent);color:black">${linkedPlate}</div>`;
     
@@ -1357,11 +1343,10 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
       h.style.cssText = "font-size: 18px; color: var(--accent-2); margin: 24px 0 16px; border-top: 1px solid var(--border); padding-top: 24px; text-align: center; width: 100%;";
       mCards.appendChild(h);
 
-      // ✅ Passa apiResult como fallback para injectOB usar quando OB não tem dados
       injectOB(linkedPlate, mCards, apiResult);
 
     } else {
-      // Veículo genérico — usa dados da KePlaca (apiResult já é a KePlaca)
+
       const h = document.createElement("h3");
       h.textContent = "🚗 Dados do Veículo";
       h.style.cssText = "font-size: 18px; color: var(--accent); margin: 24px 0 16px; border-top: 1px solid var(--border); padding-top: 24px; text-align: center; width: 100%;";
@@ -1618,6 +1603,7 @@ async function main() {
       addHistoryEntry(text);
     }
 
+    // Orquestra toda a busca por placa: API principal, OB e atualização da UI.
     async function runPlate() {
       if (!plateInputSingle || isValidating) return;
       const p = plateInputSingle.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -1667,8 +1653,6 @@ async function main() {
           
           let obData = apiResult.ob_data;
 
-          // ✅ Sempre tenta ÔnibusBrasil (há placas que a API não classifica como ônibus)
-          // Só assume "Ônibus" se o retorno do OB vier com success:true
           if ((!obData || !obData.success) && window.buscarDadosOnibusBrasil) {
             try {
               const obTry = await window.buscarDadosOnibusBrasil(p, false);
@@ -1700,10 +1684,9 @@ async function main() {
               el("ob_status").textContent = "✅ Dados encontrados! (cache)";
               el("ob_status").style.color = "var(--accent)";
 
-              // Limpa o container antes de adicionar os novos cards para evitar duplicatas
               const obContainer = el("ob_container");
               if (obContainer) {
-                // Remove todos os cards existentes para reconstruir
+
                 const cardsParaLimpar = obContainer.querySelectorAll(".card.card-plate");
                 cardsParaLimpar.forEach(c => c.remove());
               }
@@ -1739,13 +1722,12 @@ async function main() {
               }
 
             } else {
-              // ✅ SEM CACHE — busca ao vivo
+
               el("ob_status").textContent = "Buscando...";
               toggleValueSkeletons(el("ob_container"), true);
               if (window.buscarDadosOnibusBrasil) {
                 const obLive = await window.buscarDadosOnibusBrasil(p);
-                
-                // Limpa skeletons e reconstrói cards baseados no resultado
+
                 const obContainer = el("ob_container");
                 if (obContainer) {
                   const cardsParaLimpar = obContainer.querySelectorAll(".card.card-plate");
@@ -1783,8 +1765,6 @@ async function main() {
               }
             }
 
-            // ✅ Remoção da seção duplicada de FIPE abaixo da foto
-            // A lógica de injeção unificada acima já cuida de exibir FIPE na grade principal
           } else {
             if (verifEl) verifEl.innerHTML = `<span style="color:var(--accent-2)">✔ Veículo identificado</span>`;
             if (genSec) genSec.style.display = "block";
@@ -2038,7 +2018,6 @@ async function main() {
       };
     }
 
-    // GROUP MODE
     gInput.addEventListener('input', () => {
       const pos = gInput.selectionStart;
       let val = gInput.value.toUpperCase().replace(/[^A-Z0-9\n\r]/g, "");
@@ -2176,9 +2155,7 @@ async function main() {
                 
                 if (apiResult.chassi_completo || apiResult.chassi) {
                   const apiChassi = apiResult.chassi_completo || apiResult.chassi;
-                  
-                  // ✅ Só preenche o VIN se o usuário forneceu um OU se o Modo Combinado está ativo
-                  // Se o usuário mandou apenas uma lista de placas, ele quer apenas os dados OB/KePlaca delas.
+
                   const isCombined = el("combinedMode") && el("combinedMode").checked;
                   if (vin || isCombined) {
                     itemData.vin = apiChassi;
@@ -2189,28 +2166,34 @@ async function main() {
                 }
                 
                 const apiTipo = String(apiResult.tipo || apiResult.category || "").toLowerCase();
-                const isBus = apiResult.is_onibus === true || (apiResult.ob_data && apiResult.ob_data.success) || apiTipo.includes("onibus") || apiTipo.includes("ônibus");
-                
-                if (isBus) {
-                  const obData = await window.buscarDadosOnibusBrasil(plate, false);
-                  if (obData && !obData.erro) {
-                    itemData.ob_data = obData;
-                    itemData.ob = {
-                      ob_carroceria:        obData.carroceria        || "—",
-                      ob_encarrocadeira:    obData.encarrocadeira    || obData.encarrocadora || "—",
-                      // ✅ Fallback: se OB não tiver fabricante/chassi, usa KePlaca
-                      ob_fabricante_chassi: obData.fabricante_chassi || obData.fabricante || apiResult.marca  || "—",
-                      ob_chassi:            obData.modelo_chassi     || obData.chassi     || apiResult.modelo || "—"
-                    };
-                  } else {
-                    // OB não retornou nada — usa KePlaca como fallback completo
-                    itemData.ob = {
-                      ob_carroceria:        "—",
-                      ob_encarrocadeira:    "—",
-                      ob_fabricante_chassi: apiResult.marca  || "—",
-                      ob_chassi:            apiResult.modelo || "—"
-                    };
+
+                // Busca ÔnibusBrasil mesmo quando a API principal não classifica como "ônibus".
+                // Isso garante que placa => carroceria/encarroçadeira/foto apareçam igual às outras.
+                let obData = null;
+                if (window.buscarDadosOnibusBrasil) {
+                  try {
+                    obData = await window.buscarDadosOnibusBrasil(plate, false);
+                  } catch (e) {
+                    console.warn("Falha ao buscar dados no ÔnibusBrasil (grupo):", e);
                   }
+                }
+
+                if (obData && !obData.erro) {
+                  itemData.ob_data = obData;
+                  itemData.apiResult.ob_data = obData; // usado pelo openModal para decidir a renderização
+                  itemData.ob = {
+                    ob_carroceria:        obData.carroceria        || "—",
+                    ob_encarrocadeira:    obData.encarrocadeira    || obData.encarrocadora || "—",
+                    ob_fabricante_chassi: obData.fabricante_chassi || obData.fabricante || apiResult.marca || "—",
+                    ob_chassi:            obData.modelo_chassi     || obData.chassi     || apiResult.modelo || "—"
+                  };
+                } else {
+                  itemData.ob = {
+                    ob_carroceria:        "—",
+                    ob_encarrocadeira:    "—",
+                    ob_fabricante_chassi: apiResult.marca  || "—",
+                    ob_chassi:            apiResult.modelo || "—"
+                  };
                 }
               } else {
                 itemData.status = 'error';

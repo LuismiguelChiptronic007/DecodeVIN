@@ -11,9 +11,9 @@ const ASSETS = [
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js'
 ];
 
-// Instalar Service Worker e Cachear Assets
+// Prepara o cache offline com os arquivos essenciais da aplicação.
 self.addEventListener('install', (event) => {
-  self.skipWaiting(); // Forçar ativação imediata
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log('PWA: Cacheando arquivos essenciais para modo offline...');
@@ -22,7 +22,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Ativar e Limpar Caches Antigos
+// Remove versões antigas do cache e ativa imediatamente o novo service worker.
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -31,15 +31,15 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-  self.clients.claim(); // Assumir controle imediato
+  self.clients.claim();
 });
 
-// Interceptar Requisições (Network First Strategy)
+// Prioriza rede e usa cache como fallback quando o usuário está offline.
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Se a rede respondeu, atualizamos o cache se for um asset conhecido
+
         const url = new URL(event.request.url);
         if (ASSETS.includes(url.pathname) || ASSETS.some(a => url.pathname.endsWith(a.replace('./', '')))) {
           const responseClone = response.clone();
@@ -50,7 +50,7 @@ self.addEventListener('fetch', (event) => {
         return response;
       })
       .catch(() => {
-        // Se a rede falhar, tentamos o cache
+
         return caches.match(event.request).then((cachedResponse) => {
           if (cachedResponse) return cachedResponse;
           console.warn('PWA: Offline e sem cache para:', event.request.url);

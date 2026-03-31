@@ -1,21 +1,10 @@
-/**
- * INTEGRAÇÃO ONIBUSBRASIL → DecodeVIN (v6 - Timeout Forçado)
- * Esta versão inclui uma função fetchWithTimeout para prevenir que a UI congele
- * em caso de APIs lentas ou que não respondem.
- */
 
 const WORKER_URL    = "https://onibusbrasil-proxy.luismiguelgomesoliveira-014.workers.dev";
 const KEPLACA_URL   = "https://keplaca-proxy.luismiguelgomesoliveira-014.workers.dev";
 
-/**
- * Executa uma requisição fetch com um limite de tempo.
- * Se a requisição demorar mais que o timeout, a Promise é rejeitada.
- * @param {string} resource O URL do recurso a ser buscado.
- * @param {object} options Opções do fetch, incluindo um `timeout` em milissegundos.
- * @returns {Promise<Response>}
- */
+// Aplica limite de tempo nas chamadas para não travar a experiência da tela.
 const fetchWithTimeout = (resource, options = {}) => {
-  const { timeout = 8000 } = options; // 8 segundos de timeout padrão
+  const { timeout = 8000 } = options;
 
   return new Promise((resolve, reject) => {
     const controller = new AbortController();
@@ -39,6 +28,7 @@ const fetchWithTimeout = (resource, options = {}) => {
   });
 };
 
+// Busca dados de carroceria e mídia no ÔnibusBrasil com fallback para KePlaca.
 async function buscarDadosOnibusBrasil(placa, render = true, docRef) {
   const doc = docRef || document;
 
@@ -71,7 +61,7 @@ async function buscarDadosOnibusBrasil(placa, render = true, docRef) {
 const placaUpper = placa.trim().toUpperCase();
 
 try {
-  //  T — OnibusBrasil com Timeout
+
   let dados = {};
   try {
     const response = await fetchWithTimeout(`${WORKER_URL}/?placa=${placaUpper}`);
@@ -109,8 +99,7 @@ try {
     );
     return dadosNormalizados; 
   } 
-  
-  //  Não achou no OnibusBrasil — tenta o keplaca-proxy com Timeout
+
   if (elStatus) { 
     elStatus.textContent = "🔄 Buscando via KePlaca..."; 
     elStatus.style.color = "#f0a500"; 
@@ -138,7 +127,6 @@ try {
       console.error("KePlaca fallback CATCH:", errKe.message);
     }
 
-    //  Nenhuma fonte encontrou 
     if (elStatus) { 
       elStatus.textContent = `⚠️ Placa ${placaUpper} sem ficha nas fontes disponíveis.`; 
       elStatus.style.color = "#e74c3c"; 
@@ -155,7 +143,6 @@ try {
   }
 }
 
-// ── Função auxiliar para remover skeletons ────────────────
 function removerSkeleton(el) { 
   if (!el || !el.classList) return; 
 
@@ -164,7 +151,7 @@ function removerSkeleton(el) {
   el.classList.remove("skeleton-value"); 
 } 
 
-// ── Função auxiliar para preencher a UI ──────────────────
+// Centraliza o preenchimento visual dos cards e status da seção de ônibus.
 function preencherUI(dados, elCarroceria, elEncarrocadeira, elChassi, elFabChassi, elFoto, elFonte, elStatus, isFallback = false) {
   if (elCarroceria) { 
     elCarroceria.textContent = dados.carroceria || "—"; 

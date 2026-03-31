@@ -1,3 +1,4 @@
+// Prepara e valida entradas de chassi para o motor de decodificação.
 function normalizeInput(s) {
   return (s || "").trim().replace(/\s+/g, " ");
 }
@@ -49,7 +50,7 @@ function vinYearFromCode(c) {
 function scaniaYearFromCode(code) {
   const c = (code || "").toUpperCase();
   if (!c) return null;
-  if (/[1-9]/.test(c)) return 2000 + parseInt(c, 10); // 2001–2009
+  if (/[1-9]/.test(c)) return 2000 + parseInt(c, 10);
   const early = {
     A: 1980, B: 1981, C: 1982, D: 1983, E: 1984, F: 1985, G: 1986, H: 1987, J: 1988, K: 1989,
     L: 1990, M: 1991, N: 1992, P: 1993, R: 1994, S: 1995, T: 1996, V: 1997, W: 1998, X: 1999, Y: 2000
@@ -80,7 +81,7 @@ function yearFromCode2001(c) {
   const u = c.toUpperCase();
   if (/[1-9]/.test(u)) {
     const n = parseInt(u, 10);
-    return 2000 + n; // 1..9 => 2001..2009
+    return 2000 + n;
   }
   const table = {
     A: 2010, B: 2011, C: 2012, D: 2013, E: 2014, F: 2015,
@@ -92,12 +93,11 @@ function yearFromCode2001(c) {
 
 function emissionStandard(year) {
   if (year == null) return null;
-  
-  // Tratar anos ambíguos (ex: "1993/2023" da Scania)
+
   if (typeof year === "string" && year.includes("/")) {
     const parts = year.split("/");
     const standards = parts.map(y => emissionStandard(parseInt(y, 10))).filter(Boolean);
-    // Remover duplicatas e juntar
+
     return [...new Set(standards)].join(" / ");
   }
 
@@ -136,7 +136,7 @@ function getBusBodyworkByModel(manufacturerId, modelName) {
   if (manufacturerId === "volvo") {
     if (m.startsWith("B270F")) return "Urbano / Escolar (Motor Dianteiro)";
     if (m.startsWith("B7R") || m.startsWith("B290R") || m.startsWith("B250R")) return "Urbano / Rodoviário";
-    if (m.includes("M")) return "Urbano / Rodoviário (Motor Central)"; // B10M, B12M
+    if (m.includes("M")) return "Urbano / Rodoviário (Motor Central)";
     if (m.startsWith("B11R") || m.startsWith("B12R") || m.startsWith("B340R") || m.startsWith("B380R") || m.startsWith("B420R") || m.startsWith("B450R")) return "Rodoviário";
   }
   
@@ -170,7 +170,7 @@ function getBusModelByVds(wmi, vds) {
   let model = null;
   let chassis = null;
 
-  if (w === "936" || w === "93L") { // Marcopolo / Neobus
+  if (w === "936" || w === "93L") {
     const chassisCode = v[0];
     const chassisMap = { "1": "Mercedes-Benz", "2": "Scania", "3": "Volvo", "4": "VWCO", "5": "Agrale", "6": "Iveco" };
     chassis = chassisMap[chassisCode] || null;
@@ -182,7 +182,7 @@ function getBusModelByVds(wmi, vds) {
     };
     model = modelMap[modelCode] || null;
   }
-  else if (w === "93Y") { // Mascarello
+  else if (w === "93Y") {
     if (v.includes("GV")) model = "Gran Via";
     else if (v.includes("GR")) model = "Gran Roma";
     else if (v.includes("GM")) model = "Gran Midi";
@@ -193,7 +193,7 @@ function getBusModelByVds(wmi, vds) {
       chassis = "Mercedes-Benz";
     }
   }
-  else if (w === "93R") { // Comil
+  else if (w === "93R") {
     const chassisCode = v[0];
     const chassisMap = { "S": "Mercedes-Benz", "K": "Scania", "V": "Volvo", "W": "VWCO", "A": "Agrale", "I": "Iveco" };
     chassis = chassisMap[chassisCode] || null;
@@ -202,7 +202,7 @@ function getBusModelByVds(wmi, vds) {
     const modelMap = { "SV": "Svelto", "CP": "Campione", "VR": "Versatile", "PI": "Piá", "DO": "Doppio" };
     model = modelMap[modelPrefix] || null;
   }
-  else if (w === "93K") { // Caio
+  else if (w === "93K") {
     const chassisCode = v[0];
     const chassisMap = { "A": "Mercedes-Benz", "B": "Scania", "C": "Volvo", "D": "VWCO", "E": "Agrale", "F": "Iveco" };
     chassis = chassisMap[chassisCode] || null;
@@ -245,22 +245,22 @@ function matchModelByPatterns(input, rules) {
 
 function guessManufacturerByFirstPosition(input, rules) {
   const s = (input || "").trim().toUpperCase();
-  // Agrale A2 pela WMI (inclui variação histórica 9BF)
+
   if (/^(9BY|9C5|9BF)/.test(s)) return "agrale";
-  // Agrale A1 pelo prefixo C
+
   if (/^C[\s-]?\d{2}/.test(s)) return "agrale";
-  // Mercedes por padrões textuais
+
   if (/^(OF|LO)/.test(s)) return "mercedes-benz";
   if (/^O[\s-]?\d{3}/.test(s)) return "mercedes-benz";
   if (/^(9BM|8AB|8AC|8BP|WDB|WDD|WDF|WEB|NMB|AAV|4JG|WD4|VSA|VF9|LE4)/.test(s)) return "mercedes-benz";
-  // VWCO por código 953 de segmentos
+
   if (/^953[\s-]/.test(s)) return "vwco";
   if (/^[KFL]\d{2,3}/.test(s)) return "scania";
-  // Volvo B-series
+
   if (/^B\d{2,3}/.test(s)) return "volvo";
-  // Volare V-series
+
   if (/^V\d{2,3}/.test(s)) return "volare";
-  // Iveco WMIs
+
   if (/^(93Z|ZC8|ZCF|ZCG|8AI|8AJ|VHI|VF6|LNV|LNY|LZZ|XLR)/.test(s)) return "iveco";
   if (/^(YS2|YS3|YS4|YK1|9BS|8AG|WSD|WSC|VS6|VS7|VF7|5L6|ZCB|SJA|XLR|JXB)/.test(s)) return "scania";
   if (/^[A-Z0-9]{3}/.test(s)) {
@@ -418,7 +418,6 @@ function decodeVolksbus953(groups) {
   return { tokens, year: ano };
 }
 
-// Agrale mappings (A1 e A2)
 const AGR_A1_TYPE_MAP = {
   "01": "Caminhão Agrale 1600",
   "02": "Caminhão Agrale 1800",
@@ -524,7 +523,6 @@ function agraleA2YearFromCode(code) {
   return null;
 }
 
-// Iveco WMIs
 WMI_INFO_MAP["93Z"] = { manufacturer: "Iveco Brasil", region: "América do Sul", country: "Brasil" };
 WMI_INFO_MAP["ZC8"] = { manufacturer: "Iveco S.p.A.", region: "Europa", country: "Itália" };
 WMI_INFO_MAP["ZCF"] = { manufacturer: "Iveco S.p.A.", region: "Europa", country: "Itália" };
@@ -553,12 +551,12 @@ WMI_INFO_MAP["YS2"] = { manufacturer: "Scania Suécia", region: "Europa", countr
 WMI_INFO_MAP["YS3"] = { manufacturer: "Scania Suécia", region: "Europa", country: "Suécia" };
 WMI_INFO_MAP["YS4"] = { manufacturer: "Scania Suécia", region: "Europa", country: "Suécia" };
 WMI_INFO_MAP["YK1"] = { manufacturer: "Scania Suécia", region: "Europa", country: "Suécia" };
-// Volare Brasil
+
 WMI_INFO_MAP["93P"] = { manufacturer: "Volare (Marcopolo)", region: "América do Sul", country: "Brasil" };
 WMI_INFO_MAP["9EJ"] = { manufacturer: "Volare (Marcopolo)", region: "América do Sul", country: "Brasil" };
 WMI_INFO_MAP["9EL"] = { manufacturer: "Volare (Marcopolo)", region: "América do Sul", country: "Brasil" };
 WMI_INFO_MAP["9ES"] = { manufacturer: "Volare (Marcopolo)", region: "América do Sul", country: "Brasil" };
-// Volkswagen (global e regionais)
+
 WMI_INFO_MAP["WVW"] = { manufacturer: "Volkswagen AG", region: "Europa", country: "Alemanha" };
 WMI_INFO_MAP["WVG"] = { manufacturer: "Volkswagen AG (SUV/MPV)", region: "Europa", country: "Alemanha" };
 WMI_INFO_MAP["WV1"] = { manufacturer: "Volkswagen Veículos Comerciais", region: "Europa", country: "Alemanha" };
@@ -689,13 +687,12 @@ const VWCO_MODEL_ENGINE_MAP = {
   "22.260 S": "MAN D08 36"
 };
 
-// Volvo WMIs
 WMI_INFO_MAP["9BV"] = { manufacturer: "Volvo do Brasil", region: "América do Sul", country: "Brasil" };
 WMI_INFO_MAP["YV3"] = { manufacturer: "Volvo Bus Corporation", region: "Europa", country: "Suécia" };
 WMI_INFO_MAP["3CE"] = { manufacturer: "Volvo Buses México", region: "América do Norte", country: "México" };
 WMI_INFO_MAP["SCV"] = { manufacturer: "Volvo Truck & Bus UK", region: "Europa", country: "Reino Unido" };
 const VOLVO_VDS_MAP = {
-  // Primeira fase
+
   "1M2F": "B10M ECO",
   "1MA5": "B10M 245",
   "1MA6": "B10M 285",
@@ -709,7 +706,7 @@ const VOLVO_VDS_MAP = {
   "58SP": "B58 BIART",
   "58KF": "B58 ECO 4x2",
   "58KJ": "B58 4x2",
-  // Segunda fase
+
   "1ME9": "B10R 360",
   "R2FH": "B12 360",
   "R2FL": "B12 400",
@@ -727,7 +724,7 @@ const VOLVO_VDS_MAP = {
   "SS5L5": "B9R 340",
   "S6S5": "B9R 380",
   "S6M2": "B9SALF",
-  // Terceira fase
+
   "T8R9": "B215LH/B215RH",
   "T7V6": "B250R",
   "T5T5": "B270F",
@@ -884,8 +881,7 @@ function decodeMercedes(groups, patternName) {
     };
     const plantMap = { A: "Unidade Juiz de Fora", B: "Unidade São Bernardo do Campo", C: "Unidade Campinas" };
     const year = yearFromCode2001(yearCode) || vinYearFromCode(yearCode);
-    
-    // Filtragem por ano para modelos com múltiplas opções de chassi
+
     const filteredModelName = filterModelByYear("mercedes", modelCode, modelName, year);
 
     const tokens = [
@@ -1413,8 +1409,7 @@ export function createDecoder(rules, options) {
       }
       const simple = raw.replace(/[\s]+/g, " ");
       const compact = raw.replace(/[\s-]/g, "");
-      // Priorizar padrões específicos de montadora antes de VIN,
-      // para evitar classificar códigos (ex.: MB ABR-1986) como VIN quando tiverem 17 chars.
+
       const hintId = guessManufacturerByFirstPosition(simple, rules);
       const filteredRules = hintId
         ? { ...rules, manufacturers: (rules.manufacturers || []).filter(m => m.id === hintId) }
@@ -1461,12 +1456,11 @@ export function createDecoder(rules, options) {
           const vo2 = decodeVolare(model.groups);
           tokens = vo2.tokens;
         } else if (man.id === "volare" && model.pattern.name === "VolareA2") {
-          // Passar mapa de motores por modelo via options
+
           const vo3 = decodeVolareA2({ ...model.groups, __engineMap: opts.volareEngineMap || {} });
           tokens = vo3.tokens;
           if (vo3.year != null) yearForPeriod = vo3.year;
-          
-          // Adicionar Norma de Emissões para o padrão VolareA2
+
           const emV = emissionStandard(yearForPeriod);
           if (emV) {
             tokens.push({ key: "emissoes", label: "Norma de emissões", value: emV });
@@ -1506,7 +1500,7 @@ export function createDecoder(rules, options) {
           raw: { groups: model.groups, pattern: model.pattern.name, ...extraRaw }
         };
       }
-      // WMI apenas (3 primeiros caracteres)
+
       if (/^[A-Z0-9]{3}$/.test(compact)) {
         const w = decodeWMI3(compact);
         if (w) {

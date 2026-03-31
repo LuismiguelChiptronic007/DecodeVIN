@@ -1,13 +1,12 @@
 
  
+// Identifica se a célula lida do Excel contém placa ou chassi válido.
 function detectarTipo(valor) { 
   if (!valor) return null;
   const v = String(valor).trim().toUpperCase().replace(/[^A-Z0-9]/g, ''); 
-  
-  // Regex para Chassi (VIN): 17 caracteres, sem I, O, Q
+
   const regexChassi = /^[A-HJ-NPR-Z0-9]{17}$/;
-  
-  // Regex para Placa (Brasil): Antiga (ABC1234) ou Mercosul (ABC1D23)
+
   const regexPlaca = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/;
 
   if (regexChassi.test(v)) return { tipo: 'chassi', valor: v }; 
@@ -16,6 +15,7 @@ function detectarTipo(valor) {
   return null; 
 } 
 
+// Lê a planilha, monta pares placa/chassi e preenche a área de consulta em grupo.
 function lerExcelEPopularGrupo(file) { 
   const reader = new FileReader(); 
   reader.onload = function(e) { 
@@ -38,8 +38,7 @@ function lerExcelEPopularGrupo(file) {
       const placas  = itens.filter(i => i.tipo === 'placa'); 
       const chassis = itens.filter(i => i.tipo === 'chassi'); 
       const pares   = []; 
-  
-      // Pareia placa + chassi que estejam na mesma linha ou adjacentes 
+
       placas.forEach(p => { 
         const idx = chassis.findIndex(c => Math.abs(c.row - p.row) <= 1); 
         if (idx !== -1) { 
@@ -50,11 +49,9 @@ function lerExcelEPopularGrupo(file) {
         } 
       }); 
       chassis.forEach(c => pares.push({ placa: '', chassi: c.valor })); 
-  
-      // Filtra os pares para remover linhas totalmente vazias (se houver)
+
       const paresLimpos = pares.filter(p => p.placa || p.chassi);
 
-      // Popula os campos do modo grupo no DecodeVIN 
       const gInput      = document.getElementById('groupInput'); 
       const gPlateInput = document.getElementById('groupPlateInput'); 
       const combined    = document.getElementById('combinedMode'); 
@@ -68,18 +65,16 @@ function lerExcelEPopularGrupo(file) {
         }
         return; 
       } 
-  
-      // Junta os valores removendo linhas em branco desnecessárias
+
       gInput.value      = paresLimpos.map(p => p.chassi).join('\n').trim(); 
       gPlateInput.value = paresLimpos.map(p => p.placa).join('\n').trim(); 
   
       if (combined) {
         combined.checked = paresLimpos.some(p => p.placa && p.chassi); 
-        // Forçar disparo do evento change para atualizar a lógica do app.js
+
         combined.dispatchEvent(new Event('change'));
       }
-  
-      // Dispara o evento input para habilitar o botão 
+
       gInput.dispatchEvent(new Event('input')); 
       gPlateInput.dispatchEvent(new Event('input')); 
   
@@ -90,7 +85,7 @@ function lerExcelEPopularGrupo(file) {
       }
 
       if (gBtn) {
-        gBtn.disabled = false; // Força habilitação do botão
+        gBtn.disabled = false;
         gBtn.scrollIntoView({ behavior: 'smooth' }); 
       }
     } catch (err) {
@@ -104,6 +99,5 @@ function lerExcelEPopularGrupo(file) {
   }; 
   reader.readAsArrayBuffer(file); 
 } 
- 
-// Expõe globalmente 
+
 window.lerExcelEPopularGrupo = lerExcelEPopularGrupo; 

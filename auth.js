@@ -1,12 +1,8 @@
-// ============================================================
-// DecodeVINBus — Auth Frontend
-// Coloque este script ANTES do app.js no index.html
-// ============================================================
+
 
 const AUTH_WORKER = 'https://decodevinbus-auth.luismiguelgomesoliveira-014.workers.dev';
 
-// ---------- Helpers ----------
-
+// Lê a sessão local para manter o usuário autenticado entre recarregamentos.
 function getToken() { return localStorage.getItem('dvb_token'); }
 function getUser()  { return JSON.parse(localStorage.getItem('dvb_user') || 'null'); }
 
@@ -34,8 +30,6 @@ function limparSessao() {
   localStorage.removeItem('dvb_user');
 }
 
-// ---------- Verificar token ao carregar ----------
-
 async function verificarSessao() {
   const token = getToken();
   if (!token) { mostrarTelaLogin(); return; }
@@ -47,7 +41,7 @@ async function verificarSessao() {
     if (res.ok) {
       const data = await res.json();
       const u = data.usuario;
-      // Atualiza sessão local com dados frescos do banco
+
       salvarSessao(token, u.nome, u.setor, u.email, u.admin);
       mostrarApp(u);
     } else {
@@ -55,15 +49,14 @@ async function verificarSessao() {
       mostrarTelaLogin();
     }
   } catch {
-    // Offline: usa dados locais se disponíveis
+
     const user = getUser();
     if (user) mostrarApp(user);
     else mostrarTelaLogin();
   }
 }
 
-// ---------- Tela de Login/Cadastro ----------
-
+// Monta a interface de login e cadastro e conecta os eventos da tela.
 function mostrarTelaLogin() {
   document.body.style.display = 'none';
 
@@ -240,7 +233,6 @@ window.dvbShowTab = function(tab) {
   tabCad.style.color        = isLogin ? 'var(--muted)' : '#000';
   tabCad.style.fontWeight   = isLogin ? '600' : '700';
 
-  // Limpa campos do cadastro ao voltar para a aba "Criar Conta"
   if (!isLogin) {
     const cadNome = document.getElementById('cad-nome');
     const cadSetor = document.getElementById('cad-setor');
@@ -291,7 +283,6 @@ window.dvbLogin = async function() {
     const data = await res.json();
     if (!res.ok) { dvbMsg(data.erro || 'Erro ao entrar.', 'erro'); return; }
 
-    // ✅ Salva todos os dados do usuário incluindo email e setor
     salvarSessao(data.token, data.nome, data.setor, data.email, data.admin);
     document.getElementById('dvb-auth-overlay').remove();
     mostrarApp({ nome: data.nome, setor: data.setor, email: data.email, admin: data.admin });
@@ -300,6 +291,7 @@ window.dvbLogin = async function() {
   }
 };
 
+// Valida e envia os dados de cadastro para o worker de autenticação.
 window.dvbCadastrar = async function() {
   const nomeInput = document.getElementById('cad-nome');
   const nome  = sanitizeNomeInput((nomeInput?.value || '').trim());
@@ -339,8 +331,6 @@ window.dvbCadastrar = async function() {
   }
 };
 
-// ---------- Mostrar app autenticado ----------
-
 function mostrarApp(usuario) {
   const oldBar = document.getElementById('dvb-user-bar');
   if (oldBar) oldBar.remove();
@@ -366,7 +356,6 @@ function mostrarApp(usuario) {
     ? usuario.nome.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
     : 'U';
 
-  // ✅ Usa setor e email vindos do banco via /verify ou /login
   const setorExibido = usuario.setor || 'Operador';
   const emailExibido = usuario.email || '';
 
@@ -456,21 +445,17 @@ window.dvbLogout = function() {
 };
 
 window.dvbGoToMenu = function() {
-  // Esconde os decodificadores
+
   const single = document.getElementById('singleDecoder');
   const group = document.getElementById('groupDecoder');
   if (single) single.style.display = 'none';
   if (group) group.style.display = 'none';
-  
-  // Mostra a tela de seleção
+
   const selection = document.getElementById('selectionScreen');
   if (selection) selection.style.display = 'flex';
-  
-  // Limpa resultados anteriores (opcional, para garantir um estado limpo)
+
   if (window.clearUI) window.clearUI();
 };
-
-// ---------- Painel Admin ----------
 
 window.dvbAdmin = async function() {
   const token = getToken();
@@ -510,7 +495,7 @@ window.dvbAdmin = async function() {
       <td style="padding:8px; font-size:11px; color:#64748b;">${(() => {
         if (!u.last_login) return '—';
         try {
-          // Garante que o formato do banco (que vem em UTC) seja interpretado corretamente
+
           const d = new Date(u.last_login.includes('Z') ? u.last_login : u.last_login.replace(' ', 'T') + 'Z');
           return d.toLocaleString('pt-BR', {
             timeZone: 'America/Sao_Paulo',
@@ -683,15 +668,12 @@ window.dvbDeletar = async function(event, id, nome) {
   });
 };
 
-//  Inatividade (Auto Logout)
-
 let inatividadeTimer;
-const TEMPO_INATIVIDADE = 10 * 60 * 1000; // 10 minutos em milissegundos
+const TEMPO_INATIVIDADE = 10 * 60 * 1000;
 
 function resetarTimerInatividade() {
   if (inatividadeTimer) clearTimeout(inatividadeTimer);
-  
-  // Só ativa o timer se o usuário estiver logado
+
   if (getToken()) {
     inatividadeTimer = setTimeout(() => {
       console.log("Sessão expirada por inatividade.");
@@ -700,11 +682,9 @@ function resetarTimerInatividade() {
   }
 }
 
-// Listeners para detectar atividade do usuário
 ['mousedown', 'keydown', 'touchstart', 'scroll'].forEach(evt => {
   window.addEventListener(evt, resetarTimerInatividade, { passive: true });
 });
 
-// ---------- Iniciar ----------
 resetarTimerInatividade();
 verificarSessao();
