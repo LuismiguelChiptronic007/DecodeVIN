@@ -1643,6 +1643,7 @@ async function main() {
           
           const apiTipo = String(apiResult.tipo || apiResult.category || "").toLowerCase();
           const isBus = apiResult.is_onibus === true || (obData && obData.success) || apiTipo.includes("onibus") || apiTipo.includes("ônibus");
+          const apiChassi = apiResult.chassi_completo || apiResult.chassi || apiResult.final_chassi || apiResult.vin || apiResult.CHASSI || apiResult.vin_completo || "—";
 
           if (isBus) {
             if (verifEl) verifEl.innerHTML = `<span style="color:#2ecc71">${apiResult.mensagem || "✔ Veículo identificado (Ônibus)"}</span>`;
@@ -1667,6 +1668,7 @@ async function main() {
                 { label: "Carroceria",        valor: obData.carroceria        || "—",                        id: "ob_carroceria" },
                 { label: "Fabricante Chassi", valor: obData.fabricante_chassi || obData.fabricante   || apiResult.marca || "—", id: "ob_fabricante_chassi" },
                 { label: "Modelo Chassi",     valor: obData.modelo_chassi     || obData.chassi        || apiResult.modelo || "—", id: "ob_chassi" },
+                { label: "Chassi API",        valor: apiChassi, id: "ob_chassi_api" },
                 { label: "Código FIPE",       valor: apiResult.fipe_codigo,   id: "ob_fipe_codigo" },
                 { label: "Modelo FIPE",       valor: apiResult.fipe_modelo,   id: "ob_fipe_modelo" }
               ];
@@ -1708,6 +1710,7 @@ async function main() {
                     { label: "Carroceria",        valor: obLive?.carroceria        || "—", id: "ob_carroceria" },
                     { label: "Fabricante Chassi", valor: obLive?.fabricante_chassi || obLive?.fabricante || apiResult.marca || "—", id: "ob_fabricante_chassi" },
                     { label: "Modelo Chassi",     valor: obLive?.modelo_chassi     || obLive?.chassi     || apiResult.modelo || "—", id: "ob_chassi" },
+                    { label: "Chassi API",        valor: apiChassi, id: "ob_chassi_api" },
                     { label: "Código FIPE",       valor: apiResult.fipe_codigo,   id: "ob_fipe_codigo" },
                     { label: "Modelo FIPE",       valor: apiResult.fipe_modelo,   id: "ob_fipe_modelo" }
                   ];
