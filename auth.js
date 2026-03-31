@@ -68,9 +68,10 @@ function mostrarTelaLogin() {
       background: radial-gradient(1000px 600px at 10% -10%, rgba(56,189,248,.15), transparent 60%),
                   radial-gradient(800px 500px at 90% 10%, rgba(34,197,94,.12), transparent 60%),
                   linear-gradient(180deg, var(--bg-elev), var(--bg));
-      display:flex; align-items:center; justify-content:center;
+      display:flex; align-items:flex-start; justify-content:center;
       font-family:system-ui,-apple-system,sans-serif;
       padding: 20px;
+      overflow-y:auto;
     ">
       <div style="
         position:absolute; inset:0; pointer-events:none; z-index:-1;
@@ -81,9 +82,11 @@ function mostrarTelaLogin() {
 
       <div style="
         background: var(--card); border: 1px solid var(--border); border-radius: 24px; 
-        padding: 48px 40px; width: 100%; max-width: 420px; 
+        padding: clamp(24px, 4vh, 48px) clamp(20px, 4vw, 40px); width: 100%; max-width: 420px; 
         box-shadow: var(--shadow), 0 0 40px rgba(56,189,248,0.1);
-        color: var(--text); position: relative; overflow: hidden;
+        color: var(--text); position: relative; overflow-x: hidden; overflow-y: auto;
+        max-height: calc(100vh - 40px);
+        margin: auto 0;
       ">
         <div style="position:absolute; top:0; left:0; width:100%; height:4px; background:linear-gradient(90deg, var(--accent-2), var(--accent));"></div>
         
