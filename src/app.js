@@ -1049,7 +1049,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
   }
 
   mTitle.textContent = linkedPlate
-    ? `Análise Completa: ${code} + ${linkedPlate}`
+    ? `Análise Completa: ${linkedPlate}`
     : (isPlate ? `Dados OB: ${code}` : `Detalhes: ${code}`);
   mSegs.innerHTML = "";
   mCards.innerHTML = "";
@@ -1178,6 +1178,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     let obFieldCount = 0;
     let cleared = false;
     let fipeAdded = false;
+    let apiExtrasAdded = false;
 
     const checkClear = () => {
       if (!cleared) {
@@ -1195,6 +1196,24 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
       }
     };
 
+    const addApiExtras = () => {
+      if (apiExtrasAdded || !kpFallback) return;
+      const chassiApi = kpFallback.chassi_completo || kpFallback.chassi || kpFallback.final_chassi || kpFallback.vin || kpFallback.CHASSI || kpFallback.vin_completo;
+      const anoFab = kpFallback.ano || kpFallback.ano_fabricacao || kpFallback.year || kpFallback.anoFabricacao;
+      const anoMod = kpFallback.ano_modelo || kpFallback.model_year || kpFallback.anoModelo;
+      const anoCompleto = (anoFab && anoMod && anoFab !== anoMod) ? `${anoFab}/${anoMod}` : (anoFab || anoMod || null);
+
+      if (chassiApi && chassiApi !== "—") {
+        checkClear();
+        obCards.appendChild(card("Chassi API", chassiApi));
+      }
+      if (anoCompleto && anoCompleto !== "—") {
+        checkClear();
+        obCards.appendChild(card("Ano Fab./Modelo", anoCompleto));
+      }
+      apiExtrasAdded = true;
+    };
+
     const mockUI = {
       getElementById: (id) => {
         if (id === "secao-onibusbrasil") return obWrapper;
@@ -1204,6 +1223,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
             // ✅ Quando OB termina, verifica se precisamos injetar FIPE
             if (v.includes("✅") || v.includes("Aviso") || v.includes("Erro") || v.includes("sem ficha") || v.includes("Não encontrada")) {
               addFipe();
+              addApiExtras();
               checkClear();
               if (obFieldCount === 0 && kpFallback) {
                 statusDiv.textContent = "ℹ️ OnibusBrasil sem dados — exibindo dados da KePlaca";
@@ -1283,6 +1303,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
       if (carr && carr !== "—") { checkClear(); obFieldCount++; obFieldsPresent.carroceria = true; obCards.appendChild(card("Carroceria", carr)); }
       if (fab && fab !== "—") { checkClear(); obFieldCount++; obFieldsPresent.fabricante = true; obCards.appendChild(card("Fabricante Chassi", fab)); }
       if (mod && mod !== "—") { checkClear(); obFieldCount++; obCards.appendChild(card("Modelo Chassi", mod)); }
+      addApiExtras();
 
       addFipe();
 
@@ -1302,7 +1323,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
 
   // ── Renderização principal ────────────────────────────────
   if (linkedPlate) {
-    mSegs.innerHTML = `<div class="seg">${code}</div><div class="seg" style="background:var(--accent);color:black">${linkedPlate}</div>`;
+    mSegs.innerHTML = `<div class="seg" style="background:var(--accent);color:black">${linkedPlate}</div>`;
     
     const c1 = document.createElement("div");
     c1.className = "cards";
