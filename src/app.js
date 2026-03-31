@@ -1508,11 +1508,6 @@ async function main() {
 
     const showReports = (mode, show) => {
       const id = mode === "single" ? "singleReportButtons" : "reportButtons";
-      if (mode === "single") {
-        const e = el("singleReportButtons");
-        if (e) e.style.display = "none";
-        return;
-      }
       const e = el(id);
       if (e) e.style.display = show ? "flex" : "none";
     };
