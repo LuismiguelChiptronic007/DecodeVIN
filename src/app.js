@@ -963,6 +963,11 @@ function renderGroupResults() {
       const vBasico = api.versao || api.version || "";
       const mod = (mBasico && vBasico && !mBasico.includes(vBasico)) ? `${mBasico} ${vBasico}` : (mBasico || vBasico || "");
       if (mod) modelInfo = ` • <span class="model-val">${mod}</span>`;
+
+      const anoFab = api.ano || api.ano_fabricacao || api.year || api.anoFabricacao;
+      const anoMod = api.ano_modelo || api.model_year || api.anoModelo;
+      const anoCompleto = (anoFab && anoMod && anoFab !== anoMod) ? `${anoFab}/${anoMod}` : (anoFab || anoMod || "");
+      if (anoCompleto) modelInfo += ` • <span class="model-val">${anoCompleto}</span>`;
     } else if (itemData.ob && itemData.ob.ob_chassi) {
       modelInfo = ` • <span class="model-val">${itemData.ob.ob_chassi}</span>`;
     }
@@ -1644,6 +1649,11 @@ async function main() {
           const apiTipo = String(apiResult.tipo || apiResult.category || "").toLowerCase();
           const isBus = apiResult.is_onibus === true || (obData && obData.success) || apiTipo.includes("onibus") || apiTipo.includes("ônibus");
           const apiChassi = apiResult.chassi_completo || apiResult.chassi || apiResult.final_chassi || apiResult.vin || apiResult.CHASSI || apiResult.vin_completo || "—";
+          const apiAnoFab = apiResult.ano || apiResult.ano_fabricacao || apiResult.year || apiResult.anoFabricacao;
+          const apiAnoMod = apiResult.ano_modelo || apiResult.model_year || apiResult.anoModelo;
+          const apiAnoCompleto = (apiAnoFab && apiAnoMod && apiAnoFab !== apiAnoMod)
+            ? `${apiAnoFab}/${apiAnoMod}`
+            : (apiAnoFab || apiAnoMod || "—");
 
           if (isBus) {
             if (verifEl) verifEl.innerHTML = `<span style="color:#2ecc71">${apiResult.mensagem || "✔ Veículo identificado (Ônibus)"}</span>`;
@@ -1669,6 +1679,7 @@ async function main() {
                 { label: "Fabricante Chassi", valor: obData.fabricante_chassi || obData.fabricante   || apiResult.marca || "—", id: "ob_fabricante_chassi" },
                 { label: "Modelo Chassi",     valor: obData.modelo_chassi     || obData.chassi        || apiResult.modelo || "—", id: "ob_chassi" },
                 { label: "Chassi API",        valor: apiChassi, id: "ob_chassi_api" },
+                { label: "Ano Fab./Modelo",   valor: apiAnoCompleto, id: "ob_ano_api" },
                 { label: "Código FIPE",       valor: apiResult.fipe_codigo,   id: "ob_fipe_codigo" },
                 { label: "Modelo FIPE",       valor: apiResult.fipe_modelo,   id: "ob_fipe_modelo" }
               ];
@@ -1711,6 +1722,7 @@ async function main() {
                     { label: "Fabricante Chassi", valor: obLive?.fabricante_chassi || obLive?.fabricante || apiResult.marca || "—", id: "ob_fabricante_chassi" },
                     { label: "Modelo Chassi",     valor: obLive?.modelo_chassi     || obLive?.chassi     || apiResult.modelo || "—", id: "ob_chassi" },
                     { label: "Chassi API",        valor: apiChassi, id: "ob_chassi_api" },
+                    { label: "Ano Fab./Modelo",   valor: apiAnoCompleto, id: "ob_ano_api" },
                     { label: "Código FIPE",       valor: apiResult.fipe_codigo,   id: "ob_fipe_codigo" },
                     { label: "Modelo FIPE",       valor: apiResult.fipe_modelo,   id: "ob_fipe_modelo" }
                   ];
