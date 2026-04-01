@@ -598,6 +598,84 @@ function renderHistory() {
     renderGroupHistoryItems(list);
   };
 
+  // Gera os dados do relatório de um lote salvo no histórico sem reprocessar a tela.
+  const montarRelatorioDoHistorico = async (historyItem) => {
+    const vLines = String(historyItem?.vins || "").split("\n").map(l => l.trim()).filter(Boolean);
+    const pLines = String(historyItem?.plates || "").split("\n").map(l => l.trim()).filter(Boolean);
+    const total = Math.max(vLines.length, pLines.length);
+    const data = [];
+
+    for (let i = 0; i < total; i++) {
+      const vin = (vLines[i] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const plate = (pLines[i] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      let decoded = { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
+      if (vin) {
+        try {
+          decoded = decoder.decode(vin);
+        } catch (_) {
+          decoded = { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
+        }
+      }
+      const itemData = {
+        tipo: vin && plate ? "COMBINADO" : (vin ? "VIN" : "PLATE"),
+        vin,
+        placa: plate,
+        fabricante: decoded.manufacturerName || "Desconhecido",
+        result: JSON.parse(JSON.stringify(decoded)),
+        ob: {},
+        ob_data: {},
+        status: "pending"
+      };
+
+      if (plate) {
+        try {
+          const apiResult = (typeof consultarPlacaPHP === "function")
+            ? await consultarPlacaPHP(plate, vin || "")
+            : { status: "erro", mensagem: "Consulta de placa indisponível." };
+          if (apiResult.status === "ok") {
+            itemData.status = "ok";
+            itemData.apiResult = apiResult;
+            itemData.fabricante = apiResult.marca || apiResult.fabricante || apiResult.brand || apiResult.texto_marca || itemData.fabricante;
+
+            if (!vin && (apiResult.chassi_completo || apiResult.chassi)) {
+              itemData.vin = apiResult.chassi_completo || apiResult.chassi;
+            }
+
+            if (window.buscarDadosOnibusBrasil) {
+              try {
+                const obData = await window.buscarDadosOnibusBrasil(plate, false);
+                if (obData && !obData.erro) {
+                  itemData.ob_data = obData;
+                  itemData.ob = {
+                    ob_carroceria: obData.carroceria || "—",
+                    ob_encarrocadeira: obData.encarrocadeira || obData.encarrocadora || "—",
+                    ob_fabricante_chassi: obData.fabricante_chassi || obData.fabricante || apiResult.marca || "—",
+                    ob_chassi: obData.modelo_chassi || obData.chassi || apiResult.modelo || "—"
+                  };
+                }
+              } catch (_) {}
+            }
+          } else {
+            itemData.status = "error";
+            itemData.error_detail = apiResult.mensagem;
+            itemData.apiResult = apiResult;
+          }
+        } catch (e) {
+          itemData.status = "error";
+          itemData.error_detail = e.message || "Falha ao consultar API.";
+        }
+      } else if (vin) {
+        itemData.status = "ok";
+      } else {
+        itemData.status = "orphan";
+      }
+
+      data.push(itemData);
+    }
+
+    return data;
+  };
+
   const renderGroupHistoryItems = (list) => {
     const h = el("groupHistoryList");
     if (!h) return;
@@ -676,6 +754,39 @@ function renderHistory() {
         if (bGroup) { bGroup.disabled = false; bGroup.click(); }
       };
 
+      const actions = document.createElement("div");
+      actions.style.display = "flex";
+      actions.style.alignItems = "center";
+      actions.style.gap = "8px";
+
+      const btnExportLot = document.createElement("button");
+      btnExportLot.className = "btn-page";
+      btnExportLot.textContent = "📄";
+      btnExportLot.title = "Exportar este lote sem redecodificar";
+      btnExportLot.style.padding = "6px 10px";
+      btnExportLot.style.minWidth = "36px";
+      btnExportLot.onclick = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const oldTxt = btnExportLot.textContent;
+        btnExportLot.disabled = true;
+        btnExportLot.textContent = "⏳";
+        try {
+          const reportData = await montarRelatorioDoHistorico(item);
+          if (!reportData || reportData.length === 0) {
+            showToast("Não foi possível montar o relatório deste lote.", "error");
+            return;
+          }
+          const loteNome = (item.fleetName || `Lote_${new Date(item.ts).getTime()}`).replace(/\s+/g, "_");
+          openReportOptions(reportData, `Relatorio_${loteNome}`);
+        } catch (err) {
+          showToast("Erro ao preparar relatório do histórico.", "error");
+        } finally {
+          btnExportLot.disabled = false;
+          btnExportLot.textContent = oldTxt;
+        }
+      };
+
       const btnDelete = document.createElement("button");
       btnDelete.className = "btn-delete-item";
       btnDelete.innerHTML = "&times;";
@@ -691,8 +802,10 @@ function renderHistory() {
         renderGroupHistory();
       };
 
+      actions.appendChild(btnExportLot);
+      actions.appendChild(btnDelete);
       row.appendChild(v);
-      row.appendChild(btnDelete);
+      row.appendChild(actions);
       h.appendChild(row);
     });
 
