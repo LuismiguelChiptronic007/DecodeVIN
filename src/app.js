@@ -2158,13 +2158,22 @@ async function main() {
               const apiResult = await consultarPlacaPHP(plate, vin || "");
               const norm = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
               const chassiDigitadoNorm = norm(vin);
+              const msg = String(apiResult.mensagem || "");
+              const finalNaMensagem =
+                (msg.match(/placa[^.]*?final\s+([A-Z0-9*]{4,17})/i) || [])[1] ||
+                (msg.match(/final\s+([A-Z0-9*]{4,17})/i) || [])[1] ||
+                "";
+              const limparFinal = (s) => String(s || "").replace(/^\*+/, "");
               const chassiApiRef = norm(
-                apiResult.final_chassi ||
-                apiResult.final_site ||
-                apiResult.final ||
-                apiResult.chassi_raw_api ||
-                apiResult.chassi_completo ||
-                apiResult.chassi
+                limparFinal(apiResult.final_site) ||
+                limparFinal(apiResult.final_chassi) ||
+                limparFinal(apiResult.final) ||
+                limparFinal(apiResult.final_api) ||
+                limparFinal(apiResult.chassi_final) ||
+                limparFinal(apiResult.chassi_raw_api) ||
+                limparFinal(apiResult.chassi_completo) ||
+                limparFinal(apiResult.chassi) ||
+                limparFinal(finalNaMensagem)
               );
               const compativelPorFinal5 =
                 chassiDigitadoNorm.length >= 5 &&
