@@ -1076,8 +1076,20 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     
     if (isNoBalance) {
        errorCard.innerHTML = `As consultas de validação de placa estão suspensas por falta de créditos na WDAPI.<br><small style="font-weight:normal">Por favor, recarregue seu saldo para continuar.</small>`;
-     } else if (String(itemData.error_detail || "").includes("não pertence")) {
-       errorCard.innerHTML = `Este chassi (${code}) não pertence à placa (${linkedPlate}).<br><small style="font-weight:normal; margin-top: 5px; display: block;">Por segurança, os detalhes técnicos foram bloqueados.</small>`;
+    } else if (String(itemData.error_detail || "").includes("não pertence")) {
+      const api = itemData.apiResult || {};
+      const marcaPlaca = api.marca || api.fabricante || api.brand || "Desconhecida";
+      const modeloPlaca = api.modelo || api.texto_modelo || api.model || "Não informado";
+      const marcaChassi = result?.manufacturerName || itemData.fabricante || "Não identificado";
+      const resumo = `
+        <div style="margin-top:10px; text-align:left; display:inline-block; max-width:760px; font-weight:500; color:#fecaca;">
+          <div><strong>Resumo da divergência:</strong></div>
+          <div>• Chassi informado: <strong>${code}</strong> (${marcaChassi})</div>
+          <div>• Veículo retornado pela placa ${linkedPlate}: <strong>${marcaPlaca} ${modeloPlaca}</strong></div>
+          <div>• Motivo: os dados de chassi e placa apontam para veículos diferentes.</div>
+        </div>
+      `;
+      errorCard.innerHTML = `Este chassi (${code}) não pertence à placa (${linkedPlate}).<br><small style="font-weight:normal; margin-top: 5px; display: block;">Por segurança, os detalhes técnicos foram bloqueados.</small>${resumo}`;
      } else {
        errorCard.innerHTML = `Não foi possível localizar os dígitos do chassi para a placa ${linkedPlate} em fontes públicas.<br><small style="font-weight:normal; margin-top: 5px; display: block;">Por segurança, os detalhes técnicos não serão exibidos.</small>`;
      }
