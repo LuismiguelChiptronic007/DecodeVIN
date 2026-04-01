@@ -1077,9 +1077,61 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     if (isNoBalance) {
        errorCard.innerHTML = `As consultas de validação de placa estão suspensas por falta de créditos na WDAPI.<br><small style="font-weight:normal">Por favor, recarregue seu saldo para continuar.</small>`;
     } else if (String(itemData.error_detail || "").includes("não pertence")) {
-      const api = itemData.apiResult || {};
-      const marcaPlaca = api.marca || api.fabricante || api.brand || "Desconhecida";
-      const modeloPlaca = api.modelo || api.texto_modelo || api.model || "Não informado";
+      let api = itemData.apiResult || {};
+      let marcaPlaca =
+        api.marca ||
+        api.fabricante ||
+        api.brand ||
+        api.texto_marca ||
+        api.MARCA ||
+        api.FABRICANTE ||
+        api.marcaNome ||
+        api?.extra?.marca ||
+        "";
+      let modeloPlaca =
+        api.modelo ||
+        api.texto_modelo ||
+        api.model ||
+        api.MODELO ||
+        api.modelo_nome ||
+        api?.extra?.modelo ||
+        api?.extra?.submodelo ||
+        "";
+
+      // Em divergência, a API pode retornar só a mensagem de erro.
+      // Faz uma consulta extra por placa para exibir o veículo real no resumo.
+      if ((!marcaPlaca || !modeloPlaca) && linkedPlate) {
+        try {
+          const apiSomentePlaca = await consultarPlacaPHP(linkedPlate, "");
+          if (apiSomentePlaca && apiSomentePlaca.status === "ok") {
+            api = { ...api, ...apiSomentePlaca };
+            marcaPlaca =
+              marcaPlaca ||
+              apiSomentePlaca.marca ||
+              apiSomentePlaca.fabricante ||
+              apiSomentePlaca.brand ||
+              apiSomentePlaca.texto_marca ||
+              apiSomentePlaca.MARCA ||
+              apiSomentePlaca.FABRICANTE ||
+              apiSomentePlaca.marcaNome ||
+              apiSomentePlaca?.extra?.marca ||
+              "";
+            modeloPlaca =
+              modeloPlaca ||
+              apiSomentePlaca.modelo ||
+              apiSomentePlaca.texto_modelo ||
+              apiSomentePlaca.model ||
+              apiSomentePlaca.MODELO ||
+              apiSomentePlaca.modelo_nome ||
+              apiSomentePlaca?.extra?.modelo ||
+              apiSomentePlaca?.extra?.submodelo ||
+              "";
+          }
+        } catch (_) {}
+      }
+
+      if (!marcaPlaca) marcaPlaca = "Desconhecida";
+      if (!modeloPlaca) modeloPlaca = "Não informado";
       const marcaChassi = result?.manufacturerName || itemData.fabricante || "Não identificado";
       const resumo = `
         <div style="margin-top:10px; text-align:left; display:inline-block; max-width:760px; font-weight:500; color:#fecaca;">
