@@ -63,7 +63,7 @@ function mostrarTelaLogin() {
   const overlay = document.createElement('div');
   overlay.id = 'dvb-auth-overlay';
   overlay.innerHTML = `
-    <div style="
+    <div class="auth-overlay-scroll" style="
       position:fixed; inset:0; z-index:99999;
       background: radial-gradient(1000px 600px at 10% -10%, rgba(56,189,248,.15), transparent 60%),
                   radial-gradient(800px 500px at 90% 10%, rgba(34,197,94,.12), transparent 60%),
@@ -80,7 +80,7 @@ function mostrarTelaLogin() {
         background-size: 40px 40px;
       "></div>
 
-      <div style="
+      <div class="auth-panel-scroll" style="
         background: var(--card); border: 1px solid var(--border); border-radius: 24px; 
         padding: clamp(24px, 4vh, 48px) clamp(20px, 4vw, 40px); width: 100%; max-width: 420px; 
         box-shadow: var(--shadow), 0 0 40px rgba(56,189,248,0.1);
@@ -188,6 +188,17 @@ function mostrarTelaLogin() {
     <style>
       @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
       #dvb-auth-overlay input:focus { border-color: var(--accent-2) !important; box-shadow: 0 0 0 3px rgba(56,189,248,0.15) !important; }
+      #dvb-auth-overlay .auth-overlay-scroll,
+      #dvb-auth-overlay .auth-panel-scroll {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      #dvb-auth-overlay .auth-overlay-scroll::-webkit-scrollbar,
+      #dvb-auth-overlay .auth-panel-scroll::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+        display: none;
+      }
     </style>
   `;
   document.body.appendChild(overlay);
