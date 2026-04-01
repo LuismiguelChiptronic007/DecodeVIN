@@ -2102,12 +2102,46 @@ async function main() {
           
           let errorMsg = "";
           let subMsg = "Por segurança, os dados técnicos não serão exibidos.";
+          let resumoDivergencia = "";
           
           if (String(apiResult.mensagem).includes("402")) {
             errorMsg = "🔴 API SEM SALDO";
             subMsg = "As consultas de validação de placa estão suspensas por falta de créditos na WDAPI.";
           } else if (String(apiResult.mensagem).includes("não pertence")) {
             errorMsg = `Este chassi (${chassiDigitado}) não pertence à placa (${p}).`;
+
+            // Busca dados da placa sem chassi para explicar o motivo da divergência.
+            let apiPlaca = apiResult;
+            try {
+              const placaOnly = await consultarPlacaPHP(p, "");
+              if (placaOnly && placaOnly.status === "ok") apiPlaca = placaOnly;
+            } catch (_) {}
+
+            const marcaPlaca =
+              apiPlaca.marca ||
+              apiPlaca.fabricante ||
+              apiPlaca.brand ||
+              apiPlaca.texto_marca ||
+              apiPlaca.MARCA ||
+              apiPlaca.FABRICANTE ||
+              "Desconhecida";
+            const modeloPlaca =
+              apiPlaca.modelo ||
+              apiPlaca.texto_modelo ||
+              apiPlaca.model ||
+              apiPlaca.MODELO ||
+              apiPlaca.versao ||
+              "Não informado";
+            const marcaChassi = window.currentSingleResult?.result?.manufacturerName || "Não identificado";
+
+            resumoDivergencia = `
+              <div style="margin-top: 10px; text-align: left; display: inline-block; max-width: 760px; font-weight: 500; color: #fecaca;">
+                <div><strong>Resumo da divergência:</strong></div>
+                <div>• Chassi informado: <strong>${chassiDigitado || "—"}</strong> (${marcaChassi})</div>
+                <div>• Veículo da placa ${p}: <strong>${marcaPlaca} ${modeloPlaca}</strong></div>
+                <div>• Motivo: chassi e placa pertencem a veículos diferentes.</div>
+              </div>
+            `;
           } else {
             errorMsg = `Não foi possível localizar os dígitos do chassi para a placa ${p} em fontes públicas.`;
           }
@@ -2120,6 +2154,7 @@ async function main() {
           el("errors").innerHTML = `<div class="error" style="background: rgba(231, 76, 60, 0.1); border: 1px solid #e74c3c; color: #e74c3c; padding: 20px; border-radius: 8px; margin-top: 15px; font-weight: 600; text-align: center; width: 100%;">
             ${errorMsg}
             <br><small style="font-weight: normal; opacity: 0.8; margin-top: 5px; display: block;">${subMsg}</small>
+            ${resumoDivergencia}
           </div>`;
         }
       } catch (e) {
