@@ -2156,57 +2156,51 @@ async function main() {
           if (plate) {
             try {
               const apiResult = await consultarPlacaPHP(plate, vin || "");
+
               const norm = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
               const chassiDigitadoNorm = norm(vin);
-              const msg = String(apiResult.mensagem || "");
-              const finalNaMensagem =
-                (msg.match(/placa[^.]*?final\s+([A-Z0-9*]{4,17})/i) || [])[1] ||
-                (msg.match(/final\s+([A-Z0-9*]{4,17})/i) || [])[1] ||
-                "";
-              const limparFinal = (s) => String(s || "").replace(/^\*+/, "");
-              const chassiApiRef = norm(
-                limparFinal(apiResult.final_site) ||
-                limparFinal(apiResult.final_chassi) ||
-                limparFinal(apiResult.final) ||
-                limparFinal(apiResult.final_api) ||
-                limparFinal(apiResult.chassi_final) ||
-                limparFinal(apiResult.chassi_raw_api) ||
-                limparFinal(apiResult.chassi_completo) ||
-                limparFinal(apiResult.chassi) ||
-                limparFinal(finalNaMensagem)
+
+              // Pega os últimos 5 do chassi digitado
+              const final5Digitado = chassiDigitadoNorm.slice(-5);
+
+              // Coleta o chassi retornado pela API (todas as fontes possíveis)
+              const chassiRetornadoNorm = norm(
+                apiResult.chassi_completo || 
+                apiResult.chassi || 
+                apiResult.chassi_raw_api || 
+                ""
               );
-              const compativelPorFinal5 =
+
+              // Compara os últimos 5 dígitos
+              const compativelPorFinal5 = 
                 chassiDigitadoNorm.length >= 5 &&
-                chassiApiRef.length >= 5 &&
-                chassiDigitadoNorm.slice(-5) === chassiApiRef.slice(-5);
+                chassiRetornadoNorm.length >= 5 &&
+                chassiDigitadoNorm.slice(-5) === chassiRetornadoNorm.slice(-5);
+
+              const confirmouPorFinalParcial = compativelPorFinal5 && apiResult.status !== "ok";
 
               if (apiResult.status === "ok" || compativelPorFinal5) {
                 itemData.status = 'ok';
                 itemData.apiResult = apiResult;
 
-                if (compativelPorFinal5 && apiResult.status !== "ok") {
+                if (confirmouPorFinalParcial) {
                   itemData.apiResult.status = "ok";
-                  itemData.apiResult.mensagem = "✔ Compatível por validação dos 5 últimos dígitos do chassi";
+                  itemData.apiResult.mensagem = "✔ Compatível por validação dos 5 últimos dígitos";
                 }
-                
-                itemData.fabricante = apiResult.marca || apiResult.fabricante || apiResult.brand || apiResult.texto_marca || itemData.fabricante;
-                
-                if (apiResult.chassi_completo || apiResult.chassi) {
-                  const apiChassi = apiResult.chassi_completo || apiResult.chassi;
 
-                  const isCombined = el("combinedMode") && el("combinedMode").checked;
-                  if (vin || isCombined) {
-                    itemData.vin = apiChassi;
-                    if (window.currentDecoder) {
-                      itemData.result = window.currentDecoder.decode(apiChassi);
-                    }
+                itemData.fabricante = apiResult.marca || apiResult.fabricante || itemData.fabricante;
+
+                // Quando confirmou por parcial, NÃO substitui o chassi pelo retornado da API
+                // pois ele pode estar incompleto. Mantém o digitado.
+                if (!confirmouPorFinalParcial && (apiResult.chassi_completo || apiResult.chassi)) {
+                  const apiChassi = apiResult.chassi_completo || apiResult.chassi;
+                  itemData.vin = apiChassi;
+                  if (window.currentDecoder) {
+                    itemData.result = window.currentDecoder.decode(apiChassi);
                   }
                 }
-                
-                const apiTipo = String(apiResult.tipo || apiResult.category || "").toLowerCase();
 
-                // Busca ÔnibusBrasil mesmo quando a API principal não classifica como "ônibus".
-                // Isso garante que placa => carroceria/encarroçadeira/foto apareçam igual às outras.
+                // Busca OnibusBrasil
                 let obData = null;
                 if (window.buscarDadosOnibusBrasil) {
                   try {
@@ -2218,7 +2212,7 @@ async function main() {
 
                 if (obData && !obData.erro) {
                   itemData.ob_data = obData;
-                  itemData.apiResult.ob_data = obData; // usado pelo openModal para decidir a renderização
+                  itemData.apiResult.ob_data = obData;
                   itemData.ob = {
                     ob_carroceria:        obData.carroceria        || "—",
                     ob_encarrocadeira:    obData.encarrocadeira    || obData.encarrocadora || "—",
@@ -2235,7 +2229,7 @@ async function main() {
                 }
               } else {
                 itemData.status = 'error';
-                itemData.error_detail = apiResult.mensagem; 
+                itemData.error_detail = apiResult.mensagem;
               }
             } catch (e) { 
               itemData.status = 'error';
