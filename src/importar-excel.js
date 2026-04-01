@@ -106,7 +106,19 @@ function deduplicarPares(pares) {
 }
 
 // Lê a planilha e aplica os dados no modo grupo ou no modo único.
-function lerExcelEPopularGrupo(file, targetMode = "group") { 
+function lerExcelEPopularGrupo(file, targetMode = "group") {
+  if (targetMode === "group") {
+    const fleetEl = document.getElementById("fleetName");
+    if (!fleetEl || !String(fleetEl.value || "").trim()) {
+      if (window.showToast) {
+        window.showToast("Preencha o nome do lote / frota antes de importar o Excel.", "error");
+      } else {
+        alert("Preencha o nome do lote / frota antes de importar o Excel.");
+      }
+      return;
+    }
+  }
+
   const processarResultado = (paresLimpos) => {
     paresLimpos = deduplicarPares(paresLimpos);
 
@@ -173,10 +185,8 @@ function lerExcelEPopularGrupo(file, targetMode = "group") {
       alert(`Excel importado! ${paresLimpos.length} par(es) carregado(s). Clique em "Decodificar Grupo".`); 
     }
 
-    if (gBtn) {
-      gBtn.disabled = false;
-      gBtn.scrollIntoView({ behavior: 'smooth' }); 
-    }
+    if (typeof window.validateGroupForm === "function") window.validateGroupForm();
+    if (gBtn && !gBtn.disabled) gBtn.scrollIntoView({ behavior: "smooth" });
   };
 
   const importarNoMainThread = () => {

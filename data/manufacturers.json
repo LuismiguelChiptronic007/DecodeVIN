@@ -383,7 +383,7 @@
       "aliases": ["Marcopolo"],
       "status": "active",
       "identifiers": {
-        "wmi": ["936", "93P", "9EJ", "9EL", "9ES"],
+        "wmi": ["936", "93P", "9EJ", "9EL", "9ES", "98P"],
         "modelPatterns": []
       }
     },

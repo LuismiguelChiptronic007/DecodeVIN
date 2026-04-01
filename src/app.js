@@ -689,6 +689,27 @@ window.renderHistory = renderHistory;
         const bSingle = el("btnDecodeSingle");
         const bPlate = el("btnPlateSingle");
         
+        const vinVal = (item.input || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const plateVal = (item.plate || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+        const curVinVal = (vInput ? vInput.value : "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const curPlateVal = (pInput ? pInput.value : "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+        const isFieldsEmpty = !curVinVal && !curPlateVal;
+
+        // Verifica se este item já está decodificado na tela
+        const currentFingerprint = JSON.stringify({ vin: vinVal, plate: plateVal });
+
+        if (!isFieldsEmpty && window.currentSingleResult && window.lastSingleFingerprint === currentFingerprint) {
+          // Se já estiver na tela, apenas muda para a tela de busca única se necessário
+          const singleDecoder = el("singleDecoder");
+          if (singleDecoder && singleDecoder.style.display === "none") {
+            const optSingle = el("optSingle");
+            if (optSingle) optSingle.click();
+          }
+          return;
+        }
+
         if (item.input && vInput) vInput.value = item.input;
         if (item.plate && pInput) pInput.value = item.plate;
 
@@ -1090,12 +1111,59 @@ window.renderHistory = renderHistory;
           }
           return;
         }
+
         const gInput = el("groupInput");
         const gPlateInput = el("groupPlateInput");
         const bGroup = el("btnGroupDecode");
-        if (gInput) gInput.value = item.vins || "";
-        if (gPlateInput) gPlateInput.value = item.plates || "";
-        if (bGroup) { bGroup.disabled = false; bGroup.click(); }
+        const fleetEl = el("fleetName");
+
+        const fleetNameValue = item.fleetName || `Lote_${new Date(item.ts).getTime()}`;
+
+        const isFieldsEmpty = !gInput.value.trim() && !gPlateInput.value.trim();
+
+        // Verifica se este lote já está decodificado na tela
+        const currentFingerprint = JSON.stringify({
+          fleetName: fleetNameValue,
+          vins: item.vins || "",
+          plates: item.plates || ""
+        });
+
+        if (!isFieldsEmpty && window.currentGroupResults && window.currentGroupResults.length > 0 && window.lastGroupLotFingerprint === currentFingerprint) {
+          // Se já estiver na tela, apenas muda para a tela de grupo se necessário
+          const groupDecoder = el("groupDecoder");
+          if (groupDecoder && groupDecoder.style.display === "none") {
+            const optGroup = el("optGroup");
+            if (optGroup) optGroup.click();
+          }
+          return;
+        }
+
+        if (fleetEl) {
+          fleetEl.value = fleetNameValue;
+          fleetEl.dispatchEvent(new Event("input"));
+        }
+        if (gInput) {
+          gInput.value = item.vins || "";
+          gInput.dispatchEvent(new Event("input"));
+        }
+        if (gPlateInput) {
+          gPlateInput.value = item.plates || "";
+          gPlateInput.dispatchEvent(new Event("input"));
+        }
+        
+        if (bGroup) { 
+          bGroup.disabled = false; 
+          // Delay ligeiramente maior para garantir que as validações de input terminaram
+          setTimeout(() => {
+            if (bGroup.disabled === false) {
+              bGroup.click();
+            } else {
+              // Se por algum motivo continuar desabilitado, forçamos a validação e tentamos novamente
+              if (typeof window.validateGroupForm === "function") window.validateGroupForm();
+              setTimeout(() => bGroup.click(), 50);
+            }
+          }, 100);
+        }
       };
 
       const actions = document.createElement("div");
@@ -1395,18 +1463,19 @@ const exportCSV = (data, name, includeFipe = true) => {
 let currentGroupPage = 1;
 const GROUP_PAGE_SIZE = 10;
 
-function renderGroupResults() {
+function renderGroupResults(filteredList = null) {
   const gResults = el("groupResults");
   if (!gResults || !window.currentGroupResults) return;
   gResults.innerHTML = "";
 
-  const totalPages = Math.ceil(window.currentGroupResults.length / GROUP_PAGE_SIZE);
+  const displayList = filteredList || window.currentGroupResults;
+  const totalPages = Math.ceil(displayList.length / GROUP_PAGE_SIZE);
   if (currentGroupPage > totalPages) currentGroupPage = totalPages;
   if (currentGroupPage < 1) currentGroupPage = 1;
 
   const start = (currentGroupPage - 1) * GROUP_PAGE_SIZE;
   const end = start + GROUP_PAGE_SIZE;
-  const pageList = window.currentGroupResults.slice(start, end);
+  const pageList = displayList.slice(start, end);
 
   const fragment = document.createDocumentFragment();
 
@@ -1471,7 +1540,9 @@ function renderGroupResults() {
       modelInfo = ` • <span class="model-val">${itemData.ob.ob_chassi}</span>`;
     }
 
-    item.innerHTML = `${layout}<div class="info"><span>${itemData.fabricante || "—"}${modelInfo}</span><span class="status-msg">${statusHtml}</span></div>`;
+    const fleetInfo = (itemData.fleetName || "").trim();
+    const fleetHtml = fleetInfo ? ` • <span class="model-val">${fleetInfo}</span>` : "";
+    item.innerHTML = `${layout}<div class="info"><span>${itemData.fabricante || "—"}${modelInfo}${fleetHtml}</span><span class="status-msg">${statusHtml}</span></div>`;
     
     item.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1496,7 +1567,7 @@ function renderGroupResults() {
     btnPrev.textContent = "← Anterior";
     btnPrev.disabled = currentGroupPage === 1;
     btnPrev.className = "btn-page";
-    btnPrev.onclick = (e) => { e.stopPropagation(); currentGroupPage--; renderGroupResults(); };
+    btnPrev.onclick = (e) => { e.stopPropagation(); currentGroupPage--; renderGroupResults(filteredList); };
 
     const pageInfo = document.createElement("span");
     pageInfo.textContent = `Página ${currentGroupPage} de ${totalPages}`;
@@ -1507,7 +1578,7 @@ function renderGroupResults() {
     btnNext.textContent = "Próximo →";
     btnNext.disabled = currentGroupPage === totalPages;
     btnNext.className = "btn-page";
-    btnNext.onclick = (e) => { e.stopPropagation(); currentGroupPage++; renderGroupResults(); };
+    btnNext.onclick = (e) => { e.stopPropagation(); currentGroupPage++; renderGroupResults(filteredList); };
 
     pagination.appendChild(btnPrev);
     pagination.appendChild(pageInfo);
@@ -2061,7 +2132,9 @@ async function main() {
     };
     el("optGroup").onclick = () => {
       showScreen(groupDecoder);
-      if (gPlateInput) setTimeout(() => gPlateInput.focus(), 50);
+      const fn = el("fleetName");
+      if (fn) setTimeout(() => fn.focus(), 50);
+      else if (gPlateInput) setTimeout(() => gPlateInput.focus(), 50);
     };
     el("backFromSingle").onclick = () => {
       showScreen(selectionScreen);
@@ -2102,7 +2175,12 @@ async function main() {
         const fInput = el("fleetName");
         if (fInput) fInput.value = "";
         [vinInputSingle, plateInputSingle, gInput, gPlateInput].forEach(e => { if (e) e.value = ""; });
+        window.currentGroupResults = null;
+        window.currentSingleResult = null;
+        window.lastGroupLotFingerprint = null;
+        window.lastSingleFingerprint = null;
       }
+      if (typeof window.validateGroupForm === "function") window.validateGroupForm();
     };
 
     if (btnSingle) btnSingle.disabled = true;
@@ -2118,6 +2196,8 @@ async function main() {
 
       const plate = plateInputSingle ? plateInputSingle.value.trim().toUpperCase() : "";
       
+      window.lastSingleFingerprint = JSON.stringify({ vin: text, plate: plate });
+
       if (plate !== "" && !isPlateValidated && !force) {
           console.log("Placa presente mas não validada. Iniciando busca automática...");
           await runPlate();
@@ -2178,6 +2258,8 @@ async function main() {
       const p = plateInputSingle.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
       const vin = vinInputSingle ? vinInputSingle.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") : "";
       
+      window.lastSingleFingerprint = JSON.stringify({ vin: vin, plate: p });
+
       if (p.length < 6 || p.length > 7) {
         el("errors").innerHTML = `<div class="error">A placa deve ter 6 ou 7 caracteres.</div>`;
         return;
@@ -2565,6 +2647,17 @@ async function main() {
     if (vinInputSingle) vinInputSingle.addEventListener('keydown', e => e.key === "Enter" && runVIN());
     if (plateInputSingle) plateInputSingle.addEventListener('keydown', e => e.key === "Enter" && runPlate());
 
+    el("btnClearSingleInputs")?.addEventListener("click", () => {
+      if (vinInputSingle) {
+        vinInputSingle.value = "";
+        vinInputSingle.dispatchEvent(new Event("input"));
+      }
+      if (plateInputSingle) {
+        plateInputSingle.value = "";
+        plateInputSingle.dispatchEvent(new Event("input"));
+      }
+    });
+
     if (vinInputSingle) {
       vinInputSingle.addEventListener('input', () => {
         const val = vinInputSingle.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17);
@@ -2678,19 +2771,142 @@ async function main() {
     });
 
     const validateGBtn = () => {
-      const v = gInput.value.trim(); const p = gPlateInput.value.trim();
+      const fleetOk = (el("fleetName")?.value || "").trim().length > 0;
+      const v = gInput.value.trim();
+      const p = gPlateInput.value.trim();
       if (combined.checked) {
         const vl = v.split("\n").map(x => x.trim()).filter(Boolean);
         const pl = p.split("\n").map(x => x.trim()).filter(Boolean);
-        gBtn.disabled = vl.length === 0 || vl.length !== pl.length || !vl.every(x => x.length === 17) || !pl.every(x => x.length >= 6);
+        gBtn.disabled =
+          vl.length === 0 ||
+          vl.length !== pl.length ||
+          !vl.every(x => x.length === 17) ||
+          !pl.every(x => x.length >= 6) ||
+          !fleetOk;
       } else {
-        gBtn.disabled = !v && !p;
+        gBtn.disabled = (!v && !p) || !fleetOk;
       }
     };
+    window.validateGroupForm = validateGBtn;
 
-    combined.addEventListener('change', validateGBtn);
+    combined.addEventListener("change", validateGBtn);
+    const fleetNameEl = el("fleetName");
+    if (fleetNameEl) fleetNameEl.addEventListener("input", validateGBtn);
+    validateGBtn();
+
+    el("btnClearGroupInputs")?.addEventListener("click", () => {
+      if (gPlateInput) {
+        gPlateInput.value = "";
+        gPlateInput.dispatchEvent(new Event("input"));
+      }
+      if (gInput) {
+        gInput.value = "";
+        gInput.dispatchEvent(new Event("input"));
+      }
+    });
+
+    const excelFleetModal = el("excelFleetModal");
+    const excelFleetNameInput = el("excelFleetNameInput");
+    const fecharExcelFleetModal = () => {
+      if (excelFleetModal) excelFleetModal.style.display = "none";
+    };
+    const abrirExcelFleetModal = () => {
+      if (excelFleetNameInput) {
+        excelFleetNameInput.value = (el("fleetName")?.value || "").trim();
+      }
+      if (excelFleetModal) excelFleetModal.style.display = "flex";
+      setTimeout(() => excelFleetNameInput?.focus(), 80);
+    };
+    const btnImportExcelBtn = el("btnImportExcel");
+    if (btnImportExcelBtn) {
+      btnImportExcelBtn.onclick = () => abrirExcelFleetModal();
+    }
+    el("closeExcelFleetModal")?.addEventListener("click", fecharExcelFleetModal);
+    el("excelFleetCancel")?.addEventListener("click", fecharExcelFleetModal);
+    el("excelFleetConfirm")?.addEventListener("click", () => {
+      const name = (excelFleetNameInput?.value || "").trim();
+      if (!name) {
+        if (typeof showToast === "function") showToast("Preencha o nome do lote / frota.", "error");
+        return;
+      }
+      const fnFleet = el("fleetName");
+      if (fnFleet) fnFleet.value = name;
+      validateGBtn();
+      fecharExcelFleetModal();
+      el("excelFileInput")?.click();
+    });
+    if (excelFleetNameInput) {
+      excelFleetNameInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          el("excelFleetConfirm")?.click();
+        }
+      });
+    }
+    if (excelFleetModal) {
+      excelFleetModal.addEventListener("click", (e) => {
+        if (e.target === excelFleetModal) fecharExcelFleetModal();
+      });
+    }
+
+    const gSearch = el("groupSearchInput");
+    if (gSearch) {
+      gSearch.addEventListener("input", () => {
+        if (!window.currentGroupResults) return;
+        const term = gSearch.value.toLowerCase().trim();
+        if (!term) {
+          currentGroupPage = 1;
+          renderGroupResults();
+          return;
+        }
+
+        const filtered = window.currentGroupResults.filter(item => {
+          const api = item.apiResult || {};
+          const mBasico = (api.modelo || api.model || api.texto_modelo || "").toLowerCase();
+          const vBasico = (api.versao || api.version || "").toLowerCase();
+          const fab = (item.fabricante || "").toLowerCase();
+          const placa = (item.placa || "").toLowerCase();
+          const chassi = (item.vin || "").toLowerCase();
+          
+          // Dados adicionais para filtro
+          const combustivel = (api.combustivel || api.fuel || "").toLowerCase();
+          const anoFab = String(api.ano || api.ano_fabricacao || api.year || "").toLowerCase();
+          const anoMod = String(api.ano_modelo || api.model_year || "").toLowerCase();
+          
+          // Se o usuário digitou algo como "ano:2018", "placa:ABC", etc.
+          if (term.includes(":")) {
+            const [key, val] = term.split(":").map(s => s.trim());
+            if (key === "ano") return anoFab.includes(val) || anoMod.includes(val);
+            if (key === "placa") return placa.includes(val);
+            if (key === "montadora" || key === "marca") return fab.includes(val);
+            if (key === "modelo") return mBasico.includes(val) || vBasico.includes(val);
+            if (key === "combustivel") return combustivel.includes(val);
+          }
+
+          // Busca geral
+          return fab.includes(term) || 
+                 mBasico.includes(term) || 
+                 vBasico.includes(term) || 
+                 placa.includes(term) || 
+                 chassi.includes(term) ||
+                 combustivel.includes(term) ||
+                 anoFab.includes(term) ||
+                 anoMod.includes(term);
+        });
+
+        currentGroupPage = 1;
+        renderGroupResults(filtered);
+      });
+    }
 
     gBtn.onclick = async () => {
+      const fleetEl = el("fleetName");
+      if (!fleetEl || !fleetEl.value.trim()) {
+        if (typeof showToast === "function") {
+          showToast("Informe o nome do lote / frota antes de decodificar.", "error");
+        }
+        return;
+      }
       const gResults = el("groupResults");
       if (!gResults) return;
       gResults.innerHTML = "";
@@ -2707,9 +2923,18 @@ async function main() {
       if (groupProgress) groupProgress.style.display = "block";
       if (progressBar) progressBar.style.width = "0%";
 
+      const gSearch = el("groupSearchInput");
+      if (gSearch) gSearch.value = "";
+
       addGroupHistoryEntry(gInput.value, gPlateInput.value);
 
+      const fleetNameAtual = (el("fleetName")?.value || "").trim();
       window.currentGroupResults = [];
+      window.lastGroupLotFingerprint = JSON.stringify({
+        fleetName: fleetNameAtual,
+        vins: gInput.value,
+        plates: gPlateInput.value
+      });
       currentGroupPage = 1;
       
       const allItems = [];
@@ -2753,6 +2978,7 @@ async function main() {
             tipo: vin && plate ? 'COMBINADO' : (vin ? 'VIN' : 'PLATE'), 
             vin, 
             placa: plate, 
+            fleetName: fleetNameAtual,
             fabricante: res.manufacturerName || "Desconhecido", 
             result: JSON.parse(JSON.stringify(res)), 
             ob: {},

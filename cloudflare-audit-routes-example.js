@@ -1,26 +1,4 @@
-/**
- * Trecho para integrar no Worker decodevinbus-auth (Cloudflare).
- *
- * 1) Crie a tabela D1 (SQL abaixo) e faça o bind `DB` no wrangler.toml.
- * 2) Copie as funções e os `if` do fetch para o seu handler, depois de validar JWT
- *    do mesmo jeito que em /verify e /admin/users.
- * 3) Ajuste getUserIdFromPayload() aos campos do seu token (id, sub, etc.).
- *
- * SQL (D1):
- * CREATE TABLE IF NOT EXISTS search_audit (
- *   id INTEGER PRIMARY KEY AUTOINCREMENT,
- *   user_id INTEGER NOT NULL,
- *   email TEXT,
- *   nome TEXT,
- *   tipo TEXT,
- *   placa TEXT,
- *   vin TEXT,
- *   detalhe TEXT,
- *   fleet_name TEXT,
- *   created_at TEXT DEFAULT (datetime('now'))
- * );
- * CREATE INDEX IF NOT EXISTS idx_search_audit_created ON search_audit(created_at DESC);
- */
+
 
 // --- Exemplo: validar HS256 com JWT_SECRET (igual muitos Workers simples) ---
 async function verifyHs256Jwt(token, secret) {
