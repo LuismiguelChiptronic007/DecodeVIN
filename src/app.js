@@ -599,7 +599,7 @@ function renderHistory() {
   };
 
   // Gera os dados do relatório de um lote salvo no histórico sem reprocessar a tela.
-  const montarRelatorioDoHistorico = async (historyItem) => {
+  const montarRelatorioDoHistorico = async (historyItem, onProgress = null) => {
     const vLines = String(historyItem?.vins || "").split("\n").map(l => l.trim()).filter(Boolean);
     const pLines = String(historyItem?.plates || "").split("\n").map(l => l.trim()).filter(Boolean);
     const total = Math.max(vLines.length, pLines.length);
@@ -671,9 +671,57 @@ function renderHistory() {
       }
 
       data.push(itemData);
+      if (onProgress) onProgress(i + 1, total);
     }
 
     return data;
+  };
+
+  const formatarTempo = (ms) => {
+    const totalSeg = Math.max(0, Math.round(ms / 1000));
+    const min = Math.floor(totalSeg / 60);
+    const seg = totalSeg % 60;
+    return min > 0 ? `${min}m ${seg}s` : `${seg}s`;
+  };
+
+  const criarModalProgressoLote = (titulo = "Preparando relatório...") => {
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(2px);z-index:9999;display:flex;align-items:center;justify-content:center;";
+
+    const box = document.createElement("div");
+    box.style.cssText = "width:min(520px,92vw);background:var(--bg-elev);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:0 20px 50px rgba(0,0,0,0.5);";
+
+    const title = document.createElement("div");
+    title.style.cssText = "font-weight:700;color:var(--text);margin-bottom:10px;";
+    title.textContent = titulo;
+
+    const status = document.createElement("div");
+    status.style.cssText = "font-size:13px;color:var(--muted);margin-bottom:10px;";
+    status.textContent = "Iniciando...";
+
+    const barWrap = document.createElement("div");
+    barWrap.style.cssText = "width:100%;height:10px;background:var(--bg);border:1px solid var(--border);border-radius:999px;overflow:hidden;";
+
+    const bar = document.createElement("div");
+    bar.style.cssText = "width:0%;height:100%;background:linear-gradient(90deg,var(--accent-2),var(--accent));transition:width .2s ease;";
+    barWrap.appendChild(bar);
+
+    box.appendChild(title);
+    box.appendChild(status);
+    box.appendChild(barWrap);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    return {
+      update: (done, total, elapsedMs) => {
+        const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+        bar.style.width = `${pct}%`;
+        const mediaPorItem = done > 0 ? elapsedMs / done : 0;
+        const restanteMs = mediaPorItem * Math.max(0, total - done);
+        status.textContent = `${done}/${total} itens • ${pct}% • Tempo: ${formatarTempo(elapsedMs)} • Restante aprox.: ${formatarTempo(restanteMs)}`;
+      },
+      close: () => overlay.remove()
+    };
   };
 
   const renderGroupHistoryItems = (list) => {
@@ -771,8 +819,12 @@ function renderHistory() {
         const oldTxt = btnExportLot.textContent;
         btnExportLot.disabled = true;
         btnExportLot.textContent = "⏳";
+        const progresso = criarModalProgressoLote("Gerando relatório do lote...");
+        const t0 = Date.now();
         try {
-          const reportData = await montarRelatorioDoHistorico(item);
+          const reportData = await montarRelatorioDoHistorico(item, (done, total) => {
+            progresso.update(done, total, Date.now() - t0);
+          });
           if (!reportData || reportData.length === 0) {
             showToast("Não foi possível montar o relatório deste lote.", "error");
             return;
@@ -782,6 +834,7 @@ function renderHistory() {
         } catch (err) {
           showToast("Erro ao preparar relatório do histórico.", "error");
         } finally {
+          progresso.close();
           btnExportLot.disabled = false;
           btnExportLot.textContent = oldTxt;
         }
