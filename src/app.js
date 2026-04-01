@@ -722,39 +722,7 @@ window.renderHistory = renderHistory;
         }
       };
 
-      const podeRemover = historicoPodeRemoverSingle(item, sessUser);
-
-      const btnDelete = document.createElement("button");
-      btnDelete.className = "btn-delete-item";
-      btnDelete.innerHTML = "&times;";
-      btnDelete.title = "Remover este item";
-      btnDelete.style.zIndex = "10";
-      btnDelete.onclick = async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!podeRemover) return;
-        if (item.serverId && typeof window.dvbHistoricoUsuarioDelete === "function") {
-          const dr = await window.dvbHistoricoUsuarioDelete(item.serverId);
-          if (dr && dr.ok) {
-            const currentList = JSON.parse(localStorage.getItem("decodevin.history") || "[]");
-            const newList = currentList.filter(x => x.ts !== item.ts);
-            localStorage.setItem("decodevin.history", JSON.stringify(newList));
-            renderSingleHistory();
-          }
-          return;
-        }
-        const currentList = JSON.parse(localStorage.getItem("decodevin.history") || "[]");
-        const newList = currentList.filter(x => x.ts !== item.ts);
-        localStorage.setItem("decodevin.history", JSON.stringify(newList));
-        renderSingleHistory();
-      };
-      if (!podeRemover) {
-        btnDelete.style.visibility = "hidden";
-        btnDelete.style.pointerEvents = "none";
-      }
-
       row.appendChild(v);
-      row.appendChild(btnDelete);
       h.appendChild(row);
     });
 
@@ -872,7 +840,7 @@ window.renderHistory = renderHistory;
 
     const searchInput = document.createElement("input");
     searchInput.type = "text";
-    searchInput.placeholder = "🔍 Buscar no histórico (nome, placa, chassi, operador)…";
+    searchInput.placeholder = "🔍 Buscar no histórico (nome, placa, chassi)…";
     searchInput.style.marginBottom = "12px";
     searchInput.style.fontSize = "13px";
     searchInput.style.width = "100%";
@@ -1042,7 +1010,6 @@ window.renderHistory = renderHistory;
     const pageList = list.slice(start, end);
 
     pageList.forEach((item, idx) => {
-      const podeRemover = historicoPodeRemoverSingle(item, sessUser);
       const indexInFullList = start + idx;
       const row = document.createElement("div");
       row.className = "item clickable";
@@ -1214,39 +1181,7 @@ window.renderHistory = renderHistory;
         btnExportLot.title = "Sem dados de lote no servidor";
       }
 
-      const btnDelete = document.createElement("button");
-      btnDelete.className = "btn-delete-item";
-      btnDelete.innerHTML = "&times;";
-      btnDelete.title = "Remover este lote";
-      btnDelete.style.zIndex = "10";
-      btnDelete.onclick = async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!podeRemover) return;
-        if (item.serverId && typeof window.dvbHistoricoUsuarioDelete === "function") {
-          const dr = await window.dvbHistoricoUsuarioDelete(item.serverId);
-          if (dr && dr.ok) {
-            const storageKey = "decodevin.groupHistory";
-            const currentList = JSON.parse(localStorage.getItem(storageKey) || "[]");
-            const newList = currentList.filter(x => x.ts !== item.ts);
-            localStorage.setItem(storageKey, JSON.stringify(newList));
-            renderGroupHistory();
-          }
-          return;
-        }
-        const storageKey = "decodevin.groupHistory";
-        const currentList = JSON.parse(localStorage.getItem(storageKey) || "[]");
-        const newList = currentList.filter(x => x.ts !== item.ts);
-        localStorage.setItem(storageKey, JSON.stringify(newList));
-        renderGroupHistory();
-      };
-      if (!podeRemover) {
-        btnDelete.style.visibility = "hidden";
-        btnDelete.style.pointerEvents = "none";
-      }
-
       actions.appendChild(btnExportLot);
-      actions.appendChild(btnDelete);
       row.appendChild(v);
       row.appendChild(actions);
       h.appendChild(row);
@@ -2171,6 +2106,9 @@ async function main() {
       const excelInput = el("excelFileInput");
       if (excelInput) excelInput.value = "";
 
+      const gSearch = el("groupSearchInput");
+      if (gSearch) gSearch.value = "";
+
       if (!keepInputs) {
         const fInput = el("fleetName");
         if (fInput) fInput.value = "";
@@ -2648,14 +2586,7 @@ async function main() {
     if (plateInputSingle) plateInputSingle.addEventListener('keydown', e => e.key === "Enter" && runPlate());
 
     el("btnClearSingleInputs")?.addEventListener("click", () => {
-      if (vinInputSingle) {
-        vinInputSingle.value = "";
-        vinInputSingle.dispatchEvent(new Event("input"));
-      }
-      if (plateInputSingle) {
-        plateInputSingle.value = "";
-        plateInputSingle.dispatchEvent(new Event("input"));
-      }
+      clearUI(false);
     });
 
     if (vinInputSingle) {
@@ -2795,14 +2726,7 @@ async function main() {
     validateGBtn();
 
     el("btnClearGroupInputs")?.addEventListener("click", () => {
-      if (gPlateInput) {
-        gPlateInput.value = "";
-        gPlateInput.dispatchEvent(new Event("input"));
-      }
-      if (gInput) {
-        gInput.value = "";
-        gInput.dispatchEvent(new Event("input"));
-      }
+      clearUI(false);
     });
 
     const excelFleetModal = el("excelFleetModal");
