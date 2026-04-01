@@ -6,6 +6,156 @@ const AUTH_WORKER = 'https://decodevinbus-auth.luismiguelgomesoliveira-014.worke
 function getToken() { return localStorage.getItem('dvb_token'); }
 function getUser()  { return JSON.parse(localStorage.getItem('dvb_user') || 'null'); }
 
+let dvbAuditCache = null;
+let dvbAuditCacheAt = 0;
+const DVB_AUDIT_CACHE_MS = 4000;
+
+let dvbHistoricoUserCache = null;
+let dvbHistoricoUserCacheAt = 0;
+let dvbHistoricoAdminCache = null;
+let dvbHistoricoAdminCacheAt = 0;
+const DVB_HISTORICO_CACHE_MS = 4000;
+
+window.dvbHistoricoInvalidateCache = function() {
+  dvbHistoricoUserCache = null;
+  dvbHistoricoUserCacheAt = 0;
+  dvbHistoricoAdminCache = null;
+  dvbHistoricoAdminCacheAt = 0;
+  dvbAuditCache = null;
+  dvbAuditCacheAt = 0;
+};
+
+window.dvbHistoricoUsuarioGet = async function() {
+  const token = getToken();
+  if (!token) return { ok: false, single: [], group: [] };
+  const now = Date.now();
+  if (dvbHistoricoUserCache && now - dvbHistoricoUserCacheAt < DVB_HISTORICO_CACHE_MS) {
+    return dvbHistoricoUserCache;
+  }
+  try {
+    const res = await fetch(`${AUTH_WORKER}/user/history`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, single: [], group: [] };
+    const out = {
+      ok: true,
+      single: Array.isArray(data.single) ? data.single : [],
+      group: Array.isArray(data.group) ? data.group : []
+    };
+    dvbHistoricoUserCache = out;
+    dvbHistoricoUserCacheAt = now;
+    return out;
+  } catch (_) {
+    return { ok: false, single: [], group: [] };
+  }
+};
+
+window.dvbHistoricoUsuarioPost = async function(kind, payload) {
+  const token = getToken();
+  if (!token) return { ok: false };
+  try {
+    const res = await fetch(`${AUTH_WORKER}/user/history`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ kind, payload })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false };
+    dvbHistoricoInvalidateCache();
+    return { ok: true, id: data.id };
+  } catch (_) {
+    return { ok: false };
+  }
+};
+
+window.dvbHistoricoUsuarioDelete = async function(id) {
+  const token = getToken();
+  if (!token || id == null) return { ok: false };
+  try {
+    const res = await fetch(`${AUTH_WORKER}/user/history`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ id })
+    });
+    if (!res.ok) return { ok: false };
+    dvbHistoricoInvalidateCache();
+    return { ok: true };
+  } catch (_) {
+    return { ok: false };
+  }
+};
+
+window.dvbHistoricoAdminGet = async function() {
+  const token = getToken();
+  const u = getUser();
+  if (!token || !u || !u.admin) return { ok: false, entries: [] };
+  const now = Date.now();
+  if (dvbHistoricoAdminCache && now - dvbHistoricoAdminCacheAt < DVB_HISTORICO_CACHE_MS) {
+    return dvbHistoricoAdminCache;
+  }
+  try {
+    const res = await fetch(`${AUTH_WORKER}/admin/user-history?limit=500`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, entries: [] };
+    const out = { ok: true, entries: Array.isArray(data.entries) ? data.entries : [] };
+    dvbHistoricoAdminCache = out;
+    dvbHistoricoAdminCacheAt = now;
+    return out;
+  } catch (_) {
+    return { ok: false, entries: [] };
+  }
+};
+
+window.dvbRegistrarPesquisa = async function(payload) {
+  const token = getToken();
+  if (!token) return;
+  const body = {
+    tipo: String(payload.tipo || 'outro').slice(0, 32),
+    placa: String(payload.placa || '').slice(0, 12).toUpperCase(),
+    vin: String(payload.vin || '').slice(0, 24).toUpperCase(),
+    detalhe: String(payload.detalhe || '').slice(0, 500),
+    fleetName: String(payload.fleetName || '').slice(0, 120)
+  };
+  try {
+    await fetch(`${AUTH_WORKER}/audit/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body)
+    });
+    dvbAuditCache = null;
+  } catch (_) {}
+};
+
+window.dvbFetchSearchAuditLogs = async function() {
+  const token = getToken();
+  const u = getUser();
+  if (!token || !u || !u.admin) return { ok: false, logs: [] };
+  const now = Date.now();
+  if (dvbAuditCache && now - dvbAuditCacheAt < DVB_AUDIT_CACHE_MS) return dvbAuditCache;
+  try {
+    const res = await fetch(`${AUTH_WORKER}/admin/search-audit?limit=500`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = { ok: false, logs: [], erro: data.erro };
+      dvbAuditCache = err;
+      dvbAuditCacheAt = now;
+      return err;
+    }
+    const logs = Array.isArray(data.logs) ? data.logs : (Array.isArray(data.pesquisas) ? data.pesquisas : []);
+    const ok = { ok: true, logs };
+    dvbAuditCache = ok;
+    dvbAuditCacheAt = now;
+    return ok;
+  } catch (_) {
+    return { ok: false, logs: [] };
+  }
+};
+
 function sanitizeNomeInput(value) {
   if (!value) return "";
   return value
@@ -20,9 +170,11 @@ function isNomeValido(value) {
   return /^[\p{L}][\p{L}\s'-]*$/u.test(nome);
 }
 
-function salvarSessao(token, nome, setor, email, admin) {
+function salvarSessao(token, nome, setor, email, admin, id) {
+  const o = { nome, setor, email, admin };
+  if (id != null && id !== '') o.id = id;
   localStorage.setItem('dvb_token', token);
-  localStorage.setItem('dvb_user', JSON.stringify({ nome, setor, email, admin }));
+  localStorage.setItem('dvb_user', JSON.stringify(o));
 }
 
 function limparSessao() {
@@ -42,7 +194,7 @@ async function verificarSessao() {
       const data = await res.json();
       const u = data.usuario;
 
-      salvarSessao(token, u.nome, u.setor, u.email, u.admin);
+      salvarSessao(token, u.nome, u.setor, u.email, u.admin, u.id);
       mostrarApp(u);
     } else {
       limparSessao();
@@ -297,9 +449,9 @@ window.dvbLogin = async function() {
     const data = await res.json();
     if (!res.ok) { dvbMsg(data.erro || 'Erro ao entrar.', 'erro'); return; }
 
-    salvarSessao(data.token, data.nome, data.setor, data.email, data.admin);
+    salvarSessao(data.token, data.nome, data.setor, data.email, data.admin, data.id);
     document.getElementById('dvb-auth-overlay').remove();
-    mostrarApp({ nome: data.nome, setor: data.setor, email: data.email, admin: data.admin });
+    mostrarApp({ nome: data.nome, setor: data.setor, email: data.email, admin: data.admin, id: data.id });
   } catch {
     dvbMsg('Erro de conexão com o servidor.', 'erro');
   }
@@ -451,6 +603,8 @@ function mostrarApp(usuario) {
     dropdown.style.display = 'none';
     arrow.style.transform  = 'rotate(0deg)';
   });
+
+  if (typeof window.renderHistory === 'function') window.renderHistory();
 }
 
 window.dvbLogout = function() {

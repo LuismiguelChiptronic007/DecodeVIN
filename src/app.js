@@ -397,37 +397,75 @@ function setErrors(result) {
 let currentHistoryPage = 1;
 let currentGroupHistoryPage = 1;
 const HISTORY_PAGE_SIZE = 10;
+let singleHistoryFetchGen = 0;
+let groupHistoryFetchGen = 0;
 
 function addHistoryEntry(input, plateOverride = "") {
   const key = "decodevin.history";
-  const list = JSON.parse(localStorage.getItem(key) || "[]");
   const pInput = el("plateInputSingle");
   const plate = plateOverride || (pInput ? pInput.value.trim().toUpperCase() : "");
   if (!input && !plate) return;
   const entry = { input, plate, ts: Date.now() };
-  const newList = [entry, ...list.filter(x => x.input !== input || (input === "" && x.plate !== plate))].slice(0, 100);
-  localStorage.setItem(key, JSON.stringify(newList));
-  currentHistoryPage = 1;
-  renderHistory();
+  const token = localStorage.getItem("dvb_token");
+
+  function pushLocalOnly() {
+    const list = JSON.parse(localStorage.getItem(key) || "[]");
+    const newList = [entry, ...list.filter(x => x.input !== input || (input === "" && x.plate !== plate))].slice(0, 100);
+    localStorage.setItem(key, JSON.stringify(newList));
+    currentHistoryPage = 1;
+    renderHistory();
+  }
+
+  if (token && typeof window.dvbHistoricoUsuarioPost === "function") {
+    window.dvbHistoricoUsuarioPost("single", entry).then((r) => {
+      if (r && r.ok) {
+        currentHistoryPage = 1;
+        renderHistory();
+        return;
+      }
+      pushLocalOnly();
+    });
+    return;
+  }
+  pushLocalOnly();
 }
 
 function addGroupHistoryEntry(vins, plates) {
   const key = "decodevin.groupHistory";
-  const list = JSON.parse(localStorage.getItem(key) || "[]");
   if (!vins && !plates) return;
-  
+
   const fInput = el("fleetName");
   const fleetName = fInput ? fInput.value.trim() : "";
-  
+
   const entry = { vins, plates, fleetName, ts: Date.now() };
+  const list = JSON.parse(localStorage.getItem(key) || "[]");
   const lastEntry = list[0];
   if (lastEntry && lastEntry.vins === vins && lastEntry.plates === plates && lastEntry.fleetName === fleetName) return;
 
-  const newList = [entry, ...list].slice(0, 50);
-  localStorage.setItem(key, JSON.stringify(newList));
-  currentGroupHistoryPage = 1;
-  renderHistory();
-  
+  const token = localStorage.getItem("dvb_token");
+
+  function pushLocalOnly() {
+    const cur = JSON.parse(localStorage.getItem(key) || "[]");
+    const newList = [entry, ...cur].slice(0, 50);
+    localStorage.setItem(key, JSON.stringify(newList));
+    currentGroupHistoryPage = 1;
+    renderHistory();
+  }
+
+  if (token && typeof window.dvbHistoricoUsuarioPost === "function") {
+    window.dvbHistoricoUsuarioPost("group", entry).then((r) => {
+      if (r && r.ok) {
+        currentGroupHistoryPage = 1;
+        renderHistory();
+        if (fInput) fInput.value = "";
+        return;
+      }
+      pushLocalOnly();
+      if (fInput) fInput.value = "";
+    });
+    return;
+  }
+  pushLocalOnly();
   if (fInput) fInput.value = "";
 }
 
@@ -435,27 +473,145 @@ function renderHistory() {
   renderSingleHistory();
   renderGroupHistory();
 }
+window.renderHistory = renderHistory;
 
-  const renderSingleHistory = () => {
+  const parseHistoricoPayload = (raw) => {
+    if (raw == null) return {};
+    if (typeof raw === "object") return raw;
+    try {
+      return JSON.parse(String(raw));
+    } catch (_) {
+      return {};
+    }
+  };
+
+  const normHistVin = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const normHistPlate = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+  function dedupeSingleHistoryList(list) {
+    const map = new Map();
+    for (const item of list) {
+      const userKey =
+        item.auditEmail ||
+        (item.userId != null ? String(item.userId) : "") ||
+        (item.fromServer ? "self" : "local");
+      const q = `${normHistVin(item.input)}|${normHistPlate(item.plate)}`;
+      const k = `${userKey}::${q}`;
+      const prev = map.get(k);
+      if (!prev || item.ts >= prev.ts) map.set(k, item);
+    }
+    return [...map.values()].sort((a, b) => b.ts - a.ts);
+  }
+
+  function dedupeGroupHistoryList(list) {
+    const map = new Map();
+    for (const item of list) {
+      const userKey =
+        item.auditEmail ||
+        (item.userId != null ? String(item.userId) : "") ||
+        (item.fromServer ? "self" : "local");
+      const body = `${String(item.vins || "").trim()}|${String(item.plates || "").trim()}|${String(item.fleetName || "").trim()}`;
+      const k = `${userKey}::${body}`;
+      const prev = map.get(k);
+      if (!prev || item.ts >= prev.ts) map.set(k, item);
+    }
+    return [...map.values()].sort((a, b) => b.ts - a.ts);
+  }
+
+  const renderSingleHistory = async () => {
     const key = "decodevin.history";
-    const list = JSON.parse(localStorage.getItem(key) || "[]");
+    let list = JSON.parse(localStorage.getItem(key) || "[]");
+    const sessUser = JSON.parse(localStorage.getItem("dvb_user") || "null");
+    const token = localStorage.getItem("dvb_token");
+    singleHistoryFetchGen++;
+    const gen = singleHistoryFetchGen;
+
+    if (token && sessUser && sessUser.admin && typeof window.dvbHistoricoAdminGet === "function") {
+      try {
+        const res = await window.dvbHistoricoAdminGet();
+        if (gen !== singleHistoryFetchGen) return;
+        if (res && res.ok && Array.isArray(res.entries)) {
+          list = res.entries
+            .filter(e => e.kind === "single")
+            .map(e => {
+              const p = parseHistoricoPayload(e.payload);
+              const vin = String(p.input || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+              const plate = String(p.plate || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+              return {
+                input: vin,
+                plate,
+                ts: typeof p.ts === "number" ? p.ts : new Date(e.created_at || Date.now()).getTime(),
+                serverId: e.id,
+                userId: e.user_id,
+                auditBy: e.nome || "—",
+                auditEmail: e.email || "",
+                adminGlobal: true
+              };
+            })
+            .filter(x => x.input || x.plate)
+            .sort((a, b) => b.ts - a.ts)
+            .slice(0, 250);
+        }
+      } catch (_) {
+        if (gen !== singleHistoryFetchGen) return;
+      }
+    } else if (token && typeof window.dvbHistoricoUsuarioGet === "function") {
+      try {
+        const res = await window.dvbHistoricoUsuarioGet();
+        if (gen !== singleHistoryFetchGen) return;
+        if (res && res.ok && Array.isArray(res.single) && res.single.length > 0) {
+          list = res.single
+            .map(s => ({
+              input: String(s.input || ""),
+              plate: String(s.plate || ""),
+              ts: typeof s.ts === "number" ? s.ts : Date.now(),
+              serverId: s.id,
+              fromServer: true
+            }))
+            .filter(x => x.input || x.plate);
+        }
+      } catch (_) {
+        if (gen !== singleHistoryFetchGen) return;
+      }
+    } else if (gen !== singleHistoryFetchGen) {
+      return;
+    }
+
+    list = dedupeSingleHistoryList(list);
+
     const h = el("history");
     if (!h) return;
     h.innerHTML = "";
 
+    if (sessUser && sessUser.admin) {
+      const note = document.createElement("div");
+      note.style.cssText = "font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;";
+      note.textContent =
+        "Visão de administrador: histórico de todos os usuários (👤). Você só remove as linhas que forem suas.";
+      h.appendChild(note);
+    } else if (token) {
+      const note = document.createElement("div");
+      note.style.cssText = "font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;";
+      note.textContent =
+        "Histórico ligado à sua conta — o mesmo em qualquer PC ou celular após login.";
+      h.appendChild(note);
+    }
+
     const searchInput = document.createElement("input");
     searchInput.type = "text";
-    searchInput.placeholder = "🔍 Buscar no histórico (chassi ou placa)...";
+    searchInput.placeholder = "🔍 Buscar no histórico (chassi, placa ou nome)…";
     searchInput.style.marginBottom = "12px";
     searchInput.style.fontSize = "13px";
     searchInput.style.width = "100%";
     searchInput.style.boxSizing = "border-box";
     searchInput.oninput = (e) => {
       const term = e.target.value.toLowerCase();
-      renderSingleHistoryItems(list.filter(item => 
+      renderSingleHistoryItems(list.filter(item =>
         (item.input || "").toLowerCase().includes(term) ||
-        (item.plate || "").toLowerCase().includes(term)
-      ));
+        (item.plate || "").toLowerCase().includes(term) ||
+        (item.auditBy || "").toLowerCase().includes(term) ||
+        (item.auditEmail || "").toLowerCase().includes(term)
+      ), sessUser);
     };
     h.appendChild(searchInput);
 
@@ -463,10 +619,23 @@ function renderHistory() {
     listContainer.id = "singleHistoryList";
     h.appendChild(listContainer);
 
-    renderSingleHistoryItems(list);
+    renderSingleHistoryItems(list, sessUser);
   };
 
-  const renderSingleHistoryItems = (list) => {
+  const historicoPodeRemoverSingle = (item, sessUser) => {
+    if (item.adminGlobal) {
+      if (sessUser && sessUser.id != null && item.userId != null) {
+        return Number(item.userId) === Number(sessUser.id);
+      }
+      if (sessUser && sessUser.email && item.auditEmail) {
+        return String(item.auditEmail).toLowerCase() === String(sessUser.email).toLowerCase();
+      }
+      return false;
+    }
+    return true;
+  };
+
+  const renderSingleHistoryItems = (list, sessUser) => {
     const h = el("singleHistoryList");
     if (!h) return;
     h.innerHTML = "";
@@ -491,12 +660,27 @@ function renderHistory() {
       
       const v = document.createElement("div");
       v.style.flex = "1";
-      v.textContent = (item.input || "Placa: " + item.plate);
+      v.style.display = "flex";
+      v.style.flexDirection = "column";
+      v.style.gap = "4px";
+
+      const main = document.createElement("div");
+      main.textContent = (item.input || "Placa: " + item.plate);
       if (item.input && item.plate) {
         const p = document.createElement("span");
         p.style.fontSize = "12px"; p.style.color = "var(--accent)"; p.style.marginLeft = "8px";
         p.textContent = `[${item.plate}]`;
-        v.appendChild(p);
+        main.appendChild(p);
+      }
+      v.appendChild(main);
+
+      if (item.auditBy) {
+        const sub = document.createElement("div");
+        sub.style.fontSize = "11px";
+        sub.style.color = "var(--muted)";
+        sub.textContent =
+          `👤 ${item.auditBy}` + (item.auditEmail ? ` · ${item.auditEmail}` : "");
+        v.appendChild(sub);
       }
       
       v.onclick = () => {
@@ -517,19 +701,36 @@ function renderHistory() {
         }
       };
 
+      const podeRemover = historicoPodeRemoverSingle(item, sessUser);
+
       const btnDelete = document.createElement("button");
       btnDelete.className = "btn-delete-item";
       btnDelete.innerHTML = "&times;";
       btnDelete.title = "Remover este item";
       btnDelete.style.zIndex = "10";
-      btnDelete.onclick = (e) => {
+      btnDelete.onclick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (!podeRemover) return;
+        if (item.serverId && typeof window.dvbHistoricoUsuarioDelete === "function") {
+          const dr = await window.dvbHistoricoUsuarioDelete(item.serverId);
+          if (dr && dr.ok) {
+            const currentList = JSON.parse(localStorage.getItem("decodevin.history") || "[]");
+            const newList = currentList.filter(x => x.ts !== item.ts);
+            localStorage.setItem("decodevin.history", JSON.stringify(newList));
+            renderSingleHistory();
+          }
+          return;
+        }
         const currentList = JSON.parse(localStorage.getItem("decodevin.history") || "[]");
         const newList = currentList.filter(x => x.ts !== item.ts);
         localStorage.setItem("decodevin.history", JSON.stringify(newList));
         renderSingleHistory();
       };
+      if (!podeRemover) {
+        btnDelete.style.visibility = "hidden";
+        btnDelete.style.pointerEvents = "none";
+      }
 
       row.appendChild(v);
       row.appendChild(btnDelete);
@@ -567,27 +768,103 @@ function renderHistory() {
 
   window.renderSingleHistory = renderSingleHistory;
 
-  const renderGroupHistory = () => {
+  const renderGroupHistory = async () => {
     const key = "decodevin.groupHistory";
-    const list = JSON.parse(localStorage.getItem(key) || "[]");
+    let list = JSON.parse(localStorage.getItem(key) || "[]");
+    const sessUser = JSON.parse(localStorage.getItem("dvb_user") || "null");
+    const token = localStorage.getItem("dvb_token");
+    groupHistoryFetchGen++;
+    const gen = groupHistoryFetchGen;
+
+    if (token && sessUser && sessUser.admin && typeof window.dvbHistoricoAdminGet === "function") {
+      try {
+        const res = await window.dvbHistoricoAdminGet();
+        if (gen !== groupHistoryFetchGen) return;
+        if (res && res.ok && Array.isArray(res.entries)) {
+          list = res.entries
+            .filter(e => e.kind === "group")
+            .map(e => {
+              const p = parseHistoricoPayload(e.payload);
+              const vins = String(p.vins || "");
+              const plates = String(p.plates || "");
+              const hasLines = !!(vins.trim() || plates.trim());
+              return {
+                vins,
+                plates,
+                fleetName: String(p.fleetName || "").slice(0, 200),
+                ts: typeof p.ts === "number" ? p.ts : new Date(e.created_at || Date.now()).getTime(),
+                serverId: e.id,
+                userId: e.user_id,
+                auditBy: e.nome || "—",
+                auditEmail: e.email || "",
+                adminGlobal: true,
+                auditOnly: !hasLines
+              };
+            })
+            .sort((a, b) => b.ts - a.ts)
+            .slice(0, 120);
+        }
+      } catch (_) {
+        if (gen !== groupHistoryFetchGen) return;
+      }
+    } else if (token && typeof window.dvbHistoricoUsuarioGet === "function") {
+      try {
+        const res = await window.dvbHistoricoUsuarioGet();
+        if (gen !== groupHistoryFetchGen) return;
+        if (res && res.ok && Array.isArray(res.group) && res.group.length > 0) {
+          list = res.group.map(g => ({
+            vins: String(g.vins || ""),
+            plates: String(g.plates || ""),
+            fleetName: String(g.fleetName || ""),
+            ts: typeof g.ts === "number" ? g.ts : Date.now(),
+            serverId: g.id,
+            fromServer: true,
+            auditOnly: false
+          }));
+        }
+      } catch (_) {
+        if (gen !== groupHistoryFetchGen) return;
+      }
+    } else if (gen !== groupHistoryFetchGen) {
+      return;
+    }
+
+    list = dedupeGroupHistoryList(list);
+
     const h = el("groupHistory");
     if (!h) return;
     h.innerHTML = "";
 
+    if (sessUser && sessUser.admin) {
+      const note = document.createElement("div");
+      note.style.cssText = "font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;";
+      note.textContent =
+        "Lotes de todos os usuários; linhas sem chassis/placas no servidor são só registro (não reexecutam).";
+      h.appendChild(note);
+    } else if (token) {
+      const note = document.createElement("div");
+      note.style.cssText = "font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;";
+      note.textContent =
+        "Histórico de lotes ligado à sua conta — o mesmo em qualquer aparelho após login.";
+      h.appendChild(note);
+    }
+
     const searchInput = document.createElement("input");
     searchInput.type = "text";
-    searchInput.placeholder = "🔍 Buscar no histórico (nome, placa, chassi)...";
+    searchInput.placeholder = "🔍 Buscar no histórico (nome, placa, chassi, operador)…";
     searchInput.style.marginBottom = "12px";
     searchInput.style.fontSize = "13px";
     searchInput.style.width = "100%";
     searchInput.style.boxSizing = "border-box";
     searchInput.oninput = (e) => {
       const term = e.target.value.toLowerCase();
-      renderGroupHistoryItems(list.filter(item => 
+      renderGroupHistoryItems(list.filter(item =>
         (item.fleetName || "").toLowerCase().includes(term) ||
         (item.vins || "").toLowerCase().includes(term) ||
-        (item.plates || "").toLowerCase().includes(term)
-      ));
+        (item.plates || "").toLowerCase().includes(term) ||
+        (item.auditBy || "").toLowerCase().includes(term) ||
+        (item.auditEmail || "").toLowerCase().includes(term)
+      ), sessUser);
     };
     h.appendChild(searchInput);
 
@@ -595,7 +872,7 @@ function renderHistory() {
     listContainer.id = "groupHistoryList";
     h.appendChild(listContainer);
 
-    renderGroupHistoryItems(list);
+    renderGroupHistoryItems(list, sessUser);
   };
 
   // Gera os dados do relatório de um lote salvo no histórico sem reprocessar a tela.
@@ -611,7 +888,8 @@ function renderHistory() {
       let decoded = { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
       if (vin) {
         try {
-          decoded = decoder.decode(vin);
+          const dec = window.currentDecoder;
+          decoded = dec && typeof dec.decode === "function" ? dec.decode(vin) : decoded;
         } catch (_) {
           decoded = { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
         }
@@ -724,7 +1002,7 @@ function renderHistory() {
     };
   };
 
-  const renderGroupHistoryItems = (list) => {
+  const renderGroupHistoryItems = (list, sessUser) => {
     const h = el("groupHistoryList");
     if (!h) return;
     h.innerHTML = "";
@@ -743,6 +1021,7 @@ function renderHistory() {
     const pageList = list.slice(start, end);
 
     pageList.forEach((item, idx) => {
+      const podeRemover = historicoPodeRemoverSingle(item, sessUser);
       const indexInFullList = start + idx;
       const row = document.createElement("div");
       row.className = "item clickable";
@@ -775,7 +1054,17 @@ function renderHistory() {
       const details = document.createElement("div");
       details.style.fontSize = "13px";
       details.style.color = "var(--text)";
-      details.textContent = `${totalCount} itens • ${dataHora}`;
+      details.textContent = item.auditOnly
+        ? `${dataHora} · registro global`
+        : `${totalCount} itens • ${dataHora}`;
+
+      const auditLine = document.createElement("div");
+      auditLine.style.fontSize = "11px";
+      auditLine.style.color = "var(--muted)";
+      if (item.auditBy) {
+        auditLine.textContent =
+          `👤 ${item.auditBy}` + (item.auditEmail ? ` · ${item.auditEmail}` : "");
+      }
 
       const preview = document.createElement("div");
       preview.style.fontSize = "11px";
@@ -791,9 +1080,16 @@ function renderHistory() {
 
       v.appendChild(title);
       v.appendChild(details);
+      if (item.auditBy) v.appendChild(auditLine);
       if (previewText.length > 0) v.appendChild(preview);
       
       v.onclick = () => {
+        if (item.auditOnly) {
+          if (typeof showToast === "function") {
+            showToast("Sem lista de chassis no servidor — só o registro da pesquisa.", "error");
+          }
+          return;
+        }
         const gInput = el("groupInput");
         const gPlateInput = el("groupPlateInput");
         const bGroup = el("btnGroupDecode");
@@ -816,6 +1112,12 @@ function renderHistory() {
       btnExportLot.onclick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (item.auditOnly) {
+          if (typeof showToast === "function") {
+            showToast("Exportação indisponível — lote só existe como registro no servidor.", "error");
+          }
+          return;
+        }
         const oldTxt = btnExportLot.textContent;
         btnExportLot.disabled = true;
         btnExportLot.textContent = "⏳";
@@ -839,21 +1141,41 @@ function renderHistory() {
           btnExportLot.textContent = oldTxt;
         }
       };
+      if (item.auditOnly) {
+        btnExportLot.style.opacity = "0.35";
+        btnExportLot.title = "Sem dados de lote no servidor";
+      }
 
       const btnDelete = document.createElement("button");
       btnDelete.className = "btn-delete-item";
       btnDelete.innerHTML = "&times;";
       btnDelete.title = "Remover este lote";
       btnDelete.style.zIndex = "10";
-      btnDelete.onclick = (e) => {
+      btnDelete.onclick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (!podeRemover) return;
+        if (item.serverId && typeof window.dvbHistoricoUsuarioDelete === "function") {
+          const dr = await window.dvbHistoricoUsuarioDelete(item.serverId);
+          if (dr && dr.ok) {
+            const storageKey = "decodevin.groupHistory";
+            const currentList = JSON.parse(localStorage.getItem(storageKey) || "[]");
+            const newList = currentList.filter(x => x.ts !== item.ts);
+            localStorage.setItem(storageKey, JSON.stringify(newList));
+            renderGroupHistory();
+          }
+          return;
+        }
         const storageKey = "decodevin.groupHistory";
         const currentList = JSON.parse(localStorage.getItem(storageKey) || "[]");
         const newList = currentList.filter(x => x.ts !== item.ts);
         localStorage.setItem(storageKey, JSON.stringify(newList));
         renderGroupHistory();
       };
+      if (!podeRemover) {
+        btnDelete.style.visibility = "hidden";
+        btnDelete.style.pointerEvents = "none";
+      }
 
       actions.appendChild(btnExportLot);
       actions.appendChild(btnDelete);
@@ -1839,7 +2161,15 @@ async function main() {
         }
       }
 
-      addHistoryEntry(text);
+      const fromPlateFlow = !!window._dvbSkipVinAudit;
+      if (fromPlateFlow) {
+        window._dvbSkipVinAudit = false;
+      } else {
+        addHistoryEntry(text);
+      }
+      if (window.dvbRegistrarPesquisa && !fromPlateFlow) {
+        window.dvbRegistrarPesquisa({ tipo: "unico_vin", vin: text, placa: plate || "" });
+      }
     }
 
     // Orquestra toda a busca por placa: API principal, OB e atualização da UI.
@@ -2074,6 +2404,7 @@ async function main() {
             }
           }
           
+          window._dvbSkipVinAudit = true;
           await runVIN(true); 
           showReports("single", true);
 
@@ -2134,6 +2465,10 @@ async function main() {
           }
 
           addHistoryEntry(vinInputSingle.value, p);
+          if (window.dvbRegistrarPesquisa) {
+            const vVin = vinInputSingle ? vinInputSingle.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") : "";
+            window.dvbRegistrarPesquisa({ tipo: "unico_placa", placa: p, vin: vVin });
+          }
           
           if (!window.currentSingleResult) {
             window.currentSingleResult = { tipo: 'PLATE', placa: p, ob: {}, ob_data: obData || {} };
@@ -2393,7 +2728,16 @@ async function main() {
           if (groupProgress) groupProgress.style.display = "none";
           gResults.innerHTML = ""; 
           showReports("group", true);
-          renderGroupResults(); 
+          renderGroupResults();
+          if (window.dvbRegistrarPesquisa) {
+            const fn = el("fleetName");
+            const fleetName = fn ? fn.value.trim() : "";
+            window.dvbRegistrarPesquisa({
+              tipo: "grupo",
+              detalhe: `Lote: ${totalItems} veículo(s)`,
+              fleetName: fleetName || undefined
+            });
+          }
           return;
         }
 
