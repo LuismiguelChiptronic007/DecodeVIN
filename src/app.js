@@ -2156,9 +2156,29 @@ async function main() {
           if (plate) {
             try {
               const apiResult = await consultarPlacaPHP(plate, vin || "");
-              if (apiResult.status === "ok") {
+              const norm = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+              const chassiDigitadoNorm = norm(vin);
+              const chassiApiRef = norm(
+                apiResult.final_chassi ||
+                apiResult.final_site ||
+                apiResult.final ||
+                apiResult.chassi_raw_api ||
+                apiResult.chassi_completo ||
+                apiResult.chassi
+              );
+              const compativelPorFinal5 =
+                chassiDigitadoNorm.length >= 5 &&
+                chassiApiRef.length >= 5 &&
+                chassiDigitadoNorm.slice(-5) === chassiApiRef.slice(-5);
+
+              if (apiResult.status === "ok" || compativelPorFinal5) {
                 itemData.status = 'ok';
                 itemData.apiResult = apiResult;
+
+                if (compativelPorFinal5 && apiResult.status !== "ok") {
+                  itemData.apiResult.status = "ok";
+                  itemData.apiResult.mensagem = "✔ Compatível por validação dos 5 últimos dígitos do chassi";
+                }
                 
                 itemData.fabricante = apiResult.marca || apiResult.fabricante || apiResult.brand || apiResult.texto_marca || itemData.fabricante;
                 
