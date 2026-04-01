@@ -361,66 +361,8 @@ function mostrarTelaLogin() {
     nomeInput.addEventListener('input', () => {
       const sanitized = sanitizeNomeInput(nomeInput.value);
       if (sanitized !== nomeInput.value) nomeInput.value = sanitized;
-
-      if (nomeInput.value.toLowerCase().includes("cristian angelo")) {
-        showGiantMessage();
-      }
     });
   }
-}
-
-function showGiantMessage() {
-  const existing = document.getElementById('giant-warning-overlay');
-  if (existing) return;
-
-  const overlay = document.createElement('div');
-  overlay.id = 'giant-warning-overlay';
-  overlay.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.95);
-    z-index: 1000000;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 40px;
-    color: #ff3e3e;
-    font-family: 'Impact', sans-serif;
-    animation: pulse-red 0.5s infinite alternate;
-  `;
-
-  overlay.innerHTML = `
-    <h1 style="font-size: 8vw; margin: 0; line-height: 1; text-transform: uppercase;">ATENÇÃO: CRISTIAN ANGELO</h1>
-    <div style="font-size: 3vw; margin-top: 30px; color: #fff; font-family: system-ui; font-weight: 800; max-width: 800px; line-height: 1.2;">
-      ESSE USUÁRIO SÓ PODE SER CADASTRADO NO SETOR <span style="color: #38bdf8;">DIESELDIAG</span><br>
-      OU SE <span style="color: #22c55e;">PAGAR A COCA</span> PARA O LUIS! 🥤
-    </div>
-    <button onclick="document.getElementById('giant-warning-overlay').remove()" style="
-      margin-top: 50px;
-      padding: 20px 40px;
-      font-size: 24px;
-      font-weight: 900;
-      background: #ff3e3e;
-      color: white;
-      border: none;
-      border-radius: 50px;
-      cursor: pointer;
-      box-shadow: 0 0 30px rgba(255, 62, 62, 0.5);
-      text-transform: uppercase;
-    ">EU ENTENDI (OU VOU PAGAR A COCA)</button>
-    <style>
-      @keyframes pulse-red {
-        from { background: rgba(0, 0, 0, 0.95); }
-        to { background: rgba(50, 0, 0, 0.98); }
-      }
-    </style>
-  `;
-  document.body.appendChild(overlay);
 }
 
 function inputStyle() {
@@ -528,12 +470,6 @@ window.dvbCadastrar = async function() {
     return;
   }
   if (nomeInput) nomeInput.value = nome;
-
-  if (nome.toLowerCase().includes("cristian angelo") && setor !== "DIESELDIAG") {
-    showGiantMessage();
-    dvbMsg('Apenas o setor DIESELDIAG é permitido para este usuário, ou pague a coca!', 'erro');
-    return;
-  }
 
   if (!email.toLowerCase().endsWith('@chiptronic.com.br')) {
     dvbMsg('Apenas e-mails @chiptronic.com.br são permitidos.', 'erro');
