@@ -728,6 +728,20 @@ function renderHistory() {
   window.renderGroupHistory = renderGroupHistory;
 
 const exportCSV = (data, name, includeFipe = true) => {
+  const uniqueData = [];
+  const seen = new Set();
+
+  (data || []).forEach((item) => {
+    const api = item?.apiResult || {};
+    const placa = String(item?.placa || api?.placa || "").trim().toUpperCase();
+    const chassi = String(item?.vin || api?.chassi_completo || api?.chassi || "").trim().toUpperCase();
+    const key = `${placa}|${chassi}`;
+    if (key === "|") return;
+    if (seen.has(key)) return;
+    seen.add(key);
+    uniqueData.push(item);
+  });
+
   let columns = [];
   
   if (includeFipe) {
@@ -762,7 +776,7 @@ const exportCSV = (data, name, includeFipe = true) => {
 
   let csv = "\ufeff" + columns.join(";") + "\n";
 
-  data.forEach(item => {
+  uniqueData.forEach(item => {
     const tokens = item.result?.tokens || [];
     const ob = item.ob_data || item.ob || {};
     const api = item.apiResult || {};

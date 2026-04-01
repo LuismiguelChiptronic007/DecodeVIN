@@ -66,9 +66,50 @@ function getRealRange(ws) {
   });
 }
 
+// Remove pares duplicados e também entradas isoladas repetidas de placa/chassi.
+function deduplicarPares(pares) {
+  const vistosPar = new Set();
+  const vistosPlaca = new Set();
+  const vistosChassi = new Set();
+  const saida = [];
+
+  for (let i = 0; i < pares.length; i++) {
+    const placa = String(pares[i]?.placa || "").trim().toUpperCase();
+    const chassi = String(pares[i]?.chassi || "").trim().toUpperCase();
+    if (!placa && !chassi) continue;
+
+    if (placa && chassi) {
+      const keyPar = `${placa}|${chassi}`;
+      if (vistosPar.has(keyPar)) continue;
+      vistosPar.add(keyPar);
+      vistosPlaca.add(placa);
+      vistosChassi.add(chassi);
+      saida.push({ placa, chassi });
+      continue;
+    }
+
+    if (placa) {
+      if (vistosPlaca.has(placa)) continue;
+      vistosPlaca.add(placa);
+      saida.push({ placa, chassi: "" });
+      continue;
+    }
+
+    if (chassi) {
+      if (vistosChassi.has(chassi)) continue;
+      vistosChassi.add(chassi);
+      saida.push({ placa: "", chassi });
+    }
+  }
+
+  return saida;
+}
+
 // Lê a planilha e aplica os dados no modo grupo ou no modo único.
 function lerExcelEPopularGrupo(file, targetMode = "group") { 
   const processarResultado = (paresLimpos) => {
+    paresLimpos = deduplicarPares(paresLimpos);
+
     if (paresLimpos.length === 0) {
       if (window.showToast) {
         window.showToast("Não encontrei placa/chassi na planilha. Verifique se os dados estão no formato esperado.", "error");
