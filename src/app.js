@@ -1398,10 +1398,101 @@ const exportCSV = (data, name, includeFipe = true) => {
 let currentGroupPage = 1;
 const GROUP_PAGE_SIZE = 10;
 
-function renderGroupResults(filteredList = null) {
+const populateGroupFilters = (results) => {
+    const brands = new Set();
+    const models = new Set();
+    const years = new Set();
+
+    results.forEach(item => {
+      if (item.fabricante) brands.add(item.fabricante);
+      
+      let mod = "";
+      if (item.apiResult) {
+        const api = item.apiResult;
+        const mBasico = api.modelo || api.model || api.texto_modelo || "";
+        const vBasico = api.versao || api.version || "";
+        mod = (mBasico && vBasico && !mBasico.includes(vBasico)) ? `${mBasico} ${vBasico}` : (mBasico || vBasico || "");
+      } else if (item.ob && item.ob.ob_chassi) {
+        mod = item.ob.ob_chassi;
+      }
+      if (mod) models.add(mod);
+
+      if (item.apiResult) {
+        const api = item.apiResult;
+        const anoFab = api.ano || api.ano_fabricacao || api.year || api.anoFabricacao;
+        const anoMod = api.ano_modelo || api.model_year || api.anoModelo;
+        const anoCompleto = (anoFab && anoMod && anoFab !== anoMod) ? `${anoFab}/${anoMod}` : (anoFab || anoMod || "");
+        if (anoCompleto) years.add(anoCompleto);
+      }
+    });
+
+    const updateSelect = (id, values, defaultLabel) => {
+      const s = el(id);
+      if (!s) return;
+      const currentVal = s.value;
+      s.innerHTML = `<option value="">${defaultLabel}</option>`;
+      Array.from(values).sort().forEach(v => {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        s.appendChild(opt);
+      });
+      if (Array.from(values).includes(currentVal)) s.value = currentVal;
+    };
+
+    updateSelect("filterBrand", brands, "Montadora (Todas)");
+    updateSelect("filterModel", models, "Modelo (Todos)");
+    updateSelect("filterYear", years, "Ano (Todos)");
+  };
+
+  const applyGroupFilters = () => {
+    if (!window.currentGroupResults) return;
+    
+    const fPlate = el("filterPlate")?.value.toLowerCase().trim() || "";
+    const fBrand = el("filterBrand")?.value || "";
+    const fModel = el("filterModel")?.value || "";
+    const fYear  = el("filterYear")?.value || "";
+
+    const filtered = window.currentGroupResults.filter(item => {
+      const plateVal = (item.placa || "").toLowerCase();
+      const brandVal = item.fabricante || "";
+      
+      let modelVal = "";
+      if (item.apiResult) {
+        const api = item.apiResult;
+        const mBasico = api.modelo || api.model || api.texto_modelo || "";
+        const vBasico = api.versao || api.version || "";
+        modelVal = (mBasico && vBasico && !mBasico.includes(vBasico)) ? `${mBasico} ${vBasico}` : (mBasico || vBasico || "");
+      } else if (item.ob && item.ob.ob_chassi) {
+        modelVal = item.ob.ob_chassi;
+      }
+
+      let yearVal = "";
+      if (item.apiResult) {
+        const api = item.apiResult;
+        const anoFab = api.ano || api.ano_fabricacao || api.year || api.anoFabricacao;
+        const anoMod = api.ano_modelo || api.model_year || api.anoModelo;
+        yearVal = (anoFab && anoMod && anoFab !== anoMod) ? `${anoFab}/${anoMod}` : (anoFab || anoMod || "");
+      }
+
+      return (!fPlate || plateVal.includes(fPlate)) &&
+             (!fBrand || brandVal === fBrand) &&
+             (!fModel || modelVal === fModel) &&
+             (!fYear  || yearVal  === fYear);
+    });
+
+    currentGroupPage = 1;
+    renderGroupResults(filtered);
+  };
+
+ function renderGroupResults(filteredList = null) {
   const gResults = el("groupResults");
   if (!gResults || !window.currentGroupResults) return;
   gResults.innerHTML = "";
+
+  if (!filteredList) {
+    populateGroupFilters(window.currentGroupResults);
+  }
 
   const displayList = filteredList || window.currentGroupResults;
   const totalPages = Math.ceil(displayList.length / GROUP_PAGE_SIZE);
@@ -2106,8 +2197,12 @@ async function main() {
       const excelInput = el("excelFileInput");
       if (excelInput) excelInput.value = "";
 
-      const gSearch = el("groupSearchInput");
-      if (gSearch) gSearch.value = "";
+      ["filterBrand", "filterModel", "filterYear"].forEach(id => {
+        const s = el(id);
+        if (s) s.value = "";
+      });
+      const fPlate = el("filterPlate");
+      if (fPlate) fPlate.value = "";
 
       if (!keepInputs) {
         const fInput = el("fleetName");
@@ -2773,55 +2868,10 @@ async function main() {
       });
     }
 
-    const gSearch = el("groupSearchInput");
-    if (gSearch) {
-      gSearch.addEventListener("input", () => {
-        if (!window.currentGroupResults) return;
-        const term = gSearch.value.toLowerCase().trim();
-        if (!term) {
-          currentGroupPage = 1;
-          renderGroupResults();
-          return;
-        }
-
-        const filtered = window.currentGroupResults.filter(item => {
-          const api = item.apiResult || {};
-          const mBasico = (api.modelo || api.model || api.texto_modelo || "").toLowerCase();
-          const vBasico = (api.versao || api.version || "").toLowerCase();
-          const fab = (item.fabricante || "").toLowerCase();
-          const placa = (item.placa || "").toLowerCase();
-          const chassi = (item.vin || "").toLowerCase();
-          
-          // Dados adicionais para filtro
-          const combustivel = (api.combustivel || api.fuel || "").toLowerCase();
-          const anoFab = String(api.ano || api.ano_fabricacao || api.year || "").toLowerCase();
-          const anoMod = String(api.ano_modelo || api.model_year || "").toLowerCase();
-          
-          // Se o usuário digitou algo como "ano:2018", "placa:ABC", etc.
-          if (term.includes(":")) {
-            const [key, val] = term.split(":").map(s => s.trim());
-            if (key === "ano") return anoFab.includes(val) || anoMod.includes(val);
-            if (key === "placa") return placa.includes(val);
-            if (key === "montadora" || key === "marca") return fab.includes(val);
-            if (key === "modelo") return mBasico.includes(val) || vBasico.includes(val);
-            if (key === "combustivel") return combustivel.includes(val);
-          }
-
-          // Busca geral
-          return fab.includes(term) || 
-                 mBasico.includes(term) || 
-                 vBasico.includes(term) || 
-                 placa.includes(term) || 
-                 chassi.includes(term) ||
-                 combustivel.includes(term) ||
-                 anoFab.includes(term) ||
-                 anoMod.includes(term);
-        });
-
-        currentGroupPage = 1;
-        renderGroupResults(filtered);
-      });
-    }
+    ["filterBrand", "filterModel", "filterYear"].forEach(id => {
+      el(id)?.addEventListener("change", () => applyGroupFilters());
+    });
+    el("filterPlate")?.addEventListener("input", () => applyGroupFilters());
 
     gBtn.onclick = async () => {
       const fleetEl = el("fleetName");
@@ -2847,8 +2897,12 @@ async function main() {
       if (groupProgress) groupProgress.style.display = "block";
       if (progressBar) progressBar.style.width = "0%";
 
-      const gSearch = el("groupSearchInput");
-      if (gSearch) gSearch.value = "";
+      ["filterBrand", "filterModel", "filterYear"].forEach(id => {
+        const s = el(id);
+        if (s) s.value = "";
+      });
+      const fPlateEl = el("filterPlate");
+      if (fPlateEl) fPlateEl.value = "";
 
       addGroupHistoryEntry(gInput.value, gPlateInput.value);
 
@@ -2877,6 +2931,7 @@ async function main() {
           if (groupProgress) groupProgress.style.display = "none";
           gResults.innerHTML = ""; 
           showReports("group", true);
+          populateGroupFilters(window.currentGroupResults);
           renderGroupResults();
           if (window.dvbRegistrarPesquisa) {
             const fn = el("fleetName");

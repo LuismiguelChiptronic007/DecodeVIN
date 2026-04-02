@@ -145,15 +145,17 @@
         <input id="fleetName" type="text" required autocomplete="organization" placeholder="Obrigatório — ex.: Frota São Paulo - Lote 01" style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;outline:none;font-family:inherit">
       </div>
       <div class="bar-group">
-        <label style="display:block; margin-bottom:8px; font-size:14px; color:var(--accent);">Placas (6 ou 7 chars)</label>
-        <textarea id="groupPlateInput" placeholder="Insira várias placas (uma por linha)" style="width:100%;height:150px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;outline:none;font-family:inherit"></textarea>
+        <div class="group-col-head" style="height: 24px; display: flex; align-items: center; margin-bottom: 8px;">
+          <label style="margin:0; font-size:14px; color:var(--accent);">Placas (6 ou 7 chars)</label>
+        </div>
+        <textarea id="groupPlateInput" placeholder="Insira várias placas (uma por linha)" style="width:100%;height:150px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;outline:none;font-family:inherit;scrollbar-width:none;-ms-overflow-style:none;"></textarea>
       </div>
       <div class="bar-group">
-        <div class="group-col-head">
+        <div class="group-col-head" style="height: 24px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
           <label for="groupInput" style="margin:0; font-size:14px; color:var(--accent); cursor:default;">Chassis (17 chars)</label>
           <button type="button" id="btnClearGroupInputs" class="btn-clear-fields">Limpar campos</button>
         </div>
-        <textarea id="groupInput" placeholder="Insira vários chassis (um por linha)" style="width:100%;height:150px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;outline:none;font-family:inherit"></textarea>
+        <textarea id="groupInput" placeholder="Insira vários chassis (um por linha)" style="width:100%;height:150px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;outline:none;font-family:inherit;scrollbar-width:none;-ms-overflow-style:none;"></textarea>
       </div>
     </div>
     <div class="bar">
@@ -174,10 +176,19 @@
       </button>
     </div>
     
-    <div id="reportButtons" style="display: none; align-items: center; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
-      <div style="flex: 1; min-width: 250px; position: relative;">
-        <input type="text" id="groupSearchInput" placeholder="🔍 Filtrar resultados (montadora, modelo, placa, combustivel, ano)..." 
-               style="width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 15px; color: var(--text); font-size: 14px; outline: none;">
+    <div id="reportButtons" style="display: none; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+      <div id="groupFilters" style="display: flex; gap: 8px; flex: 1; flex-wrap: wrap; align-items: center;">
+        <input type="text" id="filterPlate" placeholder="🔍 Placa..." 
+               style="flex: 0.8; min-width: 100px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text); font-size: 13px; outline: none;">
+        <select id="filterBrand" style="flex: 1; min-width: 130px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text); font-size: 13px; outline: none; cursor: pointer;">
+          <option value="">Montadora (Todas)</option>
+        </select>
+        <select id="filterModel" style="flex: 1; min-width: 130px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text); font-size: 13px; outline: none; cursor: pointer;">
+          <option value="">Modelo (Todos)</option>
+        </select>
+        <select id="filterYear" style="flex: 1; min-width: 100px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text); font-size: 13px; outline: none; cursor: pointer;">
+          <option value="">Ano (Todos)</option>
+        </select>
       </div>
       <button id="btnExportCSV" style="background: var(--accent); color: black; min-width: 180px;">📄 Exportar Planilha (CSV)</button>
     </div>
