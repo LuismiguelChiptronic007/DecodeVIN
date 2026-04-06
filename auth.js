@@ -1433,5 +1433,64 @@ function resetarTimerInatividade() {
   window.addEventListener(evt, resetarTimerInatividade, { passive: true });
 });
 
+// Atalhos de teclado: Enter para submeter e ESC para fechar modais
+window.addEventListener('keydown', (e) => {
+  // ESC: Fechar modais abertos
+  if (e.key === 'Escape') {
+    const modais = [
+      'dvb-auth-overlay',
+      'dvb-admin-modal',
+      'dvb-edit-profile-overlay',
+      'dvb-forgot-overlay',
+      'dvb-confirm-overlay',
+      'dvb-alert-modal',
+      'dvb-confirm-modal'
+    ];
+    
+    for (const id of modais) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.remove();
+        // Se fechar o menu de admin, pode ser útil recarregar ou resetar estados
+        if (id === 'dvb-admin-modal') checkNewRegistrations();
+        break; // Fecha apenas o último modal aberto (o que estiver no topo)
+      }
+    }
+  }
+
+  // ENTER: Submeter formulários ativos
+  if (e.key === 'Enter') {
+    // Verifica qual formulário está visível/ativo
+    const authOverlay = document.getElementById('dvb-auth-overlay');
+    if (authOverlay) {
+      const loginVisible = document.getElementById('form-login').style.display !== 'none';
+      if (loginVisible) {
+        dvbLogin();
+      } else {
+        dvbCadastrar();
+      }
+      return;
+    }
+
+    const forgotOverlay = document.getElementById('dvb-forgot-overlay');
+    if (forgotOverlay) {
+      dvbEnviarRecuperacao();
+      return;
+    }
+
+    const editOverlay = document.getElementById('dvb-edit-profile-overlay');
+    if (editOverlay) {
+      dvbSalvarPerfil();
+      return;
+    }
+
+    // Se houver um modal de confirmação (confirm/alert), o Enter pode confirmar
+    const confirmOk = document.getElementById('dvb-confirm-ok') || document.getElementById('alert-close') || document.getElementById('confirm-yes');
+    if (confirmOk) {
+      confirmOk.click();
+    }
+  }
+});
+
 resetarTimerInatividade();
 verificarSessao();
