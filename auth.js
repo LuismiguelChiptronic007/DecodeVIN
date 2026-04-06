@@ -537,6 +537,26 @@ function mostrarApp(usuario) {
   const setorExibido = usuario.setor || 'Operador';
   const emailExibido = usuario.email || '';
 
+  const notificationIcon = usuario.admin ? `
+    <div id="dvb-notif-trigger" style="position:relative; cursor:pointer; margin-right:15px; display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid var(--border); transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
+      <span style="font-size:18px;">🔔</span>
+      <div id="dvb-notif-badge" style="position:absolute; top:-5px; right:-5px; background:var(--danger); color:white; font-size:10px; font-weight:800; width:18px; height:18px; border-radius:50%; display:none; align-items:center; justify-content:center; border:2px solid var(--bg-elev); box-shadow:0 2px 5px rgba(0,0,0,0.3);">0</div>
+      
+      <div id="dvb-notif-dropdown" style="position:absolute; top:120%; right:0; width:300px; background:var(--card); border:1px solid var(--border); border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.4); display:none; flex-direction:column; overflow:hidden; z-index:1001; animation:slideUp 0.2s ease-out;">
+        <div style="padding:15px; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:13px; font-weight:700; color:var(--text);">Notificações</span>
+          <span id="dvb-notif-count-text" style="font-size:11px; color:var(--muted);">0 pendentes</span>
+        </div>
+        <div id="dvb-notif-list" style="max-height:350px; overflow-y:auto; padding:5px;">
+          <div style="padding:20px; text-align:center; color:var(--muted); font-size:12px;">Nenhuma notificação nova</div>
+        </div>
+        <div style="padding:10px; border-top:1px solid var(--border); text-align:center;">
+          <a href="#" onclick="dvbAdmin(); return false;" style="font-size:11px; color:var(--accent-2); text-decoration:none; font-weight:600;">Ver todos os usuários</a>
+        </div>
+      </div>
+    </div>
+  ` : '';
+
   barra.innerHTML = `
     <div onclick="dvbGoToMenu()" style="display:flex; align-items:center; gap:12px; cursor:pointer;" title="Voltar ao Menu">
       <img src="assets/logo.svg" alt="Logo" style="width: 32px; height: 32px;">
@@ -546,54 +566,57 @@ function mostrarApp(usuario) {
       </div>
     </div>
 
-    <div style="position:relative;">
-      <div id="dvb-user-trigger" style="
-        display:flex; align-items:center; gap:12px; padding:6px 12px; border-radius:12px;
-        background: rgba(255,255,255,0.03); border: 1px solid var(--border); cursor:pointer;
-        transition: all 0.2s;
-      " onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
-        <div style="
-          width:32px; height:32px; border-radius:50%; background:var(--accent-2);
-          display:flex; align-items:center; justify-content:center;
-          color:#000; font-weight:800; font-size:14px;
-        ">${iniciais}</div>
-        <div style="display:flex; flex-direction:column; text-align:left;">
-          <span style="color:var(--text); font-size:13px; font-weight:700; line-height:1.2;">${usuario.nome}</span>
-          <span style="color:var(--muted); font-size:11px; font-weight:500;">${setorExibido}</span>
+    <div style="display:flex; align-items:center;">
+      ${notificationIcon}
+      <div style="position:relative;">
+        <div id="dvb-user-trigger" style="
+          display:flex; align-items:center; gap:12px; padding:6px 12px; border-radius:12px;
+          background: rgba(255,255,255,0.03); border: 1px solid var(--border); cursor:pointer;
+          transition: all 0.2s;
+        " onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
+          <div style="
+            width:32px; height:32px; border-radius:50%; background:var(--accent-2);
+            display:flex; align-items:center; justify-content:center;
+            color:#000; font-weight:800; font-size:14px;
+          ">${iniciais}</div>
+          <div style="display:flex; flex-direction:column; text-align:left;">
+            <span style="color:var(--text); font-size:13px; font-weight:700; line-height:1.2;">${usuario.nome}</span>
+            <span style="color:var(--muted); font-size:11px; font-weight:500;">${setorExibido}</span>
+          </div>
+          <span style="color:var(--muted); font-size:10px; transition: transform 0.2s;" id="dvb-arrow">▲</span>
         </div>
-        <span style="color:var(--muted); font-size:10px; transition: transform 0.2s;" id="dvb-arrow">▲</span>
-      </div>
 
-      <div id="dvb-user-dropdown" style="
-        position:absolute; top:110%; right:0; width:260px; 
-        background: var(--card); border: 1px solid var(--border); border-radius: 16px;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.4); display:none; flex-direction:column;
-        overflow:hidden; animation: slideUp 0.2s ease-out;
-      ">
-        <div style="padding:20px; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02);">
-          <div style="color:var(--text); font-size:14px; font-weight:700;">${usuario.nome}</div>
-          <div style="color:var(--accent-2); font-size:11px; margin-top:2px; font-weight:600;">${setorExibido}</div>
-          <div style="color:var(--muted); font-size:11px; margin-top:4px; word-break:break-all;">${emailExibido}</div>
-        </div>
-        
-        <div style="padding:8px;">
-          ${usuario.admin ? `
-            <a href="#" onclick="dvbAdmin(); return false;" style="
-              display:flex; align-items:center; gap:12px; padding:12px; border-radius:10px;
-              color:var(--text); text-decoration:none; font-size:13px; font-weight:600;
-              transition: background 0.2s;
-            " onmouseover="this.style.background='rgba(56,189,248,0.1)'" onmouseout="this.style.background='transparent'">
-              <span style="font-size:16px;">⚙️</span> Painel Admin
-            </a>
-          ` : ''}
+        <div id="dvb-user-dropdown" style="
+          position:absolute; top:110%; right:0; width:260px; 
+          background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+          box-shadow: 0 10px 25px rgba(0,0,0,0.4); display:none; flex-direction:column;
+          overflow:hidden; animation: slideUp 0.2s ease-out;
+        ">
+          <div style="padding:20px; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02);">
+            <div style="color:var(--text); font-size:14px; font-weight:700;">${usuario.nome}</div>
+            <div style="color:var(--accent-2); font-size:11px; margin-top:2px; font-weight:600;">${setorExibido}</div>
+            <div style="color:var(--muted); font-size:11px; margin-top:4px; word-break:break-all;">${emailExibido}</div>
+          </div>
           
-          <a href="#" onclick="dvbLogout(); return false;" style="
-            display:flex; align-items:center; gap:12px; padding:12px; border-radius:10px;
-            color:var(--danger); text-decoration:none; font-size:13px; font-weight:600;
-            transition: background 0.2s;
-          " onmouseover="this.style.background='rgba(239,68,68,0.1)'" onmouseout="this.style.background='transparent'">
-            <span style="font-size:16px;">↪️</span> Sair
-          </a>
+          <div style="padding:8px;">
+            ${usuario.admin ? `
+              <a href="#" onclick="dvbAdmin(); return false;" style="
+                display:flex; align-items:center; gap:12px; padding:12px; border-radius:10px;
+                color:var(--text); text-decoration:none; font-size:13px; font-weight:600;
+                transition: background 0.2s;
+              " onmouseover="this.style.background='rgba(56,189,248,0.1)'" onmouseout="this.style.background='transparent'">
+                <span style="font-size:16px;">⚙️</span> Painel Admin
+              </a>
+            ` : ''}
+            
+            <a href="#" onclick="dvbLogout(); return false;" style="
+              display:flex; align-items:center; gap:12px; padding:12px; border-radius:10px;
+              color:var(--danger); text-decoration:none; font-size:13px; font-weight:600;
+              transition: background 0.2s;
+            " onmouseover="this.style.background='rgba(239,68,68,0.1)'" onmouseout="this.style.background='transparent'">
+              <span style="font-size:16px;">↪️</span> Sair
+            </a>
+          </div>
         </div>
       </div>
     </div>
@@ -606,18 +629,98 @@ function mostrarApp(usuario) {
 
   trigger.onclick = (e) => {
     e.stopPropagation();
+    if (usuario.admin) {
+      document.getElementById('dvb-notif-dropdown').style.display = 'none';
+    }
     const isOpen = dropdown.style.display === 'flex';
     dropdown.style.display = isOpen ? 'none' : 'flex';
     arrow.style.transform  = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
   };
 
+  if (usuario.admin) {
+    const notifTrigger = document.getElementById('dvb-notif-trigger');
+    const notifDropdown = document.getElementById('dvb-notif-dropdown');
+    notifTrigger.onclick = (e) => {
+      e.stopPropagation();
+      dropdown.style.display = 'none';
+      arrow.style.transform = 'rotate(0deg)';
+      const isOpen = notifDropdown.style.display === 'flex';
+      notifDropdown.style.display = isOpen ? 'none' : 'flex';
+      if (!isOpen) checkNewRegistrations();
+    };
+  }
+
   document.addEventListener('click', () => {
     dropdown.style.display = 'none';
     arrow.style.transform  = 'rotate(0deg)';
+    if (usuario.admin) {
+      document.getElementById('dvb-notif-dropdown').style.display = 'none';
+    }
   });
+
+  if (usuario.admin) {
+    checkNewRegistrations();
+    setInterval(checkNewRegistrations, 60000); // Checa a cada 1 minuto
+  }
 
   if (typeof window.renderHistory === 'function') window.renderHistory();
 }
+
+async function checkNewRegistrations() {
+  const token = getToken();
+  if (!token) return;
+  try {
+    const res = await fetch(`${AUTH_WORKER}/admin/users`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json();
+    const pendentes = (data.usuarios || []).filter(u => !u.aprovado);
+    
+    const badge = document.getElementById('dvb-notif-badge');
+    const list = document.getElementById('dvb-notif-list');
+    const countText = document.getElementById('dvb-notif-count-text');
+
+    if (pendentes.length > 0) {
+      badge.style.display = 'flex';
+      badge.textContent = pendentes.length;
+      countText.textContent = `${pendentes.length} pendentes`;
+      
+      list.innerHTML = pendentes.map(u => `
+        <div style="padding:12px; border-bottom:1px solid rgba(255,255,255,0.05); transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+          <div style="font-size:12px; font-weight:700; color:var(--text);">${u.nome}</div>
+          <div style="font-size:10px; color:var(--accent-2); text-transform:uppercase;">${u.setor || 'Geral'}</div>
+          <div style="font-size:10px; color:var(--muted); margin-top:2px;">${u.email}</div>
+          <div style="margin-top:8px; display:flex; gap:5px;">
+            <button onclick="dvbAprovarNotif(${u.id}, 1)" style="flex:1; padding:5px; border-radius:6px; border:none; background:#14532d; color:#86efac; font-size:10px; font-weight:700; cursor:pointer;">Aprovar</button>
+            <button onclick="dvbDeletarNotif(${u.id}, '${u.nome}')" style="padding:5px; border-radius:6px; border:none; background:#3f0f0f; color:#fca5a5; font-size:10px; font-weight:700; cursor:pointer;">Excluir</button>
+          </div>
+        </div>
+      `).join('');
+    } else {
+      badge.style.display = 'none';
+      countText.textContent = '0 pendentes';
+      list.innerHTML = '<div style="padding:20px; text-align:center; color:var(--muted); font-size:12px;">Nenhuma notificação nova</div>';
+    }
+  } catch (err) {
+    console.error("Erro ao checar notificações:", err);
+  }
+}
+
+window.dvbAprovarNotif = async function(id, aprovado) {
+  await window.dvbAprovar(id, aprovado);
+  checkNewRegistrations();
+};
+
+window.dvbDeletarNotif = async function(id, nome) {
+  if (!confirm(`Deseja realmente excluir o cadastro de ${nome}?`)) return;
+  const token = getToken();
+  await fetch(`${AUTH_WORKER}/admin/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ id })
+  });
+  checkNewRegistrations();
+};
 
 window.dvbLogout = function() {
   limparSessao();
