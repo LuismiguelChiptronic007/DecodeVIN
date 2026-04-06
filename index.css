@@ -73,7 +73,7 @@ input[type=text], textarea{
   box-shadow:var(--shadow);
   cursor:text;
 }
-input[type=text]:focus{border-color:var(--accent-2); box-shadow:0 0 0 3px rgba(56,189,248,.25), var(--shadow)}
+input[type=text]:focus{bordcver-color:var(--accent-2); box-shadow:0 0 0 3px rgba(56,189,248,.25), var(--shadow)}
 
 textarea {
   scrollbar-width: none;
@@ -95,7 +95,7 @@ button:active{transform:translateY(1px)}
 button:disabled{opacity:.6;cursor:not-allowed;filter:none;box-shadow:none}
 
 /* Selection Screen */
-.selection-screen{
+.selection-screen{ 
   display:flex;
   flex-direction:column;
   align-items:center;

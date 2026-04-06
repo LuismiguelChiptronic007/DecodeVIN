@@ -657,6 +657,7 @@ window.renderHistory = renderHistory;
       const indexInFullList = start + idx;
       const row = document.createElement("div");
       row.className = "item clickable";
+      row.style.padding = "12px 15px";
       
       const v = document.createElement("div");
       v.style.flex = "1";
@@ -722,7 +723,51 @@ window.renderHistory = renderHistory;
         }
       };
 
+      const actions = document.createElement("div");
+      actions.style.display = "flex";
+      actions.style.alignItems = "center";
+      actions.style.gap = "8px";
+
+      const btnExportSingle = document.createElement("button");
+      btnExportSingle.className = "btn-page";
+      btnExportSingle.textContent = "📄";
+      btnExportSingle.title = "Exportar relatório deste chassi";
+      btnExportSingle.style.padding = "6px 10px";
+      btnExportSingle.style.minWidth = "36px";
+      btnExportSingle.onclick = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const oldTxt = btnExportSingle.textContent;
+        btnExportSingle.disabled = true;
+        btnExportSingle.textContent = "⏳";
+        const progresso = criarModalProgressoLote("Gerando relatório...");
+        const t0 = Date.now();
+        try {
+          const reportData = await montarRelatorioDoHistorico({
+            vins: item.input || "",
+            plates: item.plate || ""
+          }, (done, total) => {
+            progresso.update(done, total, Date.now() - t0);
+          });
+          if (!reportData || reportData.length === 0) {
+            showToast("Não foi possível montar o relatório.", "error");
+            return;
+          }
+          const fileName = (item.plate || item.input || "Relatorio").replace(/\s+/g, "_");
+          openReportOptions(reportData, `Relatorio_${fileName}`);
+        } catch (err) {
+          showToast("Erro ao preparar relatório.", "error");
+        } finally {
+          progresso.close();
+          btnExportSingle.disabled = false;
+          btnExportSingle.textContent = oldTxt;
+        }
+      };
+
+      actions.appendChild(btnExportSingle);
       row.appendChild(v);
+      row.appendChild(actions);
       h.appendChild(row);
     });
 
