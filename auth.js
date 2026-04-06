@@ -943,6 +943,9 @@ window.dvbEditarPerfil = function() {
           <input id="edit-senha" type="password" placeholder="Nova senha (deixe vazio para manter)" style="${localInputStyle} padding-right:45px;">
           <button onclick="dvbTogglePass(event, 'edit-senha')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px;">👁️</button>
         </div>
+        <p style="margin:8px 0 0; font-size:11px; color:var(--muted); font-style:italic;">
+          Requisito: Mínimo 6 caracteres, uma letra maiúscula e um caracter especial.
+        </p>
       </div>
 
       <button onclick="dvbSalvarPerfil()" style="${localBtnStyle}">Salvar Alterações</button>
@@ -964,6 +967,19 @@ window.dvbSalvarPerfil = async function() {
     msgEl.style.color = "#fca5a5";
     msgEl.style.display = "block";
     return;
+  }
+
+  if (senha) {
+    if (senha.length < 6) {
+      msgEl.textContent = "A senha deve ter pelo menos 6 caracteres.";
+      msgEl.style.color = "#fca5a5"; msgEl.style.display = "block";
+      return;
+    }
+    if (!/[A-Z]/.test(senha) || !/[!@#$%^&*(),.?":{}|<>]/.test(senha)) {
+      msgEl.textContent = "A senha deve conter uma letra maiúscula e um caracter especial.";
+      msgEl.style.color = "#fca5a5"; msgEl.style.display = "block";
+      return;
+    }
   }
 
   msgEl.textContent = "Salvando...";
@@ -1048,6 +1064,9 @@ window.dvbEsqueceuSenha = function() {
           <input id="forgot-senha" type="password" placeholder="Mínimo 6 caracteres" style="${localInputStyle} padding-right:45px;">
           <button onclick="dvbTogglePass(event, 'forgot-senha')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px;">👁️</button>
         </div>
+        <p style="margin:8px 0 0; font-size:11px; color:var(--muted); font-style:italic;">
+          Requisito: Mínimo 6 caracteres, uma letra maiúscula e um caracter especial.
+        </p>
       </div>
 
       <div style="margin-bottom:24px;">
@@ -1078,6 +1097,11 @@ window.dvbEnviarRecuperacao = async function() {
   }
   if (senha.length < 6) {
     msgEl.textContent = "A senha deve ter pelo menos 6 caracteres.";
+    msgEl.style.color = "#fca5a5"; msgEl.style.background = "rgba(239, 68, 68, 0.1)"; msgEl.style.display = "block";
+    return;
+  }
+  if (!/[A-Z]/.test(senha) || !/[!@#$%^&*(),.?":{}|<>]/.test(senha)) {
+    msgEl.textContent = "A senha deve conter uma letra maiúscula e um caracter especial.";
     msgEl.style.color = "#fca5a5"; msgEl.style.background = "rgba(239, 68, 68, 0.1)"; msgEl.style.display = "block";
     return;
   }
