@@ -1433,31 +1433,8 @@ function resetarTimerInatividade() {
   window.addEventListener(evt, resetarTimerInatividade, { passive: true });
 });
 
-// Atalhos de teclado: Enter para submeter e ESC para fechar modais
+// Atalho de teclado: Enter para submeter formulários
 window.addEventListener('keydown', (e) => {
-  // ESC: Fechar modais abertos
-  if (e.key === 'Escape') {
-    const modais = [
-      'dvb-auth-overlay',
-      'dvb-admin-modal',
-      'dvb-edit-profile-overlay',
-      'dvb-forgot-overlay',
-      'dvb-confirm-overlay',
-      'dvb-alert-modal',
-      'dvb-confirm-modal'
-    ];
-    
-    for (const id of modais) {
-      const el = document.getElementById(id);
-      if (el) {
-        el.remove();
-        // Se fechar o menu de admin, pode ser útil recarregar ou resetar estados
-        if (id === 'dvb-admin-modal') checkNewRegistrations();
-        break; // Fecha apenas o último modal aberto (o que estiver no topo)
-      }
-    }
-  }
-
   // ENTER: Submeter formulários ativos
   if (e.key === 'Enter') {
     // Verifica qual formulário está visível/ativo
