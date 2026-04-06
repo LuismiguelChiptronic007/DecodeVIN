@@ -258,12 +258,12 @@ function mostrarTelaLogin() {
         </div>
 
         <div style="display:flex; background:var(--bg); padding:4px; border-radius:12px; gap:4px; margin-bottom:32px; border:1px solid var(--border);">
-          <button id="tab-login" onclick="dvbShowTab('login')" style="
+          <button id="tab-login" onclick="dvbSwitchAuth(true)" style="
             flex:1; padding:10px; border-radius:8px; border:none; cursor:pointer;
             background:var(--accent-2); color:#000; font-weight:700; font-size:14px;
             transition: all 0.2s ease;
           ">Acessar</button>
-          <button id="tab-cadastro" onclick="dvbShowTab('cadastro')" style="
+          <button id="tab-cadastro" onclick="dvbSwitchAuth(false)" style="
             flex:1; padding:10px; border-radius:8px; border:none; cursor:pointer;
             background:transparent; color:var(--muted); font-weight:600; font-size:14px;
             transition: all 0.2s ease;
@@ -283,7 +283,7 @@ function mostrarTelaLogin() {
             </div>
             <div style="position:relative;">
               <input id="login-senha" type="password" placeholder="••••••••" style="${inputStyle()} padding-right:45px;">
-              <button onclick="dvbTogglePass('login-senha')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px; padding:5px;">👁️</button>
+              <button onclick="dvbTogglePass(event, 'login-senha')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px; padding:5px;">👁️</button>
             </div>
           </div>
           <button onclick="dvbLogin()" style="${btnStyle()}">Entrar no Sistema</button>
@@ -324,7 +324,7 @@ function mostrarTelaLogin() {
             <label style="display:block; font-size:12px; font-weight:700; color:var(--accent-2); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Defina uma Senha</label>
             <div style="position:relative;">
               <input id="cad-senha" type="password" placeholder="Mínimo 6 caracteres" style="${inputStyle()} padding-right:45px;">
-              <button onclick="dvbTogglePass('cad-senha')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px; padding:5px;">👁️</button>
+              <button onclick="dvbTogglePass(event, 'cad-senha')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px; padding:5px;">👁️</button>
             </div>
             <p style="margin:8px 0 0; font-size:11px; color:var(--muted); font-style:italic;">
               Requisito: Mínimo 6 caracteres, uma letra maiúscula e um caracter especial.
@@ -389,33 +389,6 @@ function btnStyle(bg = 'var(--accent-2)') {
   `;
 }
 
-window.dvbShowTab = function(tab) {
-  const isLogin = tab === 'login';
-  document.getElementById('form-login').style.display    = isLogin ? 'block' : 'none';
-  document.getElementById('form-cadastro').style.display = isLogin ? 'none' : 'block';
-  const tabLogin = document.getElementById('tab-login');
-  const tabCad   = document.getElementById('tab-cadastro');
-  tabLogin.style.background = isLogin ? 'var(--accent-2)' : 'transparent';
-  tabLogin.style.color      = isLogin ? '#000' : 'var(--muted)';
-  tabLogin.style.fontWeight = isLogin ? '700' : '600';
-  tabCad.style.background   = isLogin ? 'transparent' : 'var(--accent-2)';
-  tabCad.style.color        = isLogin ? 'var(--muted)' : '#000';
-  tabCad.style.fontWeight   = isLogin ? '600' : '700';
-
-  if (!isLogin) {
-    const cadNome = document.getElementById('cad-nome');
-    const cadSetor = document.getElementById('cad-setor');
-    const cadEmail = document.getElementById('cad-email');
-    const cadSenha = document.getElementById('cad-senha');
-    if (cadNome) cadNome.value = '';
-    if (cadSetor) cadSetor.selectedIndex = 0;
-    if (cadEmail) cadEmail.value = '';
-    if (cadSenha) cadSenha.value = '';
-  }
-
-  dvbMsg('', '');
-};
-
 window.dvbConfirm = function(titulo, mensagem, callback) {
   const existing = document.getElementById('dvb-confirm-overlay');
   if (existing) existing.remove();
@@ -478,7 +451,7 @@ function dvbMsg(texto, tipo) {
   el.textContent      = (tipo === 'erro' ? '⚠️ ' : '✅ ') + texto;
 }
 
-window.dvbTogglePass = function(id) {
+window.dvbTogglePass = function(event, id) {
   const el = document.getElementById(id);
   if (el.type === 'password') {
     el.type = 'text';
@@ -738,6 +711,42 @@ function mostrarApp(usuario) {
   if (typeof window.renderHistory === 'function') window.renderHistory();
 }
 
+// Alterna entre as abas de login e cadastro
+window.dvbSwitchAuth = function(isLogin) {
+  const formLogin = document.getElementById('form-login');
+  const formCad   = document.getElementById('form-cadastro');
+  if (formLogin) formLogin.style.display = isLogin ? 'block' : 'none';
+  if (formCad) formCad.style.display = isLogin ? 'none' : 'block';
+
+  const tabLogin = document.getElementById('tab-login');
+  const tabCad   = document.getElementById('tab-cadastro');
+
+  if (tabLogin) {
+    tabLogin.style.background = isLogin ? 'var(--accent-2)' : 'transparent';
+    tabLogin.style.color      = isLogin ? '#000' : 'var(--muted)';
+    tabLogin.style.fontWeight = isLogin ? '700' : '600';
+  }
+
+  if (tabCad) {
+    tabCad.style.background   = isLogin ? 'transparent' : 'var(--accent-2)';
+    tabCad.style.color        = isLogin ? 'var(--muted)' : '#000';
+    tabCad.style.fontWeight   = isLogin ? '600' : '700';
+  }
+
+  if (!isLogin) {
+    const cadNome = document.getElementById('cad-nome');
+    const cadSetor = document.getElementById('cad-setor');
+    const cadEmail = document.getElementById('cad-email');
+    const cadSenha = document.getElementById('cad-senha');
+    if (cadNome) cadNome.value = '';
+    if (cadSetor) cadSetor.selectedIndex = 0;
+    if (cadEmail) cadEmail.value = '';
+    if (cadSenha) cadSenha.value = '';
+  }
+
+  dvbMsg('', '');
+};
+
 async function checkNewRegistrations() {
   const token = getToken();
   if (!token) return;
@@ -747,18 +756,21 @@ async function checkNewRegistrations() {
     });
     const data = await res.json();
     
+    console.log("DEBUG: Resposta do Worker /admin/users:", data);
+    
     // Filtra usuários não aprovados (novos cadastros)
     const pendentes = (data.usuarios || []).filter(u => !u.aprovado);
     
     // Filtra usuários que solicitaram reset de senha (que tenham reset_senha_pendente no DB)
-    // Nota: Como não temos o campo no DB ainda, o Worker precisará retornar essa info
-    const resets = (data.usuarios || []).filter(u => u.reset_senha_pendente);
+    const resets = (data.usuarios || []).filter(u => u.reset_senha_pendente == 1 || u.reset_senha_pendente === true || u.reset_senha_pendente === '1');
 
     const badge = document.getElementById('dvb-notif-badge');
     const list = document.getElementById('dvb-notif-list');
     const countText = document.getElementById('dvb-notif-count-text');
 
     const totalNotif = pendentes.length + resets.length;
+    
+    console.log("DEBUG: Pendentes:", pendentes.length, "Resets:", resets.length);
 
     if (totalNotif > 0) {
       badge.style.display = 'flex';
@@ -818,7 +830,7 @@ window.dvbAprovarResetNotif = async function(id, nome) {
       const res = await fetch(`${AUTH_WORKER}/admin/approve-password-reset`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ id, aprovado: true })
+        body: JSON.stringify({ id, aprovar: true })
       });
       if (!res.ok) {
         const data = await res.json();
@@ -837,7 +849,7 @@ window.dvbRecusarResetNotif = async function(id) {
     const res = await fetch(`${AUTH_WORKER}/admin/approve-password-reset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ id, aprovado: false })
+      body: JSON.stringify({ id, aprovar: false })
     });
     if (!res.ok) {
       const data = await res.json();
@@ -929,7 +941,7 @@ window.dvbEditarPerfil = function() {
         <label style="display:block; font-size:11px; font-weight:700; color:var(--accent-2); text-transform:uppercase; margin-bottom:12px;">Alterar Senha (Opcional)</label>
         <div style="position:relative; margin-bottom:10px;">
           <input id="edit-senha" type="password" placeholder="Nova senha (deixe vazio para manter)" style="${localInputStyle} padding-right:45px;">
-          <button onclick="dvbTogglePass('edit-senha')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px;">👁️</button>
+          <button onclick="dvbTogglePass(event, 'edit-senha')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px;">👁️</button>
         </div>
       </div>
 
@@ -1034,7 +1046,7 @@ window.dvbEsqueceuSenha = function() {
         <label style="display:block; font-size:11px; font-weight:700; color:var(--accent-2); text-transform:uppercase; margin-bottom:8px;">Nova Senha</label>
         <div style="position:relative;">
           <input id="forgot-senha" type="password" placeholder="Mínimo 6 caracteres" style="${localInputStyle} padding-right:45px;">
-          <button onclick="dvbTogglePass('forgot-senha')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px;">👁️</button>
+          <button onclick="dvbTogglePass(event, 'forgot-senha')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px;">👁️</button>
         </div>
       </div>
 
@@ -1042,7 +1054,7 @@ window.dvbEsqueceuSenha = function() {
         <label style="display:block; font-size:11px; font-weight:700; color:var(--accent-2); text-transform:uppercase; margin-bottom:8px;">Confirmar Nova Senha</label>
         <div style="position:relative;">
           <input id="forgot-senha-conf" type="password" placeholder="Repita a nova senha" style="${localInputStyle} padding-right:45px;">
-          <button onclick="dvbTogglePass('forgot-senha-conf')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px;">👁️</button>
+          <button onclick="dvbTogglePass(event, 'forgot-senha-conf')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px;">👁️</button>
         </div>
       </div>
 
@@ -1082,12 +1094,13 @@ window.dvbEnviarRecuperacao = async function() {
     const res = await fetch(`${AUTH_WORKER}/user/request-password-reset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, novaSenha: senha })
+      body: JSON.stringify({ email, senha })
     });
 
     if (res.ok) {
-      msgEl.textContent = "Solicitação enviada! Notificamos o administrador por e-mail para aprovação.";
+      msgEl.textContent = "Solicitação enviada! Um administrador aprovará sua nova senha em breve.";
       msgEl.style.color = "#86efac"; msgEl.style.background = "rgba(34, 197, 94, 0.1)";
+
       setTimeout(() => {
         const forgotOverlay = document.getElementById('dvb-forgot-overlay');
         if (forgotOverlay) forgotOverlay.remove();
@@ -1130,7 +1143,7 @@ window.dvbAdmin = async function() {
   modal.id = 'dvb-admin-modal';
 
   const users = data.usuarios || [];
-  const resets = users.filter(u => u.reset_senha_pendente);
+  const resets = users.filter(u => u.reset_senha_pendente == 1 || u.reset_senha_pendente === true || u.reset_senha_pendente === '1');
 
   const linhasUsers = users.map(u => `
     <tr id="user-row-${u.id}" style="border-bottom:1px solid var(--border); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
@@ -1239,7 +1252,7 @@ window.dvbAprovarResetSenha = async function(id, aprovado) {
     const res = await fetch(`${AUTH_WORKER}/admin/approve-password-reset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ id, aprovado })
+      body: JSON.stringify({ id, aprovar: aprovado })
     });
     if (res.ok) {
       dvbAdmin(); // Recarrega o painel
