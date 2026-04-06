@@ -277,7 +277,10 @@ function mostrarTelaLogin() {
             <input id="login-email" type="email" placeholder="nome@exemplo.com" style="${inputStyle()}">
           </div>
           <div style="margin-bottom:24px;">
-            <label style="display:block; font-size:12px; font-weight:700; color:var(--accent-2); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Senha</label>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <label style="margin:0; font-size:12px; font-weight:700; color:var(--accent-2); text-transform:uppercase; letter-spacing:1px;">Senha</label>
+              <a href="#" onclick="dvbEsqueceuSenha(); return false;" style="font-size:11px; color:var(--muted); text-decoration:none; font-weight:600; transition:color 0.2s;" onmouseover="this.style.color='var(--accent-2)'" onmouseout="this.style.color='var(--muted)'">Esqueceu a senha?</a>
+            </div>
             <div style="position:relative;">
               <input id="login-senha" type="password" placeholder="••••••••" style="${inputStyle()} padding-right:45px;">
               <button onclick="dvbTogglePass('login-senha')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px; padding:5px;">👁️</button>
@@ -296,21 +299,21 @@ function mostrarTelaLogin() {
             <label style="display:block; font-size:12px; font-weight:700; color:var(--accent-2); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Setor</label>
             <select id="cad-setor" style="${inputStyle()} appearance:none; background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2338bdf8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E'); background-repeat: no-repeat; background-position: right 12px top 50%; background-size: 12px auto; padding-right: 40px;">
               <option value="" disabled selected>Selecione seu setor</option>
-              <option value="OBDMAP">OBDMAP</option>
+              <option value="APLICAÇÃO">APLICAÇÃO</option>
+              <option value="CRIPTO">CRIPTO</option>
               <option value="DIESELDIAG">DIESELDIAG</option>
+              <option value="ECU TEST">ECU TEST</option>
+              <option value="HARDWARE">HARDWARE</option>
               <option value="MOBILE">MOBILE</option>
               <option value="MOTODIAG">MOTODIAG</option>
-              <option value="ECU TEST">ECU TEST</option>
+              <option value="OBDMAP">OBDMAP</option>
               <option value="PROJETOS ESPECIAIS">PROJETOS ESPECIAIS</option>
-              <option value="APLICAÇÃO">APLICAÇÃO</option>
+              <option value="RESOLVE">RESOLVE</option>
+              <option value="T.I INTERNO">T.I INTERNO</option>
+              <option value="T.I TELEMETRIA">T.I TELEMETRIA</option>
               <option value="TELEMETRIA ADM">TELEMETRIA ADM</option>
               <option value="TELEMETRIA HW">TELEMETRIA HW</option>
               <option value="TELEMETRIA SW">TELEMETRIA SW</option>
-              <option value="T.I TELEMETRIA">T.I TELEMETRIA</option>
-              <option value="T.I INTERNO">T.I INTERNO</option>
-              <option value="HARDWARE">HARDWARE</option>
-              <option value="CRIPTO">CRIPTO</option>
-              <option value="RESOLVE">RESOLVE</option>
             </select>
           </div>
           <div style="margin-bottom:16px;">
@@ -411,6 +414,58 @@ window.dvbShowTab = function(tab) {
   }
 
   dvbMsg('', '');
+};
+
+window.dvbConfirm = function(titulo, mensagem, callback) {
+  const existing = document.getElementById('dvb-confirm-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'dvb-confirm-overlay';
+  overlay.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px);
+    z-index: 1000002; display: flex; align-items: center; justify-content: center;
+    animation: fadeIn 0.3s ease;
+  `;
+
+  overlay.innerHTML = `
+    <div style="
+      background: var(--card); border: 1px solid var(--border); border-radius: 24px;
+      width: 90%; max-width: 400px; padding: 32px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+      text-align: center; animation: slideUp 0.3s ease-out;
+    ">
+      <div style="font-size: 40px; margin-bottom: 20px;">⚠️</div>
+      <h3 style="margin: 0 0 12px; color: var(--text); font-size: 20px; font-weight: 800;">${titulo}</h3>
+      <p style="margin: 0 0 32px; color: var(--muted); font-size: 14px; line-height: 1.6;">${mensagem}</p>
+      
+      <div style="display: flex; gap: 12px;">
+        <button id="dvb-confirm-cancel" style="
+          flex: 1; padding: 14px; border-radius: 12px; border: 1px solid var(--border);
+          background: rgba(255,255,255,0.03); color: var(--text); font-size: 14px;
+          font-weight: 700; cursor: pointer; transition: all 0.2s;
+        " onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
+          Cancelar
+        </button>
+        <button id="dvb-confirm-ok" style="
+          flex: 1; padding: 14px; border-radius: 12px; border: none;
+          background: var(--danger); color: white; font-size: 14px;
+          font-weight: 700; cursor: pointer; transition: all 0.2s;
+          box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+        " onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter='none'">
+          Confirmar
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('dvb-confirm-cancel').onclick = () => overlay.remove();
+  document.getElementById('dvb-confirm-ok').onclick = () => {
+    overlay.remove();
+    if (callback) callback();
+  };
 };
 
 function dvbMsg(texto, tipo) {
@@ -542,6 +597,15 @@ function mostrarApp(usuario) {
       <span style="font-size:18px;">🔔</span>
       <div id="dvb-notif-badge" style="position:absolute; top:-5px; right:-5px; background:var(--danger); color:white; font-size:10px; font-weight:800; width:18px; height:18px; border-radius:50%; display:none; align-items:center; justify-content:center; border:2px solid var(--bg-elev); box-shadow:0 2px 5px rgba(0,0,0,0.3);">0</div>
       
+      <style>
+        @keyframes pulseNotif {
+          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+          70% { transform: scale(1.2); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .notif-pulse { animation: pulseNotif 2s infinite; }
+      </style>
+
       <div id="dvb-notif-dropdown" style="position:absolute; top:120%; right:0; width:300px; background:var(--card); border:1px solid var(--border); border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.4); display:none; flex-direction:column; overflow:hidden; z-index:1001; animation:slideUp 0.2s ease-out;">
         <div style="padding:15px; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); display:flex; justify-content:space-between; align-items:center;">
           <span style="font-size:13px; font-weight:700; color:var(--text);">Notificações</span>
@@ -609,6 +673,14 @@ function mostrarApp(usuario) {
               </a>
             ` : ''}
             
+            <a href="#" onclick="dvbEditarPerfil(); return false;" style="
+              display:flex; align-items:center; gap:12px; padding:12px; border-radius:10px;
+              color:var(--text); text-decoration:none; font-size:13px; font-weight:600;
+              transition: background 0.2s;
+            " onmouseover="this.style.background='rgba(56,189,248,0.1)'" onmouseout="this.style.background='transparent'">
+              <span style="font-size:16px;">👤</span> Editar Perfil
+            </a>
+
             <a href="#" onclick="dvbLogout(); return false;" style="
               display:flex; align-items:center; gap:12px; padding:12px; border-radius:10px;
               color:var(--danger); text-decoration:none; font-size:13px; font-weight:600;
@@ -660,7 +732,7 @@ function mostrarApp(usuario) {
 
   if (usuario.admin) {
     checkNewRegistrations();
-    setInterval(checkNewRegistrations, 60000); // Checa a cada 1 minuto
+    setInterval(checkNewRegistrations, 10000); // Checa a cada 10 segundos para ser "em tempo real"
   }
 
   if (typeof window.renderHistory === 'function') window.renderHistory();
@@ -674,30 +746,63 @@ async function checkNewRegistrations() {
       headers: { Authorization: `Bearer ${token}` }
     });
     const data = await res.json();
+    
+    // Filtra usuários não aprovados (novos cadastros)
     const pendentes = (data.usuarios || []).filter(u => !u.aprovado);
     
+    // Filtra usuários que solicitaram reset de senha (que tenham reset_senha_pendente no DB)
+    // Nota: Como não temos o campo no DB ainda, o Worker precisará retornar essa info
+    const resets = (data.usuarios || []).filter(u => u.reset_senha_pendente);
+
     const badge = document.getElementById('dvb-notif-badge');
     const list = document.getElementById('dvb-notif-list');
     const countText = document.getElementById('dvb-notif-count-text');
 
-    if (pendentes.length > 0) {
+    const totalNotif = pendentes.length + resets.length;
+
+    if (totalNotif > 0) {
       badge.style.display = 'flex';
-      badge.textContent = pendentes.length;
-      countText.textContent = `${pendentes.length} pendentes`;
+      badge.textContent = totalNotif;
+      badge.classList.add('notif-pulse');
+      countText.textContent = `${totalNotif} pendentes`;
       
-      list.innerHTML = pendentes.map(u => `
-        <div style="padding:12px; border-bottom:1px solid rgba(255,255,255,0.05); transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
-          <div style="font-size:12px; font-weight:700; color:var(--text);">${u.nome}</div>
-          <div style="font-size:10px; color:var(--accent-2); text-transform:uppercase;">${u.setor || 'Geral'}</div>
-          <div style="font-size:10px; color:var(--muted); margin-top:2px;">${u.email}</div>
-          <div style="margin-top:8px; display:flex; gap:5px;">
-            <button onclick="dvbAprovarNotif(${u.id}, 1)" style="flex:1; padding:5px; border-radius:6px; border:none; background:#14532d; color:#86efac; font-size:10px; font-weight:700; cursor:pointer;">Aprovar</button>
-            <button onclick="dvbDeletarNotif(${u.id}, '${u.nome}')" style="padding:5px; border-radius:6px; border:none; background:#3f0f0f; color:#fca5a5; font-size:10px; font-weight:700; cursor:pointer;">Excluir</button>
+      let html = '';
+      
+      // Lista novos cadastros
+      pendentes.forEach(u => {
+        html += `
+          <div style="padding:12px; border-bottom:1px solid rgba(255,255,255,0.05); transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+            <div style="font-size:10px; color:#fbbf24; font-weight:800; text-transform:uppercase; margin-bottom:4px;">🆕 Novo Cadastro</div>
+            <div style="font-size:12px; font-weight:700; color:var(--text);">${u.nome}</div>
+            <div style="font-size:10px; color:var(--accent-2); text-transform:uppercase;">${u.setor || 'Geral'}</div>
+            <div style="font-size:10px; color:var(--muted); margin-top:2px;">${u.email}</div>
+            <div style="margin-top:8px; display:flex; gap:5px;">
+              <button onclick="dvbAprovarNotif(${u.id}, 1)" style="flex:1; padding:5px; border-radius:6px; border:none; background:#14532d; color:#86efac; font-size:10px; font-weight:700; cursor:pointer;">Aprovar</button>
+              <button onclick="dvbDeletarNotif(${u.id}, '${u.nome}')" style="padding:5px; border-radius:6px; border:none; background:#3f0f0f; color:#fca5a5; font-size:10px; font-weight:700; cursor:pointer;">Excluir</button>
+            </div>
           </div>
-        </div>
-      `).join('');
+        `;
+      });
+
+      // Lista solicitações de senha
+      resets.forEach(u => {
+        html += `
+          <div style="padding:12px; border-bottom:1px solid rgba(255,255,255,0.05); transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+            <div style="font-size:10px; color:#38bdf8; font-weight:800; text-transform:uppercase; margin-bottom:4px;">🔑 Reset de Senha</div>
+            <div style="font-size:12px; font-weight:700; color:var(--text);">${u.nome}</div>
+            <div style="font-size:10px; color:var(--muted); margin-top:2px;">${u.email}</div>
+            <div style="margin-top:8px; display:flex; gap:5px;">
+              <button onclick="dvbAprovarResetNotif(${u.id}, '${u.nome}')" style="flex:1; padding:5px; border-radius:6px; border:none; background:#1e3a8a; color:#bfdbfe; font-size:10px; font-weight:700; cursor:pointer;">Aprovar Nova Senha</button>
+              <button onclick="dvbRecusarResetNotif(${u.id})" style="padding:5px; border-radius:6px; border:none; background:#3f0f0f; color:#fca5a5; font-size:10px; font-weight:700; cursor:pointer;">Recusar</button>
+            </div>
+          </div>
+        `;
+      });
+
+      list.innerHTML = html;
     } else {
       badge.style.display = 'none';
+      badge.classList.remove('notif-pulse');
       countText.textContent = '0 pendentes';
       list.innerHTML = '<div style="padding:20px; text-align:center; color:var(--muted); font-size:12px;">Nenhuma notificação nova</div>';
     }
@@ -706,25 +811,296 @@ async function checkNewRegistrations() {
   }
 }
 
+window.dvbAprovarResetNotif = async function(id, nome) {
+  window.dvbConfirm('Aprovar Senha', `Deseja aprovar a nova senha solicitada por ${nome}?`, async () => {
+    const token = getToken();
+    try {
+      const res = await fetch(`${AUTH_WORKER}/admin/approve-password-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id, aprovado: true })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        dvbAlert('Erro', data.erro || 'Erro ao aprovar reset.', 'erro');
+      }
+      checkNewRegistrations();
+    } catch (err) {
+      dvbAlert('Erro de Conexão', 'Não foi possível contatar o servidor.', 'erro');
+    }
+  });
+};
+
+window.dvbRecusarResetNotif = async function(id) {
+  const token = getToken();
+  try {
+    const res = await fetch(`${AUTH_WORKER}/admin/approve-password-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ id, aprovado: false })
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      dvbAlert('Erro', data.erro || 'Erro ao recusar reset.', 'erro');
+    }
+    checkNewRegistrations();
+  } catch (err) {
+    dvbAlert('Erro de Conexão', 'Não foi possível contatar o servidor.', 'erro');
+  }
+};
+
 window.dvbAprovarNotif = async function(id, aprovado) {
   await window.dvbAprovar(id, aprovado);
   checkNewRegistrations();
 };
 
 window.dvbDeletarNotif = async function(id, nome) {
-  if (!confirm(`Deseja realmente excluir o cadastro de ${nome}?`)) return;
-  const token = getToken();
-  await fetch(`${AUTH_WORKER}/admin/delete`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ id })
+  window.dvbConfirm('Excluir Cadastro', `Deseja realmente excluir o cadastro de ${nome}?`, async () => {
+    const token = getToken();
+    await fetch(`${AUTH_WORKER}/admin/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ id })
+    });
+    checkNewRegistrations();
   });
-  checkNewRegistrations();
 };
 
 window.dvbLogout = function() {
   limparSessao();
   location.reload();
+};
+
+window.dvbEditarPerfil = function() {
+  const user = getUser();
+  if (!user) return;
+
+  const existing = document.getElementById('dvb-edit-profile-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'dvb-edit-profile-overlay';
+  overlay.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px);
+    z-index: 1000005; display: flex; align-items: center; justify-content: center;
+    animation: fadeIn 0.3s ease;
+  `;
+
+  const setores = [
+    "APLICAÇÃO", "CRIPTO", "DIESELDIAG", "ECU TEST", "HARDWARE", 
+    "MOBILE", "MOTODIAG", "OBDMAP", "PROJETOS ESPECIAIS", "RESOLVE", 
+    "T.I INTERNO", "T.I TELEMETRIA", "TELEMETRIA ADM", "TELEMETRIA HW", "TELEMETRIA SW"
+  ];
+
+  const setorOptions = setores.map(s => 
+    `<option value="${s}" ${user.setor === s ? 'selected' : ''}>${s}</option>`
+  ).join('');
+
+  // Estilos locais para garantir funcionamento fora do escopo de login
+  const localInputStyle = `width:100%; padding:12px 16px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:12px; outline:none; font-size:14px; transition:all 0.2s;`;
+  const localBtnStyle = `width:100%; padding:14px; background:var(--accent-2); color:#000; border:none; border-radius:12px; font-weight:700; font-size:15px; cursor:pointer; transition:all 0.2s; box-shadow:0 4px 15px rgba(56,189,248,0.2);`;
+
+  overlay.innerHTML = `
+    <div style="
+      background: var(--card); border: 1px solid var(--border); border-radius: 24px;
+      width: 95%; max-width: 450px; padding: 32px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+      animation: slideUp 0.3s ease-out; position: relative;
+    ">
+      <button onclick="document.getElementById('dvb-edit-profile-overlay').remove()" style="position:absolute; right:20px; top:20px; background:none; border:none; color:var(--muted); cursor:pointer; font-size:24px;">&times;</button>
+      
+      <h2 style="margin: 0 0 24px; color: var(--text); font-size: 22px; font-weight: 800; text-align:center;">Editar Perfil</h2>
+      
+      <div id="edit-msg" style="margin-bottom:20px; padding:10px; border-radius:10px; font-size:12px; display:none; text-align:center;"></div>
+
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:11px; font-weight:700; color:var(--accent-2); text-transform:uppercase; margin-bottom:8px;">Nome Completo</label>
+        <input id="edit-nome" type="text" value="${user.nome}" style="${localInputStyle}">
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:11px; font-weight:700; color:var(--accent-2); text-transform:uppercase; margin-bottom:8px;">Setor</label>
+        <select id="edit-setor" style="${localInputStyle} appearance:none; background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2338bdf8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E'); background-repeat: no-repeat; background-position: right 12px top 50%; background-size: 12px auto;">
+          ${setorOptions}
+        </select>
+      </div>
+
+      <div style="margin-bottom:24px; padding:16px; background:rgba(255,255,255,0.02); border-radius:12px; border:1px solid var(--border);">
+        <label style="display:block; font-size:11px; font-weight:700; color:var(--accent-2); text-transform:uppercase; margin-bottom:12px;">Alterar Senha (Opcional)</label>
+        <div style="position:relative; margin-bottom:10px;">
+          <input id="edit-senha" type="password" placeholder="Nova senha (deixe vazio para manter)" style="${localInputStyle} padding-right:45px;">
+          <button onclick="dvbTogglePass('edit-senha')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px;">👁️</button>
+        </div>
+      </div>
+
+      <button onclick="dvbSalvarPerfil()" style="${localBtnStyle}">Salvar Alterações</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+};
+
+window.dvbSalvarPerfil = async function() {
+  const nome = document.getElementById('edit-nome').value.trim();
+  const setor = document.getElementById('edit-setor').value;
+  const senha = document.getElementById('edit-senha').value;
+  const msgEl = document.getElementById('edit-msg');
+  const token = getToken();
+
+  if (!nome) {
+    msgEl.textContent = "Nome não pode ficar vazio.";
+    msgEl.style.color = "#fca5a5";
+    msgEl.style.display = "block";
+    return;
+  }
+
+  msgEl.textContent = "Salvando...";
+  msgEl.style.color = "var(--accent-2)";
+  msgEl.style.display = "block";
+
+  try {
+    const res = await fetch(`${AUTH_WORKER}/user/update-profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ nome, setor, senha: senha || undefined })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      msgEl.textContent = data.erro || "Erro ao salvar.";
+      msgEl.style.color = "#fca5a5";
+      return;
+    }
+
+    // Atualiza a sessão local
+    const user = getUser();
+    user.nome = nome;
+    user.setor = setor;
+    localStorage.setItem('dvb_user', JSON.stringify(user));
+
+    msgEl.textContent = "Perfil atualizado com sucesso!";
+    msgEl.style.color = "#86efac";
+    
+    setTimeout(() => {
+      const editOverlay = document.getElementById('dvb-edit-profile-overlay');
+      if (editOverlay) editOverlay.remove();
+      location.reload(); // Recarrega para atualizar o nome na barra superior
+    }, 1500);
+
+  } catch (err) {
+    msgEl.textContent = "Erro de conexão.";
+    msgEl.style.color = "#fca5a5";
+  }
+};
+
+window.dvbEsqueceuSenha = function() {
+  const existing = document.getElementById('dvb-forgot-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'dvb-forgot-overlay';
+  overlay.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px);
+    z-index: 1000010; display: flex; align-items: center; justify-content: center;
+    animation: fadeIn 0.3s ease;
+  `;
+
+  const localInputStyle = `width:100%; padding:12px 16px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:12px; outline:none; font-size:14px; transition:all 0.2s;`;
+  const localBtnStyle = `width:100%; padding:14px; background:var(--accent-2); color:#000; border:none; border-radius:12px; font-weight:700; font-size:15px; cursor:pointer; transition:all 0.2s; box-shadow:0 4px 15px rgba(56,189,248,0.2);`;
+
+  overlay.innerHTML = `
+    <div style="
+      background: var(--card); border: 1px solid var(--border); border-radius: 24px;
+      width: 95%; max-width: 400px; padding: 32px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+      animation: slideUp 0.3s ease-out; position: relative;
+    ">
+      <button onclick="document.getElementById('dvb-forgot-overlay').remove()" style="position:absolute; right:20px; top:20px; background:none; border:none; color:var(--muted); cursor:pointer; font-size:24px;">&times;</button>
+      
+      <div style="font-size: 40px; margin-bottom: 20px; text-align:center;">🔑</div>
+      <h2 style="margin: 0 0 12px; color: var(--text); font-size: 22px; font-weight: 800; text-align:center;">Recuperar Acesso</h2>
+      <p style="margin: 0 0 24px; color: var(--muted); font-size: 14px; line-height: 1.6; text-align:center;">
+        Informe seu e-mail e a nova senha desejada. Um administrador aprovará sua solicitação.
+      </p>
+      
+      <div id="forgot-msg" style="margin-bottom:20px; padding:10px; border-radius:10px; font-size:12px; display:none; text-align:center;"></div>
+
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:11px; font-weight:700; color:var(--accent-2); text-transform:uppercase; margin-bottom:8px;">Seu E-mail</label>
+        <input id="forgot-email" type="email" placeholder="seu@email.com" style="${localInputStyle}">
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:11px; font-weight:700; color:var(--accent-2); text-transform:uppercase; margin-bottom:8px;">Nova Senha</label>
+        <div style="position:relative;">
+          <input id="forgot-senha" type="password" placeholder="Mínimo 6 caracteres" style="${localInputStyle} padding-right:45px;">
+          <button onclick="dvbTogglePass('forgot-senha')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px;">👁️</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom:24px;">
+        <label style="display:block; font-size:11px; font-weight:700; color:var(--accent-2); text-transform:uppercase; margin-bottom:8px;">Confirmar Nova Senha</label>
+        <div style="position:relative;">
+          <input id="forgot-senha-conf" type="password" placeholder="Repita a nova senha" style="${localInputStyle} padding-right:45px;">
+          <button onclick="dvbTogglePass('forgot-senha-conf')" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px;">👁️</button>
+        </div>
+      </div>
+
+      <button onclick="dvbEnviarRecuperacao()" style="${localBtnStyle}">Solicitar Nova Senha</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+};
+
+window.dvbEnviarRecuperacao = async function() {
+  const email = document.getElementById('forgot-email').value.trim();
+  const senha = document.getElementById('forgot-senha').value;
+  const conf  = document.getElementById('forgot-senha-conf').value;
+  const msgEl = document.getElementById('forgot-msg');
+
+  if (!email || !email.includes('@')) {
+    msgEl.textContent = "Informe um e-mail válido.";
+    msgEl.style.color = "#fca5a5"; msgEl.style.background = "rgba(239, 68, 68, 0.1)"; msgEl.style.display = "block";
+    return;
+  }
+  if (senha.length < 6) {
+    msgEl.textContent = "A senha deve ter pelo menos 6 caracteres.";
+    msgEl.style.color = "#fca5a5"; msgEl.style.background = "rgba(239, 68, 68, 0.1)"; msgEl.style.display = "block";
+    return;
+  }
+  if (senha !== conf) {
+    msgEl.textContent = "As senhas não coincidem.";
+    msgEl.style.color = "#fca5a5"; msgEl.style.background = "rgba(239, 68, 68, 0.1)"; msgEl.style.display = "block";
+    return;
+  }
+
+  msgEl.textContent = "Enviando solicitação...";
+  msgEl.style.color = "var(--accent-2)"; msgEl.style.background = "rgba(56, 189, 248, 0.1)"; msgEl.style.display = "block";
+
+  try {
+    const res = await fetch(`${AUTH_WORKER}/user/request-password-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, novaSenha: senha })
+    });
+
+    if (res.ok) {
+      msgEl.textContent = "Solicitação enviada! Notificamos o administrador por e-mail para aprovação.";
+      msgEl.style.color = "#86efac"; msgEl.style.background = "rgba(34, 197, 94, 0.1)";
+      setTimeout(() => {
+        const forgotOverlay = document.getElementById('dvb-forgot-overlay');
+        if (forgotOverlay) forgotOverlay.remove();
+      }, 5000);
+    } else {
+      const data = await res.json();
+      msgEl.textContent = data.erro || "Erro no servidor.";
+      msgEl.style.color = "#fca5a5"; msgEl.style.background = "rgba(239, 68, 68, 0.1)";
+    }
+  } catch (err) {
+    msgEl.textContent = "Erro de conexão.";
+    msgEl.style.color = "#fca5a5"; msgEl.style.background = "rgba(239, 68, 68, 0.1)";
+  }
 };
 
 window.dvbGoToMenu = function() {
@@ -753,77 +1129,128 @@ window.dvbAdmin = async function() {
   const modal = document.createElement('div');
   modal.id = 'dvb-admin-modal';
 
-  const linhas = data.usuarios.map(u => `
-    <tr id="user-row-${u.id}" style="border-bottom:1px solid var(--border); transition: background 0.2s;"
-      onmouseover="this.style.background='rgba(255,255,255,0.02)'"
-      onmouseout="this.style.background='transparent'">
+  const users = data.usuarios || [];
+  const resets = users.filter(u => u.reset_senha_pendente);
+
+  const linhasUsers = users.map(u => `
+    <tr id="user-row-${u.id}" style="border-bottom:1px solid var(--border); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
       <td style="padding:16px;">
         <div style="font-weight:600; color:var(--text);">${u.nome}</div>
-        <div style="font-size:11px; color:var(--accent-2); text-transform:uppercase; letter-spacing:0.5px;">${u.setor || 'Geral'}</div>
+        <div style="font-size:11px; color:var(--accent-2); text-transform:uppercase;">${u.setor || 'Geral'}</div>
       </td>
       <td style="padding:16px; color:var(--muted); font-size:12px;">${u.email}</td>
       <td style="padding:8px; text-align:center;">
-        <button onclick="dvbAprovar(${u.id}, ${u.aprovado ? 0 : 1})" style="
-          padding:4px 10px; border-radius:6px; border:none; cursor:pointer;
-          background:${u.aprovado ? '#7f1d1d' : '#14532d'};
-          color:${u.aprovado ? '#fca5a5' : '#86efac'}; font-size:12px;
-        ">${u.aprovado ? 'Revogar' : 'Aprovar'}</button>
+        <button onclick="dvbAprovar(${u.id}, ${u.aprovado ? 0 : 1})" style="padding:4px 10px; border-radius:6px; border:none; cursor:pointer; background:${u.aprovado ? '#7f1d1d' : '#14532d'}; color:${u.aprovado ? '#fca5a5' : '#86efac'}; font-size:12px;">${u.aprovado ? 'Revogar' : 'Aprovar'}</button>
       </td>
       <td style="padding:8px; text-align:center;">
-        <button onclick="dvbPromover(${u.id}, ${u.admin ? 0 : 1})" style="
-          padding:4px 10px; border-radius:6px; border:none; cursor:pointer;
-          background:#1e3a5f; color:#7dd3fc; font-size:12px;
-        ">${u.admin ? 'Remover admin' : 'Tornar admin'}</button>
+        <button onclick="dvbPromover(${u.id}, ${u.admin ? 0 : 1})" style="padding:4px 10px; border-radius:6px; border:none; cursor:pointer; background:#1e3a5f; color:#7dd3fc; font-size:12px;">${u.admin ? 'Remover admin' : 'Tornar admin'}</button>
       </td>
-      <td style="padding:8px; font-size:11px; color:#64748b;">${(() => {
-        if (!u.last_login) return '—';
-        try {
-
-          const d = new Date(u.last_login.includes('Z') ? u.last_login : u.last_login.replace(' ', 'T') + 'Z');
-          return d.toLocaleString('pt-BR', {
-            timeZone: 'America/Sao_Paulo',
-            day: '2-digit', month: '2-digit', year: 'numeric',
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
-          });
-        } catch(e) { return u.last_login; }
-      })()}</td>
+      <td style="padding:8px; font-size:11px; color:#64748b;">${u.last_login || '—'}</td>
       <td style="padding:8px; text-align:center;">
-        <button onclick="dvbDeletar(event, ${u.id}, '${u.nome.replace(/'/g, "\\'")}')" style="
-          padding:4px 10px; border-radius:6px; border:none; cursor:pointer;
-          background:#3f0f0f; color:#fca5a5; font-size:12px;
-        ">🗑 Excluir</button>
+        <button onclick="dvbDeletar(event, ${u.id}, '${u.nome.replace(/'/g, "\\'")}')" style="padding:4px 10px; border-radius:6px; border:none; cursor:pointer; background:#3f0f0f; color:#fca5a5; font-size:12px;">🗑 Excluir</button>
       </td>
     </tr>
   `).join('');
 
-  modal.innerHTML = `
-    <div style="position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.7);
-      display:flex; align-items:center; justify-content:center; font-family:'Segoe UI',sans-serif;">
-      <div style="background:#1e293b; border-radius:16px; padding:32px;
-        width:90%; max-width:900px; color:#f1f5f9; max-height:80vh; overflow-y:auto;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-          <h2 style="margin:0; color:#38bdf8;">⚙️ Gestão de Operadores</h2>
-          <button onclick="document.getElementById('dvb-admin-modal').remove()"
-            style="background:none; border:none; color:#94a3b8; font-size:20px; cursor:pointer;">✕</button>
+  const linhasResets = resets.map(u => `
+    <tr style="border-bottom:1px solid var(--border); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+      <td style="padding:16px;">
+        <div style="font-weight:600; color:var(--text);">${u.nome}</div>
+        <div style="font-size:11px; color:var(--muted);">${u.email}</div>
+      </td>
+      <td style="padding:16px; text-align:center;">
+        <div style="display:flex; gap:8px; justify-content:center;">
+          <button onclick="dvbAprovarResetSenha(${u.id}, true)" style="padding:6px 12px; border-radius:8px; border:none; cursor:pointer; background:#1e3a8a; color:#bfdbfe; font-size:12px; font-weight:700;">Aprovar Nova Senha</button>
+          <button onclick="dvbAprovarResetSenha(${u.id}, false)" style="padding:6px 12px; border-radius:8px; border:none; cursor:pointer; background:#3f0f0f; color:#fca5a5; font-size:12px; font-weight:700;">Rejeitar</button>
         </div>
-        <p style="margin:0 0 16px; font-size:13px; color:#64748b;">Controle de acessos e permissões do sistema</p>
-        <table style="width:100%; border-collapse:collapse; font-size:13px;">
-          <thead>
-            <tr style="color:#64748b; text-align:left; border-bottom:1px solid #334155;">
-              <th style="padding:8px;">Operador</th>
-              <th style="padding:8px;">E-mail</th>
-              <th style="padding:8px; text-align:center;">Status Acesso</th>
-              <th style="padding:8px; text-align:center;">Nível</th>
-              <th style="padding:8px;">Última Atividade</th>
-              <th style="padding:8px; text-align:center;">Ações</th>
-            </tr>
-          </thead>
-          <tbody>${linhas}</tbody>
-        </table>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="2" style="padding:40px; text-align:center; color:var(--muted);">Nenhuma redefinição pendente</td></tr>';
+
+  modal.innerHTML = `
+    <div style="position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.8); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; font-family:system-ui,-apple-system,sans-serif;">
+      <div style="background:var(--card); border:1px solid var(--border); border-radius:24px; padding:32px; width:95%; max-width:1000px; color:var(--text); max-height:85vh; overflow-y:auto; box-shadow:0 20px 50px rgba(0,0,0,0.5);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+          <div>
+            <h2 style="margin:0; color:var(--accent-2); font-size:24px; font-weight:800;">⚙️ Painel de Controle Admin</h2>
+            <p style="margin:4px 0 0; font-size:13px; color:var(--muted);">Gerencie usuários e solicitações do sistema</p>
+          </div>
+          <button onclick="document.getElementById('dvb-admin-modal').remove()" style="background:none; border:none; color:var(--muted); font-size:24px; cursor:pointer;">&times;</button>
+        </div>
+
+        <div style="display:flex; gap:8px; margin-bottom:24px; border-bottom:1px solid var(--border); padding-bottom:16px;">
+          <button id="admin-tab-users" onclick="dvbAdminTab('users')" style="padding:10px 20px; border-radius:10px; border:none; cursor:pointer; background:var(--accent-2); color:#000; font-weight:700; font-size:14px; transition:all 0.2s;">Operadores (${users.length})</button>
+          <button id="admin-tab-resets" onclick="dvbAdminTab('resets')" style="padding:10px 20px; border-radius:10px; border:none; cursor:pointer; background:transparent; color:var(--muted); font-weight:600; font-size:14px; transition:all 0.2s;">Redefinições Pendentes ${resets.length > 0 ? `<span style="background:var(--danger); color:white; padding:2px 6px; border-radius:10px; font-size:10px; margin-left:6px;">${resets.length}</span>` : ''}</button>
+        </div>
+
+        <div id="admin-view-users">
+          <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+              <tr style="color:var(--muted); text-align:left; border-bottom:1px solid var(--border);">
+                <th style="padding:12px;">Operador</th>
+                <th style="padding:12px;">E-mail</th>
+                <th style="padding:12px; text-align:center;">Status</th>
+                <th style="padding:12px; text-align:center;">Nível</th>
+                <th style="padding:12px;">Última Atividade</th>
+                <th style="padding:12px; text-align:center;">Ações</th>
+              </tr>
+            </thead>
+            <tbody>${linhasUsers}</tbody>
+          </table>
+        </div>
+
+        <div id="admin-view-resets" style="display:none;">
+          <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+              <tr style="color:var(--muted); text-align:left; border-bottom:1px solid var(--border);">
+                <th style="padding:12px;">Usuário</th>
+                <th style="padding:12px; text-align:center;">Ações de Recuperação</th>
+              </tr>
+            </thead>
+            <tbody>${linhasResets}</tbody>
+          </table>
+        </div>
       </div>
     </div>
   `;
   document.body.appendChild(modal);
+};
+
+window.dvbAdminTab = function(tab) {
+  const isUsers = tab === 'users';
+  document.getElementById('admin-view-users').style.display = isUsers ? 'block' : 'none';
+  document.getElementById('admin-view-resets').style.display = isUsers ? 'none' : 'block';
+  
+  const btnUsers = document.getElementById('admin-tab-users');
+  const btnResets = document.getElementById('admin-tab-resets');
+  
+  btnUsers.style.background = isUsers ? 'var(--accent-2)' : 'transparent';
+  btnUsers.style.color = isUsers ? '#000' : 'var(--muted)';
+  btnUsers.style.fontWeight = isUsers ? '700' : '600';
+  
+  btnResets.style.background = isUsers ? 'transparent' : 'var(--accent-2)';
+  btnResets.style.color = isUsers ? 'var(--muted)' : '#000';
+  btnResets.style.fontWeight = isUsers ? '600' : '700';
+};
+
+window.dvbAprovarResetSenha = async function(id, aprovado) {
+  const token = getToken();
+  try {
+    const res = await fetch(`${AUTH_WORKER}/admin/approve-password-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ id, aprovado })
+    });
+    if (res.ok) {
+      dvbAdmin(); // Recarrega o painel
+      checkNewRegistrations(); // Atualiza o badge
+    } else {
+      const data = await res.json();
+      dvbAlert('Erro', data.erro || 'Erro ao processar solicitação.', 'erro');
+    }
+  } catch (err) {
+    dvbAlert('Erro', 'Falha de conexão com o servidor.', 'erro');
+  }
 };
 
 window.dvbAprovar = async function(id, aprovado) {
