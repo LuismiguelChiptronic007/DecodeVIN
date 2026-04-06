@@ -491,6 +491,18 @@ window.dvbCadastrar = async function() {
     });
     const data = await res.json();
     if (!res.ok) { dvbMsg(data.erro || 'Erro ao cadastrar.', 'erro'); return; }
+    
+    // Notifica os administradores sobre o novo cadastro
+    try {
+      await fetch(`${AUTH_WORKER}/admin/notify-registration`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome, setor, email })
+      });
+    } catch (err) {
+      console.warn("Falha ao notificar administradores:", err);
+    }
+
     dvbMsg('Cadastro enviado! Aguarde aprovação do administrador.', 'ok');
   } catch {
     dvbMsg('Erro de conexão com o servidor.', 'erro');
