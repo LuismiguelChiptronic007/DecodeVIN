@@ -1,8 +1,9 @@
-const CACHE_NAME = 'decodevin-v3';
+const CACHE_NAME = 'decodevin-v4';
 const ASSETS = [
   './',
   './index.html',
   './index.css',
+  './auth.js',
   './src/app.js',
   './src/decoder.js',
   './decodevin-integracao.js',
