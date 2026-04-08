@@ -90,9 +90,107 @@ async function buscarFallbackKePlaca(placa) {
   }
 }
 
+// ============================================================ 
+ // BLOCO 1 — Funções de API para fleet_vehicles 
+ // Cole logo após as funções fetchWithTimeout / consultarPlacaPHP 
+ // no início do main.js 
+ // ============================================================ 
+  
+ const AUTH_WORKER = 'https://decodevinbus-auth.luismiguelgomesoliveira-014.workers.dev'; // mesmo que você já usa 
+  
+ // Salva todos os veículos decodificados de um lote no banco 
+ async function salvarFrotaNoBanco(fleetName, historyId, results) { 
+   const token = localStorage.getItem('dvb_token'); 
+   if (!token) return; // usuário não logado, não salva 
+  
+   const vehicles = (results || []).map(item => { 
+     const tech = getTechnicalData(item); 
+     const api  = item.apiResult || {}; 
+     const ob   = item.ob_data  || item.ob || {}; 
+  
+     const anoFab = api.ano || api.ano_fabricacao || ''; 
+     const anoMod = api.ano_modelo || ''; 
+     const ano    = (anoFab && anoMod && anoFab !== anoMod) 
+       ? (anoFab + '/' + anoMod) 
+       : (anoFab || anoMod || tech.year || ''); 
+  
+     return { 
+       vin:          String(item.vin   || '').toUpperCase(), 
+       placa:        String(item.placa || '').toUpperCase(), 
+       montadora:    tech.brand    || '', 
+       modelo:       tech.model    || '', 
+       submodelo:    tech.submodel || '', 
+       ano:          String(ano), 
+       carroceria:   ob.carroceria        || ob.ob_carroceria   || '', 
+       encarrocadora: ob.encarrocadeira   || ob.ob_encarrocadeira || '', 
+       segmento:     tech.segment  || '', 
+     }; 
+   }).filter(v => v.vin || v.placa); // ignora linhas completamente vazias 
+  
+   if (vehicles.length === 0) return; 
+  
+   try { 
+     await fetch(AUTH_WORKER + '/fleet/vehicles', { 
+       method: 'POST', 
+       headers: { 
+         'Content-Type': 'application/json', 
+         'Authorization': 'Bearer ' + token, 
+       }, 
+       body: JSON.stringify({ fleet_name: fleetName, history_id: historyId, vehicles }), 
+     }); 
+   } catch (e) { 
+     console.warn('[Fleet] Falha ao salvar frota no banco:', e); 
+   } 
+ } 
+  
+ // Busca veículos com filtros aplicados 
+ async function buscarFrotaNoBanco(filtros = {}) { 
+   const token = localStorage.getItem('dvb_token'); 
+   if (!token) return null; 
+  
+   const params = new URLSearchParams(); 
+   if (filtros.montadora)  params.set('montadora',  filtros.montadora); 
+   if (filtros.modelo)     params.set('modelo',     filtros.modelo); 
+   if (filtros.submodelo)  params.set('submodelo',  filtros.submodelo); 
+   if (filtros.ano)        params.set('ano',        filtros.ano); 
+   if (filtros.segmento)   params.set('segmento',   filtros.segmento); 
+   if (filtros.placa)      params.set('placa',      filtros.placa); 
+   if (filtros.fleet_name) params.set('fleet_name', filtros.fleet_name); 
+   params.set('limit',  String(filtros.limit  || 200)); 
+   params.set('offset', String(filtros.offset || 0)); 
+  
+   const res  = await fetch(AUTH_WORKER + '/fleet/search?' + params.toString(), { 
+     headers: { 'Authorization': 'Bearer ' + token }, 
+   }); 
+   return await res.json(); 
+ } 
+  
+ // Busca opções disponíveis para popular os selects 
+ async function buscarOpcoesFrota() { 
+   const token = localStorage.getItem('dvb_token'); 
+   if (!token) return null; 
+   const res = await fetch(AUTH_WORKER + '/fleet/options', { 
+     headers: { 'Authorization': 'Bearer ' + token }, 
+   }); 
+   return await res.json(); 
+ } 
+
 function el(id) {
   return document.getElementById(id);
 }
+
+// Helper para converter ano em label Euro ou ano real
+const getYearLabel = (anoFull) => {
+  if (!anoFull) return "";
+  const anoStr = String(anoFull);
+  // Pega o primeiro ano se for formato 2012/2013
+  const anoBase = parseInt(anoStr.split("/")[0], 10);
+  if (isNaN(anoBase)) return anoStr;
+  
+  if (anoBase >= 2023) return "Euro 6";
+  if (anoBase >= 2012) return "Euro 5";
+  return anoStr; // Inferior a 2012 apresenta o ano real
+};
 
 const TOOLTIPS = {
   "WMI": "World Manufacturer Identifier: Identifica o fabricante e o país de origem.",
@@ -243,43 +341,37 @@ function showToast(message, type = "success") {
   const toast = document.createElement("div");
   toast.className = "custom-toast";
   
-  toast.style.cssText = `
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: var(--bg-elev);
-    border: 2px solid ${type === "error" ? "var(--danger)" : "var(--accent)"};
-    padding: 24px 32px;
-    border-radius: 16px;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.5), var(--shadow);
-    z-index: 9999;
-    color: var(--text);
-    text-align: center;
-    max-width: 400px;
-    width: 90%;
-    animation: toast-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    font-weight: 500;
-    line-height: 1.5;
-  `;
+  toast.style.cssText = [
+    "position: fixed",
+    "top: 50%",
+    "left: 50%",
+    "transform: translate(-50%, -50%)",
+    "background: var(--bg-elev)",
+    "border: 2px solid " + (type === "error" ? "var(--danger)" : "var(--accent)"),
+    "padding: 24px 32px",
+    "border-radius: 16px",
+    "box-shadow: 0 20px 50px rgba(0,0,0,0.5), var(--shadow)",
+    "z-index: 9999",
+    "color: var(--text)",
+    "text-align: center",
+    "max-width: 400px",
+    "width: 90%",
+    "animation: toast-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+    "font-weight: 500",
+    "line-height: 1.5"
+  ].join(";");
 
-  toast.innerHTML = `
-    <div style="font-size: 32px; margin-bottom: 12px;">${type === "error" ? "⚠️" : "✅"}</div>
-    <div style="font-size: 16px;">${message}</div>
-    <button style="margin-top: 20px; width: 100%;" onclick="this.parentElement.remove()">OK</button>
-  `;
+  const icon = type === "error" ? "⚠️" : "✅";
+  toast.innerHTML = '<div style="font-size: 32px; margin-bottom: 12px;">' + icon + '</div>' +
+    '<div style="font-size: 16px;">' + message + '</div>' +
+    '<button style="margin-top: 20px; width: 100%;" onclick="this.parentElement.remove()">OK</button>';
 
   document.body.appendChild(toast);
 
   if (!document.getElementById("toast-styles")) {
     const style = document.createElement("style");
     style.id = "toast-styles";
-    style.innerHTML = `
-      @keyframes toast-in {
-        from { opacity: 0; transform: translate(-50%, -40%) scale(0.9); }
-        to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-      }
-    `;
+    style.innerHTML = "@keyframes toast-in { from { opacity: 0; transform: translate(-50%, -40%) scale(0.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }";
     document.head.appendChild(style);
   }
 }
@@ -430,14 +522,42 @@ function addHistoryEntry(input, plateOverride = "") {
   pushLocalOnly();
 }
 
-function addGroupHistoryEntry(vins, plates) {
+function addGroupHistoryEntry(vins, plates, results = []) {
   const key = "decodevin.groupHistory";
   if (!vins && !plates) return;
 
   const fInput = el("fleetName");
   const fleetName = fInput ? fInput.value.trim() : "";
 
-  const entry = { vins, plates, fleetName, ts: Date.now() };
+  // Extrai metadados para permitir filtros no histórico sem reprocessar tudo
+  const brands = new Set();
+  const models = new Set();
+  const submodels = new Set();
+  const years = new Set();
+  const types = new Set();
+
+  results.forEach(item => {
+    const tech = getTechnicalData(item);
+    if (tech.brand) brands.add(tech.brand);
+    if (tech.model) models.add(tech.model);
+    if (tech.submodel) submodels.add(tech.submodel);
+    if (tech.year) years.add(tech.year);
+    if (tech.type) types.add(tech.type);
+  });
+
+  const entry = { 
+    vins, 
+    plates, 
+    fleetName, 
+    ts: Date.now(),
+    meta: {
+      brands: Array.from(brands),
+      models: Array.from(models),
+      submodels: Array.from(submodels),
+      years: Array.from(years),
+      types: Array.from(types)
+    }
+  };
   const list = JSON.parse(localStorage.getItem(key) || "[]");
   const lastEntry = list[0];
   if (lastEntry && lastEntry.vins === vins && lastEntry.plates === plates && lastEntry.fleetName === fleetName) return;
@@ -475,15 +595,15 @@ function renderHistory() {
 }
 window.renderHistory = renderHistory;
 
-  const parseHistoricoPayload = (raw) => {
-    if (raw == null) return {};
-    if (typeof raw === "object") return raw;
-    try {
-      return JSON.parse(String(raw));
-    } catch (_) {
-      return {};
-    }
-  };
+function parseHistoricoPayload(raw) {
+  if (raw == null) return {};
+  if (typeof raw === "object") return raw;
+  try {
+    return JSON.parse(String(raw));
+  } catch (_) {
+    return {};
+  }
+}
 
   const normHistVin = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   const normHistPlate = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -495,8 +615,8 @@ window.renderHistory = renderHistory;
         item.auditEmail ||
         (item.userId != null ? String(item.userId) : "") ||
         (item.fromServer ? "self" : "local");
-      const q = `${normHistVin(item.input)}|${normHistPlate(item.plate)}`;
-      const k = `${userKey}::${q}`;
+      const q = normHistVin(item.input) + "|" + normHistPlate(item.plate);
+      const k = userKey + "::" + q;
       const prev = map.get(k);
       if (!prev || item.ts >= prev.ts) map.set(k, item);
     }
@@ -510,117 +630,117 @@ window.renderHistory = renderHistory;
         item.auditEmail ||
         (item.userId != null ? String(item.userId) : "") ||
         (item.fromServer ? "self" : "local");
-      const body = `${String(item.vins || "").trim()}|${String(item.plates || "").trim()}|${String(item.fleetName || "").trim()}`;
-      const k = `${userKey}::${body}`;
+      const body = String(item.vins || "").trim() + "|" + String(item.plates || "").trim() + "|" + String(item.fleetName || "").trim();
+      const k = userKey + "::" + body;
       const prev = map.get(k);
       if (!prev || item.ts >= prev.ts) map.set(k, item);
     }
     return [...map.values()].sort((a, b) => b.ts - a.ts);
   }
 
-  const renderSingleHistory = async () => {
-    const key = "decodevin.history";
-    let list = JSON.parse(localStorage.getItem(key) || "[]");
-    const sessUser = JSON.parse(localStorage.getItem("dvb_user") || "null");
-    const token = localStorage.getItem("dvb_token");
-    singleHistoryFetchGen++;
-    const gen = singleHistoryFetchGen;
+async function renderSingleHistory() {
+  const key = "decodevin.history";
+  let list = JSON.parse(localStorage.getItem(key) || "[]");
+  const sessUser = JSON.parse(localStorage.getItem("dvb_user") || "null");
+  const token = localStorage.getItem("dvb_token");
+  singleHistoryFetchGen++;
+  const gen = singleHistoryFetchGen;
 
-    if (token && sessUser && sessUser.admin && typeof window.dvbHistoricoAdminGet === "function") {
-      try {
-        const res = await window.dvbHistoricoAdminGet();
-        if (gen !== singleHistoryFetchGen) return;
-        if (res && res.ok && Array.isArray(res.entries)) {
-          list = res.entries
-            .filter(e => e.kind === "single")
-            .map(e => {
-              const p = parseHistoricoPayload(e.payload);
-              const vin = String(p.input || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-              const plate = String(p.plate || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-              return {
-                input: vin,
-                plate,
-                ts: typeof p.ts === "number" ? p.ts : new Date(e.created_at || Date.now()).getTime(),
-                serverId: e.id,
-                userId: e.user_id,
-                auditBy: e.nome || "—",
-                auditEmail: e.email || "",
-                adminGlobal: true
-              };
-            })
-            .filter(x => x.input || x.plate)
-            .sort((a, b) => b.ts - a.ts)
-            .slice(0, 250);
-        }
-      } catch (_) {
-        if (gen !== singleHistoryFetchGen) return;
+  if (token && sessUser && sessUser.admin && typeof window.dvbHistoricoAdminGet === "function") {
+    try {
+      const res = await window.dvbHistoricoAdminGet();
+      if (gen !== singleHistoryFetchGen) return;
+      if (res && res.ok && Array.isArray(res.entries)) {
+        list = res.entries
+          .filter(e => e.kind === "single")
+          .map(e => {
+            const p = parseHistoricoPayload(e.payload);
+            const vin = String(p.input || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+            const plate = String(p.plate || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+            return {
+              input: vin,
+              plate,
+              ts: typeof p.ts === "number" ? p.ts : new Date(e.created_at || Date.now()).getTime(),
+              serverId: e.id,
+              userId: e.user_id,
+              auditBy: e.nome || "—",
+              auditEmail: e.email || "",
+              adminGlobal: true
+            };
+          })
+          .filter(x => x.input || x.plate)
+          .sort((a, b) => b.ts - a.ts)
+          .slice(0, 250);
       }
-    } else if (token && typeof window.dvbHistoricoUsuarioGet === "function") {
-      try {
-        const res = await window.dvbHistoricoUsuarioGet();
-        if (gen !== singleHistoryFetchGen) return;
-        if (res && res.ok && Array.isArray(res.single) && res.single.length > 0) {
-          list = res.single
-            .map(s => ({
-              input: String(s.input || ""),
-              plate: String(s.plate || ""),
-              ts: typeof s.ts === "number" ? s.ts : Date.now(),
-              serverId: s.id,
-              fromServer: true
-            }))
-            .filter(x => x.input || x.plate);
-        }
-      } catch (_) {
-        if (gen !== singleHistoryFetchGen) return;
+    } catch (_) {
+      if (gen !== singleHistoryFetchGen) return;
+    }
+  } else if (token && typeof window.dvbHistoricoUsuarioGet === "function") {
+    try {
+      const res = await window.dvbHistoricoUsuarioGet();
+      if (gen !== singleHistoryFetchGen) return;
+      if (res && res.ok && Array.isArray(res.single) && res.single.length > 0) {
+        list = res.single
+          .map(s => ({
+            input: String(s.input || ""),
+            plate: String(s.plate || ""),
+            ts: typeof s.ts === "number" ? s.ts : Date.now(),
+            serverId: s.id,
+            fromServer: true
+          }))
+          .filter(x => x.input || x.plate);
       }
-    } else if (gen !== singleHistoryFetchGen) {
-      return;
+    } catch (_) {
+      if (gen !== singleHistoryFetchGen) return;
     }
+  } else if (gen !== singleHistoryFetchGen) {
+    return;
+  }
 
-    list = dedupeSingleHistoryList(list);
+  list = dedupeSingleHistoryList(list);
 
-    const h = el("history");
-    if (!h) return;
-    h.innerHTML = "";
+  const h = el("history");
+  if (!h) return;
+  h.innerHTML = "";
 
-    if (sessUser && sessUser.admin) {
-      const note = document.createElement("div");
-      note.style.cssText = "font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;";
-      note.textContent =
-        "Visão de administrador: histórico de todos os usuários (👤). Você só remove as linhas que forem suas.";
-      h.appendChild(note);
-    } else if (token) {
-      const note = document.createElement("div");
-      note.style.cssText = "font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;";
-      note.textContent =
-        "Histórico ligado à sua conta — o mesmo em qualquer PC ou celular após login.";
-      h.appendChild(note);
-    }
+  if (sessUser && sessUser.admin) {
+    const note = document.createElement("div");
+    note.style.cssText = "font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;";
+    note.textContent =
+      "Visão de administrador: histórico de todos os usuários (👤). Você só remove as linhas que forem suas.";
+    h.appendChild(note);
+  } else if (token) {
+    const note = document.createElement("div");
+    note.style.cssText = "font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;";
+    note.textContent =
+      "Histórico ligado à sua conta — o mesmo em qualquer PC ou celular após login.";
+    h.appendChild(note);
+  }
 
-    const searchInput = document.createElement("input");
-    searchInput.type = "text";
-    searchInput.placeholder = "🔍 Buscar no histórico (chassi, placa ou nome)…";
-    searchInput.style.marginBottom = "12px";
-    searchInput.style.fontSize = "13px";
-    searchInput.style.width = "100%";
-    searchInput.style.boxSizing = "border-box";
-    searchInput.oninput = (e) => {
-      const term = e.target.value.toLowerCase();
-      renderSingleHistoryItems(list.filter(item =>
-        (item.input || "").toLowerCase().includes(term) ||
-        (item.plate || "").toLowerCase().includes(term) ||
-        (item.auditBy || "").toLowerCase().includes(term) ||
-        (item.auditEmail || "").toLowerCase().includes(term)
-      ), sessUser);
-    };
-    h.appendChild(searchInput);
-
-    const listContainer = document.createElement("div");
-    listContainer.id = "singleHistoryList";
-    h.appendChild(listContainer);
-
-    renderSingleHistoryItems(list, sessUser);
+  const searchInput = document.createElement("input");
+  searchInput.type = "text";
+  searchInput.placeholder = "🔍 Buscar no histórico (chassi, placa ou nome)…";
+  searchInput.style.marginBottom = "12px";
+  searchInput.style.fontSize = "13px";
+  searchInput.style.width = "100%";
+  searchInput.style.boxSizing = "border-box";
+  searchInput.oninput = (e) => {
+    const term = e.target.value.toLowerCase();
+    renderSingleHistoryItems(list.filter(item =>
+      (item.input || "").toLowerCase().includes(term) ||
+      (item.plate || "").toLowerCase().includes(term) ||
+      (item.auditBy || "").toLowerCase().includes(term) ||
+      (item.auditEmail || "").toLowerCase().includes(term)
+    ), sessUser);
   };
+  h.appendChild(searchInput);
+
+  const listContainer = document.createElement("div");
+  listContainer.id = "singleHistoryList";
+  h.appendChild(listContainer);
+
+  renderSingleHistoryItems(list, sessUser);
+}
 
   const historicoPodeRemoverSingle = (item, sessUser) => {
     if (item.adminGlobal) {
@@ -635,635 +755,837 @@ window.renderHistory = renderHistory;
     return true;
   };
 
-  const renderSingleHistoryItems = (list, sessUser) => {
-    const h = el("singleHistoryList");
-    if (!h) return;
-    h.innerHTML = "";
+function renderSingleHistoryItems(list, sessUser) {
+  const h = el("singleHistoryList");
+  if (!h) return;
+  h.innerHTML = "";
 
-    if (list.length === 0) {
-      h.innerHTML = `<div style="color:var(--muted); text-align:center; padding: 20px;">Nenhum item encontrado.</div>`;
-      return;
+  if (list.length === 0) {
+    h.innerHTML = '<div style="color:var(--muted); text-align:center; padding: 20px;">Nenhum item encontrado.</div>';
+    return;
+  }
+
+  const totalPages = Math.ceil(list.length / HISTORY_PAGE_SIZE);
+  if (currentHistoryPage > totalPages) currentHistoryPage = totalPages;
+  if (currentHistoryPage < 1) currentHistoryPage = 1;
+
+  const start = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE;
+  const end = start + HISTORY_PAGE_SIZE;
+  const pageList = list.slice(start, end);
+
+  pageList.forEach((item, idx) => {
+    const indexInFullList = start + idx;
+    const row = document.createElement("div");
+    row.className = "item clickable";
+    row.style.padding = "12px 15px";
+    
+    const v = document.createElement("div");
+    v.style.flex = "1";
+    v.style.display = "flex";
+    v.style.flexDirection = "column";
+    v.style.gap = "4px";
+
+    const main = document.createElement("div");
+    main.textContent = (item.input || "Placa: " + item.plate);
+    if (item.input && item.plate) {
+      const p = document.createElement("span");
+      p.style.fontSize = "12px"; p.style.color = "var(--accent)"; p.style.marginLeft = "8px";
+      p.textContent = "[" + item.plate + "]";
+      main.appendChild(p);
     }
+    v.appendChild(main);
 
-    const totalPages = Math.ceil(list.length / HISTORY_PAGE_SIZE);
-    if (currentHistoryPage > totalPages) currentHistoryPage = totalPages;
-    if (currentHistoryPage < 1) currentHistoryPage = 1;
-
-    const start = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE;
-    const end = start + HISTORY_PAGE_SIZE;
-    const pageList = list.slice(start, end);
-
-    pageList.forEach((item, idx) => {
-      const indexInFullList = start + idx;
-      const row = document.createElement("div");
-      row.className = "item clickable";
-      row.style.padding = "12px 15px";
+    if (item.auditBy) {
+      const sub = document.createElement("div");
+      sub.style.fontSize = "11px";
+      sub.style.color = "var(--muted)";
+      sub.textContent =
+        "👤 " + item.auditBy + (item.auditEmail ? " · " + item.auditEmail : "");
+      v.appendChild(sub);
+    }
+    
+    v.onclick = () => {
+      const vInput = el("vinInputSingle");
+      const pInput = el("plateInputSingle");
+      const bSingle = el("btnDecodeSingle");
+      const bPlate = el("btnPlateSingle");
       
-      const v = document.createElement("div");
-      v.style.flex = "1";
-      v.style.display = "flex";
-      v.style.flexDirection = "column";
-      v.style.gap = "4px";
+      const vinVal = (item.input || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const plateVal = (item.plate || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
-      const main = document.createElement("div");
-      main.textContent = (item.input || "Placa: " + item.plate);
-      if (item.input && item.plate) {
-        const p = document.createElement("span");
-        p.style.fontSize = "12px"; p.style.color = "var(--accent)"; p.style.marginLeft = "8px";
-        p.textContent = `[${item.plate}]`;
-        main.appendChild(p);
-      }
-      v.appendChild(main);
+      const curVinVal = (vInput ? vInput.value : "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const curPlateVal = (pInput ? pInput.value : "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
-      if (item.auditBy) {
-        const sub = document.createElement("div");
-        sub.style.fontSize = "11px";
-        sub.style.color = "var(--muted)";
-        sub.textContent =
-          `👤 ${item.auditBy}` + (item.auditEmail ? ` · ${item.auditEmail}` : "");
-        v.appendChild(sub);
+      const isFieldsEmpty = !curVinVal && !curPlateVal;
+
+      // Verifica se este item já está decodificado na tela
+      const currentFingerprint = JSON.stringify({ vin: vinVal, plate: plateVal });
+
+      if (!isFieldsEmpty && window.currentSingleResult && window.lastSingleFingerprint === currentFingerprint) {
+        // Se já estiver na tela, apenas muda para a tela de busca única se necessário
+        const singleDecoder = el("singleDecoder");
+        if (singleDecoder && singleDecoder.style.display === "none") {
+          const optSingle = el("optSingle");
+          if (optSingle) optSingle.click();
+        }
+        return;
       }
+
+      if (item.input && vInput) vInput.value = item.input;
+      if (item.plate && pInput) pInput.value = item.plate;
+
+      if (item.plate && bPlate) {
+        bPlate.disabled = false;
+        bPlate.click();
+      } else if (item.input && bSingle) {
+        bSingle.disabled = false;
+        bSingle.click();
+      }
+    };
+
+    const actions = document.createElement("div");
+    actions.style.display = "flex";
+    actions.style.alignItems = "center";
+    actions.style.gap = "8px";
+
+    const btnExportSingle = document.createElement("button");
+    btnExportSingle.className = "btn-page";
+    btnExportSingle.textContent = "📄";
+    btnExportSingle.title = "Exportar relatório deste chassi";
+    btnExportSingle.style.padding = "6px 10px";
+    btnExportSingle.style.minWidth = "36px";
+    btnExportSingle.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       
-      v.onclick = () => {
-        const vInput = el("vinInputSingle");
-        const pInput = el("plateInputSingle");
-        const bSingle = el("btnDecodeSingle");
-        const bPlate = el("btnPlateSingle");
-        
-        const vinVal = (item.input || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-        const plateVal = (item.plate || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-
-        const curVinVal = (vInput ? vInput.value : "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-        const curPlateVal = (pInput ? pInput.value : "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-
-        const isFieldsEmpty = !curVinVal && !curPlateVal;
-
-        // Verifica se este item já está decodificado na tela
-        const currentFingerprint = JSON.stringify({ vin: vinVal, plate: plateVal });
-
-        if (!isFieldsEmpty && window.currentSingleResult && window.lastSingleFingerprint === currentFingerprint) {
-          // Se já estiver na tela, apenas muda para a tela de busca única se necessário
-          const singleDecoder = el("singleDecoder");
-          if (singleDecoder && singleDecoder.style.display === "none") {
-            const optSingle = el("optSingle");
-            if (optSingle) optSingle.click();
-          }
+      const oldTxt = btnExportSingle.textContent;
+      btnExportSingle.disabled = true;
+      btnExportSingle.textContent = "⏳";
+      const progresso = criarModalProgressoLote("Gerando relatório...");
+      const t0 = Date.now();
+      try {
+        const reportData = await montarRelatorioDoHistorico({
+          vins: item.input || "",
+          plates: item.plate || ""
+        }, (done, total) => {
+          progresso.update(done, total, Date.now() - t0);
+        });
+        if (!reportData || reportData.length === 0) {
+          showToast("Não foi possível montar o relatório.", "error");
           return;
         }
+        const fileName = (item.plate || item.input || "Relatorio").replace(/\s+/g, "_");
+        openReportOptions(reportData, "Relatorio_" + fileName);
+      } catch (err) {
+        showToast("Erro ao preparar relatório.", "error");
+      } finally {
+        progresso.close();
+        btnExportSingle.disabled = false;
+        btnExportSingle.textContent = oldTxt;
+      }
+    };
 
-        if (item.input && vInput) vInput.value = item.input;
-        if (item.plate && pInput) pInput.value = item.plate;
+    actions.appendChild(btnExportSingle);
+    row.appendChild(v);
+    row.appendChild(actions);
+    h.appendChild(row);
+  });
 
-        if (item.plate && bPlate) {
-          bPlate.disabled = false;
-          bPlate.click();
-        } else if (item.input && bSingle) {
-          bSingle.disabled = false;
-          bSingle.click();
-        }
-      };
+  if (totalPages > 1) {
+    const pagination = document.createElement("div");
+    pagination.className = "history-pagination";
+    pagination.style.cssText = "display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 15px; padding: 10px;";
 
-      const actions = document.createElement("div");
-      actions.style.display = "flex";
-      actions.style.alignItems = "center";
-      actions.style.gap = "8px";
+    const btnPrev = document.createElement("button");
+    btnPrev.textContent = "← Anterior";
+    btnPrev.disabled = currentHistoryPage === 1;
+    btnPrev.className = "btn-page";
+    btnPrev.onclick = () => { currentHistoryPage--; renderSingleHistory(); };
 
-      const btnExportSingle = document.createElement("button");
-      btnExportSingle.className = "btn-page";
-      btnExportSingle.textContent = "📄";
-      btnExportSingle.title = "Exportar relatório deste chassi";
-      btnExportSingle.style.padding = "6px 10px";
-      btnExportSingle.style.minWidth = "36px";
-      btnExportSingle.onclick = async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const oldTxt = btnExportSingle.textContent;
-        btnExportSingle.disabled = true;
-        btnExportSingle.textContent = "⏳";
-        const progresso = criarModalProgressoLote("Gerando relatório...");
-        const t0 = Date.now();
-        try {
-          const reportData = await montarRelatorioDoHistorico({
-            vins: item.input || "",
-            plates: item.plate || ""
-          }, (done, total) => {
-            progresso.update(done, total, Date.now() - t0);
-          });
-          if (!reportData || reportData.length === 0) {
-            showToast("Não foi possível montar o relatório.", "error");
-            return;
-          }
-          const fileName = (item.plate || item.input || "Relatorio").replace(/\s+/g, "_");
-          openReportOptions(reportData, `Relatorio_${fileName}`);
-        } catch (err) {
-          showToast("Erro ao preparar relatório.", "error");
-        } finally {
-          progresso.close();
-          btnExportSingle.disabled = false;
-          btnExportSingle.textContent = oldTxt;
-        }
-      };
+    const pageInfo = document.createElement("span");
+    pageInfo.textContent = "Página " + currentHistoryPage + " de " + totalPages;
+    pageInfo.style.fontSize = "14px";
+    pageInfo.style.color = "var(--muted)";
 
-      actions.appendChild(btnExportSingle);
-      row.appendChild(v);
-      row.appendChild(actions);
-      h.appendChild(row);
-    });
+    const btnNext = document.createElement("button");
+    btnNext.textContent = "Próximo →";
+    btnNext.disabled = currentHistoryPage === totalPages;
+    btnNext.className = "btn-page";
+    btnNext.onclick = () => { currentHistoryPage++; renderSingleHistory(); };
 
-    if (totalPages > 1) {
-      const pagination = document.createElement("div");
-      pagination.className = "history-pagination";
-      pagination.style.cssText = "display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 15px; padding: 10px;";
-
-      const btnPrev = document.createElement("button");
-      btnPrev.textContent = "← Anterior";
-      btnPrev.disabled = currentHistoryPage === 1;
-      btnPrev.className = "btn-page";
-      btnPrev.onclick = () => { currentHistoryPage--; renderSingleHistory(); };
-
-      const pageInfo = document.createElement("span");
-      pageInfo.textContent = `Página ${currentHistoryPage} de ${totalPages}`;
-      pageInfo.style.fontSize = "14px";
-      pageInfo.style.color = "var(--muted)";
-
-      const btnNext = document.createElement("button");
-      btnNext.textContent = "Próximo →";
-      btnNext.disabled = currentHistoryPage === totalPages;
-      btnNext.className = "btn-page";
-      btnNext.onclick = () => { currentHistoryPage++; renderSingleHistory(); };
-
-      pagination.appendChild(btnPrev);
-      pagination.appendChild(pageInfo);
-      pagination.appendChild(btnNext);
-      h.appendChild(pagination);
-    }
-  };
+    pagination.appendChild(btnPrev);
+    pagination.appendChild(pageInfo);
+    pagination.appendChild(btnNext);
+    h.appendChild(pagination);
+  }
+}
 
   window.renderSingleHistory = renderSingleHistory;
 
-  const renderGroupHistory = async () => {
-    const key = "decodevin.groupHistory";
-    let list = JSON.parse(localStorage.getItem(key) || "[]");
-    const sessUser = JSON.parse(localStorage.getItem("dvb_user") || "null");
-    const token = localStorage.getItem("dvb_token");
-    groupHistoryFetchGen++;
-    const gen = groupHistoryFetchGen;
+async function renderGroupHistory() {
+  const key = "decodevin.groupHistory";
+  let list = JSON.parse(localStorage.getItem(key) || "[]");
+  const sessUser = JSON.parse(localStorage.getItem("dvb_user") || "null");
+  const token = localStorage.getItem("dvb_token");
+  groupHistoryFetchGen++;
+  const gen = groupHistoryFetchGen;
 
-    if (token && sessUser && sessUser.admin && typeof window.dvbHistoricoAdminGet === "function") {
-      try {
-        const res = await window.dvbHistoricoAdminGet();
-        if (gen !== groupHistoryFetchGen) return;
-        if (res && res.ok && Array.isArray(res.entries)) {
-          list = res.entries
-            .filter(e => e.kind === "group")
-            .map(e => {
-              const p = parseHistoricoPayload(e.payload);
-              const vins = String(p.vins || "");
-              const plates = String(p.plates || "");
-              const hasLines = !!(vins.trim() || plates.trim());
-              return {
-                vins,
-                plates,
-                fleetName: String(p.fleetName || "").slice(0, 200),
-                ts: typeof p.ts === "number" ? p.ts : new Date(e.created_at || Date.now()).getTime(),
-                serverId: e.id,
-                userId: e.user_id,
-                auditBy: e.nome || "—",
-                auditEmail: e.email || "",
-                adminGlobal: true,
-                auditOnly: !hasLines
-              };
-            })
-            .sort((a, b) => b.ts - a.ts)
-            .slice(0, 120);
-        }
-      } catch (_) {
-        if (gen !== groupHistoryFetchGen) return;
+  if (token && sessUser && sessUser.admin && typeof window.dvbHistoricoAdminGet === "function") {
+    try {
+      const res = await window.dvbHistoricoAdminGet();
+      if (gen !== groupHistoryFetchGen) return;
+      if (res && res.ok && Array.isArray(res.entries)) {
+        list = res.entries
+          .filter(e => e.kind === "group")
+          .map(e => {
+            const p = parseHistoricoPayload(e.payload);
+            const vins = String(p.vins || "");
+            const plates = String(p.plates || "");
+            const hasLines = !!(vins.trim() || plates.trim());
+            return {
+              vins,
+              plates,
+              fleetName: String(p.fleetName || "").slice(0, 200),
+              ts: typeof p.ts === "number" ? p.ts : new Date(e.created_at || Date.now()).getTime(),
+              serverId: e.id,
+              userId: e.user_id,
+              auditBy: e.nome || "—",
+              auditEmail: e.email || "",
+              adminGlobal: true,
+              auditOnly: !hasLines,
+              meta: p.meta || null
+            };
+          })
+          .sort((a, b) => b.ts - a.ts)
+          .slice(0, 120);
       }
-    } else if (token && typeof window.dvbHistoricoUsuarioGet === "function") {
-      try {
-        const res = await window.dvbHistoricoUsuarioGet();
-        if (gen !== groupHistoryFetchGen) return;
-        if (res && res.ok && Array.isArray(res.group) && res.group.length > 0) {
-          list = res.group.map(g => ({
-            vins: String(g.vins || ""),
-            plates: String(g.plates || ""),
-            fleetName: String(g.fleetName || ""),
-            ts: typeof g.ts === "number" ? g.ts : Date.now(),
-            serverId: g.id,
-            fromServer: true,
-            auditOnly: false
-          }));
-        }
-      } catch (_) {
-        if (gen !== groupHistoryFetchGen) return;
+    } catch (_) {
+      if (gen !== groupHistoryFetchGen) return;
+    }
+  } else if (token && typeof window.dvbHistoricoUsuarioGet === "function") {
+    try {
+      const res = await window.dvbHistoricoUsuarioGet();
+      if (gen !== groupHistoryFetchGen) return;
+      if (res && res.ok && Array.isArray(res.group) && res.group.length > 0) {
+        list = res.group.map(g => ({
+          vins: String(g.vins || ""),
+          plates: String(g.plates || ""),
+          fleetName: String(g.fleetName || ""),
+          ts: typeof g.ts === "number" ? g.ts : Date.now(),
+          serverId: g.id,
+          fromServer: true,
+          auditOnly: false,
+          meta: g.meta || null
+        }));
       }
-    } else if (gen !== groupHistoryFetchGen) {
-      return;
+    } catch (_) {
+      if (gen !== groupHistoryFetchGen) return;
     }
+  } else if (gen !== groupHistoryFetchGen) {
+    return;
+  }
 
-    list = dedupeGroupHistoryList(list);
+  list = dedupeGroupHistoryList(list);
 
-    const h = el("groupHistory");
-    if (!h) return;
-    h.innerHTML = "";
+  const h = el("groupHistory");
+  if (!h) return;
+  h.innerHTML = "";
 
-    if (sessUser && sessUser.admin) {
-      const note = document.createElement("div");
-      note.style.cssText = "font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;";
-      note.textContent =
-        "Lotes de todos os usuários; linhas sem chassis/placas no servidor são só registro (não reexecutam).";
-      h.appendChild(note);
-    } else if (token) {
-      const note = document.createElement("div");
-      note.style.cssText = "font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;";
-      note.textContent =
-        "Histórico de lotes ligado à sua conta — o mesmo em qualquer aparelho após login.";
-      h.appendChild(note);
+  if (sessUser && sessUser.admin) {
+    const note = document.createElement("div");
+    note.style.cssText = "font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;";
+    note.textContent =
+      "Lotes de todos os usuários; linhas sem chassis/placas no servidor são só registro (não reexecutam).";
+    h.appendChild(note);
+  } else if (token) {
+    const note = document.createElement("div");
+    note.style.cssText = "font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;";
+    note.textContent =
+      "Histórico de lotes ligado à sua conta — o mesmo em qualquer aparelho após login.";
+    h.appendChild(note);
+  }
+
+  const searchContainer = document.createElement("div");
+  searchContainer.style.cssText = "display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px;";
+
+  const mainSearch = document.createElement("input");
+  mainSearch.type = "text";
+  mainSearch.id = "historyMainSearch";
+  mainSearch.placeholder = "🔍 Buscar no histórico (nome do lote/frota, placa, chassi ou nome)…";
+  mainSearch.style.cssText = "font-size: 13px; width: 100%; box-sizing: border-box; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text); outline: none;";
+  
+  const filterRow = document.createElement("div");
+  filterRow.style.cssText = "display: flex; gap: 8px; flex-wrap: wrap;";
+
+  const createHistorySelect = (id, defaultLabel) => {
+    const s = document.createElement("select");
+    s.id = id;
+    s.style.cssText = "flex: 1; min-width: 120px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px; color: var(--text); font-size: 12px; outline: none; cursor: pointer;";
+    s.innerHTML = '<option value="">' + defaultLabel + '</option>';
+    return s;
+  };
+
+  const hFilterBrand = createHistorySelect("historyFilterBrand", "Montadora (Todas)");
+  const hFilterModel = createHistorySelect("historyFilterModel", "Modelo (Todos)");
+  const hFilterSubModel = createHistorySelect("historyFilterSubModel", "Submodelo (Todos)");
+  const hFilterYear = createHistorySelect("historyFilterYear", "Ano (Todos)");
+
+  filterRow.appendChild(hFilterBrand);
+  filterRow.appendChild(hFilterModel);
+  filterRow.appendChild(hFilterSubModel);
+  filterRow.appendChild(hFilterYear);
+
+  searchContainer.appendChild(mainSearch);
+  searchContainer.appendChild(filterRow);
+
+  // ============================================================ 
+ // BLOCO 3 — Botão "Pesquisar Frota" na seção do histórico 
+ // Cole dentro da função renderGroupHistory(), 
+ // logo APÓS a linha: searchContainer.appendChild(filterRow); 
+ // (antes de: h.appendChild(searchContainer);) 
+ // ============================================================ 
+  
+ // ----- INÍCIO DO TRECHO A INSERIR EM renderGroupHistory() ----- 
+  
+ const btnRowFrota = document.createElement('div'); 
+ btnRowFrota.style.cssText = 'display:flex;justify-content:flex-end;margin-top:6px;'; 
+  
+ const btnPesquisarFrota = document.createElement('button'); 
+ btnPesquisarFrota.id        = 'btnPesquisarFrota'; 
+ btnPesquisarFrota.className = 'btn-page'; 
+ btnPesquisarFrota.style.cssText = [ 
+   'display:flex', 
+   'align-items:center', 
+   'gap:6px', 
+   'padding:9px 18px', 
+   'background:linear-gradient(135deg, var(--accent-2), var(--accent))', 
+   'color:#000', 
+   'font-weight:700', 
+   'border:none', 
+   'border-radius:10px', 
+   'cursor:pointer', 
+   'font-size:13px', 
+   'transition:opacity .2s', 
+ ].join(';'); 
+ btnPesquisarFrota.innerHTML = '🔍 Pesquisar Frota'; 
+  
+ btnPesquisarFrota.onmouseenter = () => btnPesquisarFrota.style.opacity = '.85'; 
+ btnPesquisarFrota.onmouseleave = () => btnPesquisarFrota.style.opacity = '1'; 
+  
+ btnPesquisarFrota.onclick = () => { 
+   const filtros = { 
+     montadora:  (document.getElementById('historyFilterBrand')    || {}).value || '', 
+     modelo:     (document.getElementById('historyFilterModel')    || {}).value || '', 
+     submodelo:  (document.getElementById('historyFilterSubModel') || {}).value || '', 
+     ano:        (document.getElementById('historyFilterYear')     || {}).value || '', 
+     fleet_name: (document.getElementById('historyMainSearch')     || {}).value || '', 
+   }; 
+  
+   if (typeof window.abrirPesquisaFrota === 'function') { 
+     window.abrirPesquisaFrota(filtros); 
+   } 
+ }; 
+  
+ btnRowFrota.appendChild(btnPesquisarFrota); 
+ searchContainer.appendChild(btnRowFrota);   // <- já existe a variável searchContainer em renderGroupHistory 
+  
+ // ----- FIM DO TRECHO A INSERIR EM renderGroupHistory() ----- 
+
+  h.appendChild(searchContainer);
+
+  // Popular filtros do histórico
+  const hBrands = new Set();
+  const hModels = new Set();
+  const hSubModels = new Set();
+  const hYears = new Set();
+
+  const getOrExtractMeta = (item) => {
+    if (item.meta && (item.meta.brands?.length > 0 || item.meta.models?.length > 0)) return item.meta;
+    const brands = new Set();
+    const models = new Set();
+    const submodels = new Set();
+    const years = new Set();
+    const vins = String(item.vins || "").split(/[\n,]/).filter(Boolean).slice(0, 5);
+    vins.forEach(v => {
+      const vin = v.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (vin.length >= 3 && window.currentDecoder) {
+        try {
+          const res = window.currentDecoder.decode(vin);
+          const mockItem = { result: res, fabricante: res.manufacturerName };
+          const tech = getTechnicalData(mockItem);
+          if (tech.brand) brands.add(tech.brand);
+          if (tech.model) models.add(tech.model);
+          if (tech.submodel) submodels.add(tech.submodel);
+          if (tech.year) years.add(tech.year);
+        } catch (e) {}
+      }
+    });
+    const extracted = { brands: Array.from(brands), models: Array.from(models), submodels: Array.from(submodels), years: Array.from(years) };
+    item.meta = extracted; 
+    return extracted;
+  };
+
+  list.forEach(item => {
+    const meta = getOrExtractMeta(item);
+    (meta.brands || []).forEach(b => hBrands.add(normalizeBrand(b)));
+    (meta.models || []).forEach(m => { if (m) hModels.add(String(m).trim().toUpperCase()); });
+    (meta.submodels || []).forEach(s => { if (s) hSubModels.add(String(s).trim().toUpperCase()); });
+    (meta.years || []).forEach(y => hYears.add(y));
+  });
+
+  const updateHistorySelect = (sel, values, currentVal = "") => {
+    if (!sel) return;
+    const defaultLabel = (sel.id === "historyFilterYear" ? "Ano (Todos)" : (sel.id === "historyFilterModel" ? "Modelo (Todos)" : (sel.id === "historyFilterSubModel" ? "Submodelo (Todos)" : "Montadora (Todas)")));
+    sel.innerHTML = '<option value="">' + defaultLabel + '</option>';
+    const isYearField = (sel.id && sel.id.includes("Year"));
+    const labels = new Set();
+    if (values) {
+      Array.from(values).forEach(v => {
+        if (!v) return;
+        const lbl = isYearField ? getYearLabel(v) : String(v).trim().toUpperCase();
+        if (lbl) labels.add(lbl);
+      });
     }
+    const sortedValues = Array.from(labels).sort((a, b) => {
+      if (isYearField) {
+        const numA = parseInt(a, 10); const numB = parseInt(b, 10);
+        if (!isNaN(numA) && !isNaN(numB)) return numB - numA;
+        return String(b).localeCompare(String(a));
+      }
+      return String(a).localeCompare(String(b));
+    });
+    sortedValues.forEach(v => {
+      const opt = document.createElement("option"); opt.value = v; opt.textContent = v; sel.appendChild(opt);
+    });
+    if (currentVal && Array.from(labels).some(l => l === currentVal.toUpperCase())) sel.value = currentVal.toUpperCase();
+  };
 
-    const searchInput = document.createElement("input");
-    searchInput.type = "text";
-    searchInput.placeholder = "🔍 Buscar no histórico (nome, placa, chassi)…";
-    searchInput.style.marginBottom = "12px";
-    searchInput.style.fontSize = "13px";
-    searchInput.style.width = "100%";
-    searchInput.style.boxSizing = "border-box";
-    searchInput.oninput = (e) => {
-      const term = e.target.value.toLowerCase();
-      renderGroupHistoryItems(list.filter(item =>
+  const applyHistoryFilters = (rebuildSelects = false) => {
+    const term = mainSearch.value.toLowerCase().trim();
+    const fBrand = hFilterBrand.value;
+    const fModel = hFilterModel.value;
+    const fSubModel = hFilterSubModel.value;
+    const fYear = hFilterYear.value;
+
+    const filtered = list.filter(item => {
+      const matchTerm = !term || 
         (item.fleetName || "").toLowerCase().includes(term) ||
         (item.vins || "").toLowerCase().includes(term) ||
         (item.plates || "").toLowerCase().includes(term) ||
-        (item.auditBy || "").toLowerCase().includes(term) ||
-        (item.auditEmail || "").toLowerCase().includes(term)
-      ), sessUser);
-    };
-    h.appendChild(searchInput);
+        (item.auditBy || "").toLowerCase().includes(term);
 
-    const listContainer = document.createElement("div");
-    listContainer.id = "groupHistoryList";
-    h.appendChild(listContainer);
+      if (!matchTerm) return false;
 
-    renderGroupHistoryItems(list, sessUser);
-  };
+      const meta = getOrExtractMeta(item);
+      if (fBrand && !(meta.brands || []).some(b => normalizeBrand(b) === fBrand)) return false;
+      if (fModel && !(meta.models || []).some(m => String(m).trim().toUpperCase().includes(fModel.toUpperCase()))) return false;
+      if (fSubModel && !(meta.submodels || []).some(s => String(s).trim().toUpperCase().includes(fSubModel.toUpperCase()))) return false;
+      if (fYear && !(meta.years || []).some(y => getYearLabel(y) === fYear)) return false;
 
-  // Gera os dados do relatório de um lote salvo no histórico sem reprocessar a tela.
-  const montarRelatorioDoHistorico = async (historyItem, onProgress = null) => {
-    const vLines = String(historyItem?.vins || "").split("\n").map(l => l.trim()).filter(Boolean);
-    const pLines = String(historyItem?.plates || "").split("\n").map(l => l.trim()).filter(Boolean);
-    const total = Math.max(vLines.length, pLines.length);
-    const data = [];
+      return true;
+    });
 
-    for (let i = 0; i < total; i++) {
-      const vin = (vLines[i] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-      const plate = (pLines[i] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-      let decoded = { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
-      if (vin) {
-        try {
-          const dec = window.currentDecoder;
-          decoded = dec && typeof dec.decode === "function" ? dec.decode(vin) : decoded;
-        } catch (_) {
-          decoded = { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
-        }
-      }
-      const itemData = {
-        tipo: vin && plate ? "COMBINADO" : (vin ? "VIN" : "PLATE"),
-        vin,
-        placa: plate,
-        fabricante: decoded.manufacturerName || "Desconhecido",
-        result: JSON.parse(JSON.stringify(decoded)),
-        ob: {},
-        ob_data: {},
-        status: "pending"
-      };
+    if (rebuildSelects) {
+      const newModels = new Set();
+      const newSubs = new Set();
+      const newYears = new Set();
 
-      if (plate) {
-        try {
-          const apiResult = (typeof consultarPlacaPHP === "function")
-            ? await consultarPlacaPHP(plate, vin || "")
-            : { status: "erro", mensagem: "Consulta de placa indisponível." };
-          if (apiResult.status === "ok") {
-            itemData.status = "ok";
-            itemData.apiResult = apiResult;
-            itemData.fabricante = apiResult.marca || apiResult.fabricante || apiResult.brand || apiResult.texto_marca || itemData.fabricante;
+      filtered.forEach(item => {
+        const meta = item.meta || {};
+        (meta.models || []).forEach(m => { if (m) newModels.add(m); });
+        (meta.submodels || []).forEach(s => { if (s) newSubs.add(s); });
+        (meta.years || []).forEach(y => { if (y) newYears.add(y); });
+      });
 
-            if (!vin && (apiResult.chassi_completo || apiResult.chassi)) {
-              itemData.vin = apiResult.chassi_completo || apiResult.chassi;
-            }
-
-            if (window.buscarDadosOnibusBrasil) {
-              try {
-                const obData = await window.buscarDadosOnibusBrasil(plate, false);
-                if (obData && !obData.erro) {
-                  itemData.ob_data = obData;
-                  itemData.ob = {
-                    ob_carroceria: obData.carroceria || "—",
-                    ob_encarrocadeira: obData.encarrocadeira || obData.encarrocadora || "—",
-                    ob_fabricante_chassi: obData.fabricante_chassi || obData.fabricante || apiResult.marca || "—",
-                    ob_chassi: obData.modelo_chassi || obData.chassi || apiResult.modelo || "—"
-                  };
-                }
-              } catch (_) {}
-            }
-          } else {
-            itemData.status = "error";
-            itemData.error_detail = apiResult.mensagem;
-            itemData.apiResult = apiResult;
-          }
-        } catch (e) {
-          itemData.status = "error";
-          itemData.error_detail = e.message || "Falha ao consultar API.";
-        }
-      } else if (vin) {
-        itemData.status = "ok";
-      } else {
-        itemData.status = "orphan";
-      }
-
-      data.push(itemData);
-      if (onProgress) onProgress(i + 1, total);
+      updateHistorySelect(hFilterModel, newModels, fModel);
+      updateHistorySelect(hFilterSubModel, newSubs, fSubModel);
+      updateHistorySelect(hFilterYear, newYears, fYear);
     }
 
-    return data;
+    renderGroupHistoryItems(filtered, sessUser);
   };
 
-  const formatarTempo = (ms) => {
-    const totalSeg = Math.max(0, Math.round(ms / 1000));
-    const min = Math.floor(totalSeg / 60);
-    const seg = totalSeg % 60;
-    return min > 0 ? `${min}m ${seg}s` : `${seg}s`;
+  updateHistorySelect(hFilterBrand, hBrands);
+  updateHistorySelect(hFilterModel, hModels);
+  updateHistorySelect(hFilterSubModel, hSubModels);
+  updateHistorySelect(hFilterYear, hYears);
+
+  mainSearch.oninput = () => applyHistoryFilters(true);
+
+  hFilterBrand.onchange = () => {
+    hFilterModel.value = ""; hFilterSubModel.value = ""; hFilterYear.value = "";
+    applyHistoryFilters(true);
   };
+  hFilterModel.onchange = () => {
+    hFilterSubModel.value = ""; hFilterYear.value = "";
+    applyHistoryFilters(true);
+  };
+  hFilterSubModel.onchange = () => applyHistoryFilters(true);
+  hFilterYear.onchange = () => applyHistoryFilters(true);
 
-  const criarModalProgressoLote = (titulo = "Preparando relatório...") => {
-    const overlay = document.createElement("div");
-    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(2px);z-index:9999;display:flex;align-items:center;justify-content:center;";
+  const listContainer = document.createElement("div");
+  listContainer.id = "groupHistoryList";
+  h.appendChild(listContainer);
 
-    const box = document.createElement("div");
-    box.style.cssText = "width:min(520px,92vw);background:var(--bg-elev);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:0 20px 50px rgba(0,0,0,0.5);";
+  renderGroupHistoryItems(list, sessUser);
+}
 
-    const title = document.createElement("div");
-    title.style.cssText = "font-weight:700;color:var(--text);margin-bottom:10px;";
-    title.textContent = titulo;
+  // Gera os dados do relatório de um lote salvo no histórico sem reprocessar a tela.
+async function montarRelatorioDoHistorico(historyItem, onProgress = null) {
+  const vLines = String(historyItem?.vins || "").split("\n").map(l => l.trim()).filter(Boolean);
+  const pLines = String(historyItem?.plates || "").split("\n").map(l => l.trim()).filter(Boolean);
+  const total = Math.max(vLines.length, pLines.length);
+  const data = [];
 
-    const status = document.createElement("div");
-    status.style.cssText = "font-size:13px;color:var(--muted);margin-bottom:10px;";
-    status.textContent = "Iniciando...";
+  for (let i = 0; i < total; i++) {
+    const vin = (vLines[i] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const plate = (pLines[i] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    let decoded = { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
+    if (vin) {
+      try {
+        const dec = window.currentDecoder;
+        decoded = dec && typeof dec.decode === "function" ? dec.decode(vin) : decoded;
+      } catch (_) {
+        decoded = { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
+      }
+    }
+    const itemData = {
+      tipo: vin && plate ? "COMBINADO" : (vin ? "VIN" : "PLATE"),
+      vin,
+      placa: plate,
+      fabricante: decoded.manufacturerName || "Desconhecido",
+      result: JSON.parse(JSON.stringify(decoded)),
+      ob: {},
+      ob_data: {},
+      status: "pending"
+    };
 
-    const barWrap = document.createElement("div");
-    barWrap.style.cssText = "width:100%;height:10px;background:var(--bg);border:1px solid var(--border);border-radius:999px;overflow:hidden;";
+    if (plate) {
+      try {
+        const apiResult = (typeof consultarPlacaPHP === "function")
+          ? await consultarPlacaPHP(plate, vin || "")
+          : { status: "erro", mensagem: "Consulta de placa indisponível." };
+        if (apiResult.status === "ok") {
+          itemData.status = "ok";
+          itemData.apiResult = apiResult;
+          itemData.fabricante = apiResult.marca || apiResult.fabricante || apiResult.brand || apiResult.texto_marca || itemData.fabricante;
 
-    const bar = document.createElement("div");
-    bar.style.cssText = "width:0%;height:100%;background:linear-gradient(90deg,var(--accent-2),var(--accent));transition:width .2s ease;";
-    barWrap.appendChild(bar);
+          if (!vin && (apiResult.chassi_completo || apiResult.chassi)) {
+            itemData.vin = apiResult.chassi_completo || apiResult.chassi;
+          }
 
-    box.appendChild(title);
-    box.appendChild(status);
-    box.appendChild(barWrap);
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
+          if (window.buscarDadosOnibusBrasil) {
+            try {
+              const obData = await window.buscarDadosOnibusBrasil(plate, false);
+              if (obData && !obData.erro) {
+                itemData.ob_data = obData;
+                itemData.ob = {
+                  ob_carroceria: obData.carroceria || "—",
+                  ob_encarrocadeira: obData.encarrocadeira || obData.encarrocadora || "—",
+                  ob_fabricante_chassi: obData.fabricante_chassi || obData.fabricante || apiResult.marca || "—",
+                  ob_chassi: obData.modelo_chassi || obData.chassi || apiResult.modelo || "—"
+                };
+              }
+            } catch (_) {}
+          }
+        } else {
+          itemData.status = "error";
+          itemData.error_detail = apiResult.mensagem;
+          itemData.apiResult = apiResult;
+        }
+      } catch (e) {
+        itemData.status = "error";
+        itemData.error_detail = e.message || "Falha ao consultar API.";
+      }
+    } else if (vin) {
+      itemData.status = "ok";
+    } else {
+      itemData.status = "orphan";
+    }
 
-    return {
+    data.push(itemData);
+    if (onProgress) onProgress(i + 1, total);
+  }
+
+  return data;
+}
+
+function formatarTempo(ms) {
+  const totalSeg = Math.max(0, Math.round(ms / 1000));
+  const min = Math.floor(totalSeg / 60);
+  const seg = totalSeg % 60;
+  return min > 0 ? (min + "m " + seg + "s") : (seg + "s");
+}
+
+function criarModalProgressoLote(titulo = "Preparando relatório...") {
+  const overlay = document.createElement("div");
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(2px);z-index:9999;display:flex;align-items:center;justify-content:center;";
+
+  const box = document.createElement("div");
+  box.style.cssText = "width:min(520px,92vw);background:var(--bg-elev);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:0 20px 50px rgba(0,0,0,0.5);";
+
+  const title = document.createElement("div");
+  title.style.cssText = "font-weight:700;color:var(--text);margin-bottom:10px;";
+  title.textContent = titulo;
+
+  const status = document.createElement("div");
+  status.style.cssText = "font-size:13px;color:var(--muted);margin-bottom:10px;";
+  status.textContent = "Iniciando...";
+
+  const barWrap = document.createElement("div");
+  barWrap.style.cssText = "width:100%;height:10px;background:var(--bg);border:1px solid var(--border);border-radius:999px;overflow:hidden;";
+
+  const bar = document.createElement("div");
+  bar.style.cssText = "width:0%;height:100%;background:linear-gradient(90deg,var(--accent-2),var(--accent));transition:width .2s ease;";
+  barWrap.appendChild(bar);
+
+  box.appendChild(title);
+  box.appendChild(status);
+  box.appendChild(barWrap);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  return {
       update: (done, total, elapsedMs) => {
         const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-        bar.style.width = `${pct}%`;
+        bar.style.width = pct + "%";
         const mediaPorItem = done > 0 ? elapsedMs / done : 0;
         const restanteMs = mediaPorItem * Math.max(0, total - done);
-        status.textContent = `${done}/${total} itens • ${pct}% • Tempo: ${formatarTempo(elapsedMs)} • Restante aprox.: ${formatarTempo(restanteMs)}`;
+        status.textContent = done + "/" + total + " itens • " + pct + "% • Tempo: " + formatarTempo(elapsedMs) + " • Restante aprox.: " + formatarTempo(restanteMs);
       },
       close: () => overlay.remove()
     };
-  };
+  }
 
-  const renderGroupHistoryItems = (list, sessUser) => {
-    const h = el("groupHistoryList");
-    if (!h) return;
-    h.innerHTML = "";
+function renderGroupHistoryItems(list, sessUser) {
+  const h = el("groupHistoryList");
+  if (!h) return;
+  h.innerHTML = "";
 
-    if (list.length === 0) {
-      h.innerHTML = `<div style="color:var(--muted); text-align:center; padding: 20px;">Nenhum item encontrado.</div>`;
-      return;
-    }
+  if (list.length === 0) {
+    h.innerHTML = '<div style="color:var(--muted); text-align:center; padding: 20px;">Nenhum item encontrado.</div>';
+    return;
+  }
 
-    const totalPages = Math.ceil(list.length / HISTORY_PAGE_SIZE);
-    if (currentGroupHistoryPage > totalPages) currentGroupHistoryPage = totalPages;
-    if (currentGroupHistoryPage < 1) currentGroupHistoryPage = 1;
+  const totalPages = Math.ceil(list.length / HISTORY_PAGE_SIZE);
+  if (currentGroupHistoryPage > totalPages) currentGroupHistoryPage = totalPages;
+  if (currentGroupHistoryPage < 1) currentGroupHistoryPage = 1;
 
-    const start = (currentGroupHistoryPage - 1) * HISTORY_PAGE_SIZE;
-    const end = start + HISTORY_PAGE_SIZE;
-    const pageList = list.slice(start, end);
+  const start = (currentGroupHistoryPage - 1) * HISTORY_PAGE_SIZE;
+  const end = start + HISTORY_PAGE_SIZE;
+  const pageList = list.slice(start, end);
 
-    pageList.forEach((item, idx) => {
-      const indexInFullList = start + idx;
-      const row = document.createElement("div");
-      row.className = "item clickable";
-      row.style.padding = "12px 15px";
-      
-      const v = document.createElement("div");
-      v.style.flex = "1";
-      v.style.display = "flex";
-      v.style.flexDirection = "column";
-      v.style.gap = "4px";
+  pageList.forEach((item, idx) => {
+    const indexInFullList = start + idx;
+    const row = document.createElement("div");
+    row.className = "item clickable";
+    row.style.padding = "12px 15px";
+    
+    const v = document.createElement("div");
+    v.style.flex = "1";
+    v.style.display = "flex";
+    v.style.flexDirection = "column";
+    v.style.gap = "4px";
 
-      const vCount = (item.vins || "").split("\n").filter(Boolean).length;
-      const pCount = (item.plates || "").split("\n").filter(Boolean).length;
-      const totalCount = Math.max(vCount, pCount);
-      
-      const dataHora = new Date(item.ts).toLocaleString('pt-BR', {
-        timeZone: 'America/Sao_Paulo',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-
-      const title = document.createElement("div");
-      title.style.fontWeight = "600";
-      title.style.color = "var(--accent)";
-      title.textContent = item.fleetName ? `📦 ${item.fleetName}` : `📦 Lote #${list.length - indexInFullList}`;
-      
-      const details = document.createElement("div");
-      details.style.fontSize = "13px";
-      details.style.color = "var(--text)";
-      details.textContent = item.auditOnly
-        ? `${dataHora} · registro global`
-        : `${totalCount} itens • ${dataHora}`;
-
-      const auditLine = document.createElement("div");
-      auditLine.style.fontSize = "11px";
-      auditLine.style.color = "var(--muted)";
-      if (item.auditBy) {
-        auditLine.textContent =
-          `👤 ${item.auditBy}` + (item.auditEmail ? ` · ${item.auditEmail}` : "");
-      }
-
-      const preview = document.createElement("div");
-      preview.style.fontSize = "11px";
-      preview.style.color = "var(--muted)";
-      preview.style.fontStyle = "italic";
-      const vList = (item.vins || "").split("\n").filter(Boolean);
-      const pList = (item.plates || "").split("\n").filter(Boolean);
-      const previewText = [];
-      for(let i=0; i<Math.min(2, totalCount); i++) {
-        previewText.push(`${vList[i] || ""}${pList[i] ? " ["+pList[i]+"]" : ""}`);
-      }
-      preview.textContent = previewText.join(", ") + (totalCount > 2 ? "..." : "");
-
-      v.appendChild(title);
-      v.appendChild(details);
-      if (item.auditBy) v.appendChild(auditLine);
-      if (previewText.length > 0) v.appendChild(preview);
-      
-      v.onclick = () => {
-        if (item.auditOnly) {
-          if (typeof showToast === "function") {
-            showToast("Sem lista de chassis no servidor — só o registro da pesquisa.", "error");
-          }
-          return;
-        }
-
-        const gInput = el("groupInput");
-        const gPlateInput = el("groupPlateInput");
-        const bGroup = el("btnGroupDecode");
-        const fleetEl = el("fleetName");
-
-        const fleetNameValue = item.fleetName || `Lote_${new Date(item.ts).getTime()}`;
-
-        const isFieldsEmpty = !gInput.value.trim() && !gPlateInput.value.trim();
-
-        // Verifica se este lote já está decodificado na tela
-        const currentFingerprint = JSON.stringify({
-          fleetName: fleetNameValue,
-          vins: item.vins || "",
-          plates: item.plates || ""
-        });
-
-        if (!isFieldsEmpty && window.currentGroupResults && window.currentGroupResults.length > 0 && window.lastGroupLotFingerprint === currentFingerprint) {
-          // Se já estiver na tela, apenas muda para a tela de grupo se necessário
-          const groupDecoder = el("groupDecoder");
-          if (groupDecoder && groupDecoder.style.display === "none") {
-            const optGroup = el("optGroup");
-            if (optGroup) optGroup.click();
-          }
-          return;
-        }
-
-        if (fleetEl) {
-          fleetEl.value = fleetNameValue;
-          fleetEl.dispatchEvent(new Event("input"));
-        }
-        if (gInput) {
-          gInput.value = item.vins || "";
-          gInput.dispatchEvent(new Event("input"));
-        }
-        if (gPlateInput) {
-          gPlateInput.value = item.plates || "";
-          gPlateInput.dispatchEvent(new Event("input"));
-        }
-        
-        if (bGroup) { 
-          bGroup.disabled = false; 
-          // Delay ligeiramente maior para garantir que as validações de input terminaram
-          setTimeout(() => {
-            if (bGroup.disabled === false) {
-              bGroup.click();
-            } else {
-              // Se por algum motivo continuar desabilitado, forçamos a validação e tentamos novamente
-              if (typeof window.validateGroupForm === "function") window.validateGroupForm();
-              setTimeout(() => bGroup.click(), 50);
-            }
-          }, 100);
-        }
-      };
-
-      const actions = document.createElement("div");
-      actions.style.display = "flex";
-      actions.style.alignItems = "center";
-      actions.style.gap = "8px";
-
-      const btnExportLot = document.createElement("button");
-      btnExportLot.className = "btn-page";
-      btnExportLot.textContent = "📄";
-      btnExportLot.title = "Exportar este lote sem redecodificar";
-      btnExportLot.style.padding = "6px 10px";
-      btnExportLot.style.minWidth = "36px";
-      btnExportLot.onclick = async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (item.auditOnly) {
-          if (typeof showToast === "function") {
-            showToast("Exportação indisponível — lote só existe como registro no servidor.", "error");
-          }
-          return;
-        }
-        const oldTxt = btnExportLot.textContent;
-        btnExportLot.disabled = true;
-        btnExportLot.textContent = "⏳";
-        const progresso = criarModalProgressoLote("Gerando relatório do lote...");
-        const t0 = Date.now();
-        try {
-          const reportData = await montarRelatorioDoHistorico(item, (done, total) => {
-            progresso.update(done, total, Date.now() - t0);
-          });
-          if (!reportData || reportData.length === 0) {
-            showToast("Não foi possível montar o relatório deste lote.", "error");
-            return;
-          }
-          const loteNome = (item.fleetName || `Lote_${new Date(item.ts).getTime()}`).replace(/\s+/g, "_");
-          openReportOptions(reportData, `Relatorio_${loteNome}`);
-        } catch (err) {
-          showToast("Erro ao preparar relatório do histórico.", "error");
-        } finally {
-          progresso.close();
-          btnExportLot.disabled = false;
-          btnExportLot.textContent = oldTxt;
-        }
-      };
-      if (item.auditOnly) {
-        btnExportLot.style.opacity = "0.35";
-        btnExportLot.title = "Sem dados de lote no servidor";
-      }
-
-      actions.appendChild(btnExportLot);
-      row.appendChild(v);
-      row.appendChild(actions);
-      h.appendChild(row);
+    const vCount = (item.vins || "").split("\n").filter(Boolean).length;
+    const pCount = (item.plates || "").split("\n").filter(Boolean).length;
+    const totalCount = Math.max(vCount, pCount);
+    
+    const dataHora = new Date(item.ts).toLocaleString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     });
 
-    if (totalPages > 1) {
-      const pagination = document.createElement("div");
-      pagination.className = "history-pagination";
-      pagination.style.cssText = "display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 15px; padding: 10px;";
+    const title = document.createElement("div");
+    title.style.fontWeight = "600";
+    title.style.color = "var(--accent)";
+    title.textContent = item.fleetName ? ("📦 " + item.fleetName) : ("📦 Lote #" + (list.length - indexInFullList));
+    
+    const details = document.createElement("div");
+    details.style.fontSize = "13px";
+    details.style.color = "var(--text)";
+    details.textContent = item.auditOnly
+      ? (dataHora + " · registro global")
+      : (totalCount + " itens • " + dataHora);
 
-      const btnPrev = document.createElement("button");
-      btnPrev.textContent = "← Anterior";
-      btnPrev.disabled = currentGroupHistoryPage === 1;
-      btnPrev.className = "btn-page";
-      btnPrev.onclick = () => { currentGroupHistoryPage--; renderGroupHistory(); };
-
-      const pageInfo = document.createElement("span");
-      pageInfo.textContent = `Página ${currentGroupHistoryPage} de ${totalPages}`;
-      pageInfo.style.fontSize = "14px";
-      pageInfo.style.color = "var(--muted)";
-
-      const btnNext = document.createElement("button");
-      btnNext.textContent = "Próximo →";
-      btnNext.disabled = currentGroupHistoryPage === totalPages;
-      btnNext.className = "btn-page";
-      btnNext.onclick = () => { currentGroupHistoryPage++; renderGroupHistory(); };
-
-      pagination.appendChild(btnPrev);
-      pagination.appendChild(pageInfo);
-      pagination.appendChild(btnNext);
-      h.appendChild(pagination);
+    const auditLine = document.createElement("div");
+    auditLine.style.fontSize = "11px";
+    auditLine.style.color = "var(--muted)";
+    if (item.auditBy) {
+      auditLine.textContent = "👤 " + item.auditBy + (item.auditEmail ? " · " + item.auditEmail : "");
     }
-  };
+
+    const preview = document.createElement("div");
+    preview.style.fontSize = "11px";
+    preview.style.color = "var(--muted)";
+    preview.style.fontStyle = "italic";
+    const vList = (item.vins || "").split("\n").filter(Boolean);
+    const pList = (item.plates || "").split("\n").filter(Boolean);
+    const previewText = [];
+    for (let i = 0; i < Math.min(2, totalCount); i++) {
+      previewText.push((vList[i] || "") + (pList[i] ? " [" + pList[i] + "]" : ""));
+    }
+    preview.textContent = previewText.join(", ") + (totalCount > 2 ? "..." : "");
+
+    v.appendChild(title);
+    v.appendChild(details);
+    if (item.auditBy) v.appendChild(auditLine);
+    if (previewText.length > 0) v.appendChild(preview);
+    
+    row.onclick = () => {
+      if (item.auditOnly) {
+        if (typeof showToast === "function") {
+          showToast("Sem lista de chassis no servidor — só o registro da pesquisa.", "error");
+        }
+        return;
+      }
+
+      const gInput = el("groupInput");
+      const gPlateInput = el("groupPlateInput");
+      const bGroup = el("btnGroupDecode");
+      const fleetEl = el("fleetName");
+      const optGroup = el("optGroup");
+      const combinedEl = el("combinedMode");
+
+      const fleetNameValue = item.fleetName || ("Lote_" + new Date(item.ts).getTime());
+
+      // Sempre muda para a aba de grupo ao clicar no histórico
+      if (optGroup) optGroup.click();
+
+      const vListItems = (item.vins || "").split("\n").filter(Boolean);
+      const pListItems = (item.plates || "").split("\n").filter(Boolean);
+      const isCombined = vListItems.length > 0 && pListItems.length > 0 && vListItems.length === pListItems.length;
+
+      if (combinedEl) {
+        combinedEl.checked = isCombined;
+      }
+
+      const currentFingerprint = JSON.stringify({
+        fleetName: fleetNameValue,
+        vins: item.vins || "",
+        plates: item.plates || ""
+      });
+
+      // Se já for o lote que está na tela, não precisa reprocessar
+      const gResults = el("groupResults");
+      const alreadyRendered = gResults && gResults.children.length > 0;
+      if (alreadyRendered && window.currentGroupResults && window.currentGroupResults.length > 0 && window.lastGroupLotFingerprint === currentFingerprint) {
+        return;
+      }
+
+      if (fleetEl) {
+        fleetEl.value = fleetNameValue;
+        fleetEl.dispatchEvent(new Event("input"));
+      }
+      if (gInput) {
+        gInput.value = item.vins || "";
+        gInput.dispatchEvent(new Event("input"));
+      }
+      if (gPlateInput) {
+        gPlateInput.value = item.plates || "";
+        gPlateInput.dispatchEvent(new Event("input"));
+      }
+      
+      if (bGroup) { 
+        // Delay para garantir que o sistema processe as entradas
+        setTimeout(() => {
+          if (typeof window.validateGroupForm === "function") window.validateGroupForm();
+          bGroup.disabled = false; 
+          bGroup.click();
+        }, 200);
+      }
+    };
+
+    const actions = document.createElement("div");
+    actions.style.display = "flex";
+    actions.style.alignItems = "center";
+    actions.style.gap = "8px";
+
+    const btnExportLot = document.createElement("button");
+    btnExportLot.className = "btn-page";
+    btnExportLot.textContent = "📄";
+    btnExportLot.title = "Exportar este lote sem redecodificar";
+    btnExportLot.style.padding = "6px 10px";
+    btnExportLot.style.minWidth = "36px";
+    btnExportLot.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (item.auditOnly) {
+        if (typeof showToast === "function") {
+          showToast("Exportação indisponível — lote só existe como registro no servidor.", "error");
+        }
+        return;
+      }
+      const oldTxt = btnExportLot.textContent;
+      btnExportLot.disabled = true;
+      btnExportLot.textContent = "⏳";
+      const progresso = criarModalProgressoLote("Gerando relatório do lote...");
+      const t0 = Date.now();
+      try {
+        const reportData = await montarRelatorioDoHistorico(item, (done, total) => {
+          progresso.update(done, total, Date.now() - t0);
+        });
+        if (!reportData || reportData.length === 0) {
+          showToast("Não foi possível montar o relatório deste lote.", "error");
+          return;
+        }
+        const loteNome = (item.fleetName || ("Lote_" + new Date(item.ts).getTime())).replace(/\s+/g, "_");
+        openReportOptions(reportData, "Relatorio_" + loteNome);
+      } catch (err) {
+        showToast("Erro ao preparar relatório do histórico.", "error");
+      } finally {
+        progresso.close();
+        btnExportLot.disabled = false;
+        btnExportLot.textContent = oldTxt;
+      }
+    };
+    if (item.auditOnly) {
+      btnExportLot.style.opacity = "0.35";
+      btnExportLot.title = "Sem dados de lote no servidor";
+    }
+
+    actions.appendChild(btnExportLot);
+    row.appendChild(v);
+    row.appendChild(actions);
+    h.appendChild(row);
+  });
+
+  if (totalPages > 1) {
+    const pagination = document.createElement("div");
+    pagination.className = "history-pagination";
+    pagination.style.cssText = "display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 15px; padding: 10px;";
+
+    const btnPrev = document.createElement("button");
+    btnPrev.textContent = "← Anterior";
+    btnPrev.disabled = currentGroupHistoryPage === 1;
+    btnPrev.className = "btn-page";
+    btnPrev.onclick = () => { currentGroupHistoryPage--; renderGroupHistory(); };
+
+    const pageInfo = document.createElement("span");
+    pageInfo.textContent = "Página " + currentGroupHistoryPage + " de " + totalPages;
+    pageInfo.style.fontSize = "14px";
+    pageInfo.style.color = "var(--muted)";
+
+    const btnNext = document.createElement("button");
+    btnNext.textContent = "Próximo →";
+    btnNext.disabled = currentGroupHistoryPage === totalPages;
+    btnNext.className = "btn-page";
+    btnNext.onclick = () => { currentGroupHistoryPage++; renderGroupHistory(); };
+
+    pagination.appendChild(btnPrev);
+    pagination.appendChild(pageInfo);
+    pagination.appendChild(btnNext);
+    h.appendChild(pagination);
+  }
+}
 
   window.renderGroupHistory = renderGroupHistory;
 
-const exportCSV = (data, name, includeFipe = true) => {
+function exportCSV(data, name, includeFipe = true) {
   const uniqueData = [];
   const seen = new Set();
 
@@ -1271,7 +1593,7 @@ const exportCSV = (data, name, includeFipe = true) => {
     const api = item?.apiResult || {};
     const placa = String(item?.placa || api?.placa || "").trim().toUpperCase();
     const chassi = String(item?.vin || api?.chassi_completo || api?.chassi || "").trim().toUpperCase();
-    const key = `${placa}|${chassi}`;
+    const key = placa + "|" + chassi;
     if (key === "|") return;
     if (seen.has(key)) return;
     seen.add(key);
@@ -1375,7 +1697,7 @@ const exportCSV = (data, name, includeFipe = true) => {
         fipeModFinal,
         api.combustivel || "—",
         api.cor || "—",
-        (api.municipio && api.uf) ? `${api.municipio} / ${api.uf}` : (api.cidade || "—")
+        (api.municipio && api.uf) ? (api.municipio + " / " + api.uf) : (api.cidade || "—")
       ];
     } else {
       row = [
@@ -1387,7 +1709,7 @@ const exportCSV = (data, name, includeFipe = true) => {
         ob.carroceria || "—",
         ob.encarrocadeira || ob.encarrocadora || "—",
         ob.modelo_chassi || ob.chassi || api.modelo || findToken("Modelo") || "—",
-        (api.municipio && api.uf) ? `${api.municipio} / ${api.uf}` : (api.cidade || "—")
+        (api.municipio && api.uf) ? (api.municipio + " / " + api.uf) : (api.cidade || "—")
       ];
     }
 
@@ -1401,145 +1723,400 @@ const exportCSV = (data, name, includeFipe = true) => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${name}_${new Date().getTime()}.csv`;
+  link.download = name + "_" + new Date().getTime() + ".csv";
   link.click();
-};
+}
 
-  const btnExportCSV = el("btnExportCSV");
+let exportDataBuffer = null;
+let exportNameBuffer = "";
+
+function openReportOptions(data, name) {
+  exportDataBuffer = data;
+  exportNameBuffer = name;
   const reportModal = el("reportModal");
-  let exportDataBuffer = null;
-  let exportNameBuffer = "";
-
-  const openReportOptions = (data, name) => {
-    exportDataBuffer = data;
-    exportNameBuffer = name;
-    if (reportModal) reportModal.style.display = "flex";
-  };
-
-  if (el("closeReportModal")) {
-    el("closeReportModal").onclick = () => { if (reportModal) reportModal.style.display = "none"; };
-  }
-
-  if (el("btnExportFull")) {
-    el("btnExportFull").onclick = () => {
-      if (exportDataBuffer) exportCSV(exportDataBuffer, exportNameBuffer, true);
-      if (reportModal) reportModal.style.display = "none";
-    };
-  }
-
-  if (el("btnExportBasic")) {
-    el("btnExportBasic").onclick = () => {
-      if (exportDataBuffer) exportCSV(exportDataBuffer, exportNameBuffer, false);
-      if (reportModal) reportModal.style.display = "none";
-    };
-  }
-
-  if (btnExportCSV) {
-    btnExportCSV.onclick = () => {
-      if (window.currentGroupResults) openReportOptions(window.currentGroupResults, "Relatorio_Frota");
-    };
-  }
+  if (reportModal) reportModal.style.display = "flex";
+}
 
 let currentGroupPage = 1;
 const GROUP_PAGE_SIZE = 10;
 
-const populateGroupFilters = (results) => {
+const normalizeBrand = (b) => {
+  if (!b) return "";
+  const brand = String(b).trim().toUpperCase();
+  if (brand.includes("SCANIA")) return "SCANIA";
+  if (brand.includes("VOLVO")) return "VOLVO";
+  if (brand.includes("IVECO")) return "IVECO";
+  if (brand.includes("MERCEDES") || brand.includes("M.BENZ") || brand.includes("MBENZ")) return "MERCEDES-BENZ";
+  if (brand.includes("VOLKSWAGEN") || brand.includes("VWCO") || brand.includes("MAN LATIN AMERICA") || brand === "MAN") return "VOLKSWAGEN";
+  if (brand.includes("AGRALE")) return "AGRALE";
+  if (brand.includes("DAF")) return "DAF";
+  if (brand.includes("MARCOPOLO")) return "MARCOPOLO";
+  if (brand.includes("VOLARE")) return "VOLARE";
+  if (brand.includes("NEOBUS")) return "NEOBUS";
+  if (brand.includes("CAIO")) return "CAIO";
+  if (brand.includes("COMIL")) return "COMIL";
+  if (brand.includes("MASCARELLO")) return "MASCARELLO";
+  if (brand.includes("IRIZAR")) return "IRIZAR";
+  if (brand.includes("FORD")) return "FORD";
+  if (brand.includes("CHEVROLET") || brand === "GM") return "CHEVROLET";
+  return brand; // Retorna sempre em caixa alta para evitar duplicidade por case
+};
+
+const getTechnicalData = (item) => {
+  let brand = normalizeBrand(item.fabricante);
+  let modFull = "";
+  let yearFull = "";
+  let type = ""; // BUS, TRUCK, etc
+  let segment = ""; // Caminhão, Ônibus, Leves, Agrícola, Florestal
+
+  const findValueByTerm = (term) => {
+    if (!item.result || !item.result.tokens) return null;
+    const target = term.toLowerCase();
+    const t = item.result.tokens.find(tk => {
+      const key = String(tk.key || "").toLowerCase();
+      const label = String(tk.label || "").toLowerCase();
+      return key.includes(target) || label.includes(target);
+    });
+    return t ? t.value : null;
+  };
+
+  if (item.apiResult) {
+    const api = item.apiResult;
+    const mBasico = api.modelo || api.model || api.texto_modelo || "";
+    const vBasico = api.versao || api.version || "";
+    modFull = (mBasico && vBasico && !mBasico.includes(vBasico)) ? (mBasico + " " + vBasico) : (mBasico || vBasico || "");
+    
+    const anoFab = api.ano || api.ano_fabricacao || api.year || api.anoFabricacao;
+    const anoMod = api.ano_modelo || api.model_year || api.anoModelo;
+    yearFull = (anoFab && anoMod && api.ano !== api.ano_modelo) ? (anoFab + "/" + anoMod) : (anoFab || anoMod || "");
+    if (!brand) brand = normalizeBrand(api.marca || api.fabricante || api.brand);
+    
+    // Tenta identificar o tipo e o segmento pela API
+    const rawSegment = String(api.segmento || api.tipo_veiculo || api.tipo || api.category || "").trim();
+    const apiType = rawSegment.toUpperCase();
+    
+    if (apiType.includes("ONIBUS") || apiType.includes("ÔNIBUS") || apiType.includes("BUS")) {
+      type = "BUS";
+      segment = "Ônibus";
+    } else if (apiType.includes("CAMINHAO") || apiType.includes("CAMINHÃO") || apiType.includes("TRUCK")) {
+      type = "TRUCK";
+      segment = "Caminhão";
+    } else if (apiType.includes("LEVE")) {
+      type = "CAR";
+      segment = "Leves";
+    } else if (apiType.includes("AGRICOLA") || apiType.includes("AGRÍCOLA")) {
+      type = "AGRI";
+      segment = "Agrícola";
+    } else if (apiType.includes("FLORESTAL")) {
+      type = "FOREST";
+      segment = "Florestal";
+    } else {
+      segment = rawSegment; // Caso venha outra coisa, mantém o que veio da API
+    }
+
+  } else if (item.result && item.result.type !== "UNKNOWN") {
+    modFull = findValueByTerm("modelo") || findValueByTerm("chassi/motor") || findValueByTerm("descrição") || "";
+    yearFull = item.result.year || findValueByTerm("ano") || "";
+    if (!brand) brand = normalizeBrand(item.result.manufacturerName || findValueByTerm("fabricante") || findValueByTerm("marca"));
+    
+    // Identifica o tipo pelo decodificador
+    const resType = String(item.result.type || "").toUpperCase();
+    if (resType.includes("BUS")) {
+      type = "BUS";
+      if (!segment) segment = "Ônibus";
+    } else if (resType.includes("TRUCK")) {
+      type = "TRUCK";
+      if (!segment) segment = "Caminhão";
+    }
+
+  } else if (item.ob && item.ob.ob_chassi && item.ob.ob_chassi !== "—") {
+    modFull = item.ob.ob_chassi;
+    if (!brand) brand = normalizeBrand(item.ob.ob_fabricante_chassi);
+    type = "BUS"; // Dados do ÔnibusBrasil são sempre ônibus
+    segment = "Ônibus";
+  }
+
+  // Se ainda não tem tipo, tenta inferir pelo nome do modelo ou fabricante
+  if (!type) {
+    const searchString = (modFull + " " + brand).toUpperCase();
+    if (searchString.includes("BUS") || searchString.includes("ÔNIBUS") || searchString.includes("MICRO") || searchString.includes("VOLARE") || searchString.includes("MARCOPOLO") || searchString.includes("NEOBUS") || searchString.includes("CAIO") || searchString.includes("COMIL") || searchString.includes("MASCARELLO")) {
+      type = "BUS";
+      segment = "Ônibus";
+    } else if (searchString.includes("STRADALE") || searchString.includes("STRALIS") || searchString.includes("TRUCK") || searchString.includes("CAMINHAO") || searchString.includes("CAMINHÃO") || searchString.includes("TRACTOR") || searchString.includes("SCANIA") || searchString.includes("IVECO") || searchString.includes("DAF")) {
+      type = "TRUCK";
+      segment = "Caminhão";
+    }
+  }
+
+  // Limpeza: Se o que veio em modFull for APENAS um ano (ex: 2013 ou 1986/2016), limpamos modFull
+  const isOnlyYear = /^(\d{4})(\/\d{4})?$/.test(String(modFull).trim());
+  if (isOnlyYear) {
+    if (!yearFull) yearFull = modFull; // Aproveita se yearFull estiver vazio
+    modFull = "";
+  }
+
+  let model = "";
+  let submodel = "";
+  if (modFull) {
+    const sMod = String(modFull).trim();
+    if (sMod.includes("-")) {
+      const parts = sMod.split("-");
+      model = parts[0].trim();
+      submodel = parts.slice(1).join("-").trim();
+    } else if (sMod.includes(" ")) {
+      const parts = sMod.split(" ");
+      model = parts[0].trim();
+      submodel = parts.slice(1).join(" ").trim();
+    } else {
+      const match = sMod.match(/^([A-Za-z]+)([0-9].*)$/);
+      if (match) {
+        model = match[1].trim();
+        submodel = match[2].trim();
+      } else {
+        model = sMod.trim();
+      }
+    }
+  }
+
+  return {
+    brand: brand || "",
+    model,
+    submodel,
+    fullModel: modFull,
+    year: yearFull ? String(yearFull) : "",
+    type: type || "UNKNOWN",
+    segment: segment || "Outros"
+  };
+};
+
+function populateGroupFilters(results) {
+    const segments = new Set();
     const brands = new Set();
-    const models = new Set();
-    const years = new Set();
 
     results.forEach(item => {
-      if (item.fabricante) brands.add(item.fabricante);
-      
-      let mod = "";
-      if (item.apiResult) {
-        const api = item.apiResult;
-        const mBasico = api.modelo || api.model || api.texto_modelo || "";
-        const vBasico = api.versao || api.version || "";
-        mod = (mBasico && vBasico && !mBasico.includes(vBasico)) ? `${mBasico} ${vBasico}` : (mBasico || vBasico || "");
-      } else if (item.ob && item.ob.ob_chassi) {
-        mod = item.ob.ob_chassi;
-      }
-      if (mod) models.add(mod);
-
-      if (item.apiResult) {
-        const api = item.apiResult;
-        const anoFab = api.ano || api.ano_fabricacao || api.year || api.anoFabricacao;
-        const anoMod = api.ano_modelo || api.model_year || api.anoModelo;
-        const anoCompleto = (anoFab && anoMod && anoFab !== anoMod) ? `${anoFab}/${anoMod}` : (anoFab || anoMod || "");
-        if (anoCompleto) years.add(anoCompleto);
-      }
+      const tech = getTechnicalData(item);
+      if (tech.segment && tech.segment !== "Outros") segments.add(tech.segment);
+      if (tech.brand && tech.brand !== "Desconhecido") brands.add(tech.brand);
     });
+
+    // Salva os resultados para uso na cascata
+    window._lastGroupResults = results;
 
     const updateSelect = (id, values, defaultLabel) => {
       const s = el(id);
       if (!s) return;
       const currentVal = s.value;
-      s.innerHTML = `<option value="">${defaultLabel}</option>`;
-      Array.from(values).sort().forEach(v => {
+      s.innerHTML = '<option value="">' + defaultLabel + '</option>';
+      
+      const isYearField = id.includes("Year");
+      const labels = new Set();
+      
+      Array.from(values).forEach(v => {
+        if (!v) return;
+        const lbl = isYearField ? getYearLabel(v) : String(v).trim();
+        if (lbl) labels.add(lbl);
+      });
+
+      const sortedValues = Array.from(labels).sort((a, b) => {
+        if (isYearField) {
+          if (a.startsWith("Euro") && b.startsWith("Euro")) return b.localeCompare(a);
+          if (a.startsWith("Euro")) return -1;
+          if (b.startsWith("Euro")) return 1;
+          const numA = parseInt(a, 10);
+          const numB = parseInt(b, 10);
+          if (!isNaN(numA) && !isNaN(numB)) return numB - numA;
+        }
+        return String(a).localeCompare(String(b));
+      });
+
+      sortedValues.forEach(v => {
         const opt = document.createElement("option");
         opt.value = v;
         opt.textContent = v;
         s.appendChild(opt);
       });
-      if (Array.from(values).includes(currentVal)) s.value = currentVal;
+      if (sortedValues.includes(currentVal)) s.value = currentVal;
     };
 
+    // Popula segmento e montadora (sem cascata ainda)
+    updateSelect("filterSegment", segments, "Segmento (Todos)");
     updateSelect("filterBrand", brands, "Montadora (Todas)");
-    updateSelect("filterModel", models, "Modelo (Todos)");
-    updateSelect("filterYear", years, "Ano (Todos)");
-  };
 
-  const applyGroupFilters = () => {
+    // Função que atualiza modelo/submodelo/ano baseado na montadora selecionada
+    const updateDependentFilters = () => {
+      const fBrand = el("filterBrand")?.value || "";
+      const fModel = el("filterModel")?.value || "";
+      const results = window._lastGroupResults || [];
+
+      const filteredByBrand = fBrand 
+        ? results.filter(item => getTechnicalData(item).brand === fBrand) 
+        : results;
+
+      const models = new Set();
+      const submodels = new Set();
+      const years = new Set();
+
+      filteredByBrand.forEach(item => {
+        const tech = getTechnicalData(item);
+        if (tech.model) models.add(tech.model);
+        if (tech.submodel) submodels.add(tech.submodel);
+        if (tech.year) years.add(tech.year);
+      });
+
+      // FIX 4: enriquece modelos com dicionário fixo para a montadora selecionada
+      if (fBrand) getKnownModels(fBrand).forEach(m => models.add(m));
+
+      // Se já tem modelo selecionado, filtra submodelos por ele também
+      if (fModel) {
+        submodels.clear();
+        years.clear();
+        filteredByBrand
+          .filter(item => {
+            const tech = getTechnicalData(item);
+            return tech.model === fModel || tech.fullModel === fModel;
+          })
+          .forEach(item => {
+            const tech = getTechnicalData(item);
+            if (tech.submodel) submodels.add(tech.submodel);
+            if (tech.year) years.add(tech.year);
+          });
+      }
+
+      updateSelect("filterModel", models, "Modelo (Todos)");
+      updateSelect("filterSubModel", submodels, "Submodelo (Todos)");
+      updateSelect("filterYear", years, "Ano / Euro (Todos)");
+
+      // Garante que valores obsoletos sejam limpos
+      const mSel = el("filterModel");
+      const sSel = el("filterSubModel");
+      const ySel = el("filterYear");
+      
+      // Se o valor atual não existe mais nas opções, reseta
+      if (mSel && !Array.from(mSel.options).some(o => o.value === fModel)) mSel.value = "";
+      if (sSel && sSel.value && !Array.from(sSel.options).some(o => o.value === sSel.value)) sSel.value = "";
+      if (ySel && ySel.value && !Array.from(ySel.options).some(o => o.value === ySel.value)) ySel.value = "";
+    };
+
+    // Inicializa os filtros dependentes
+    updateDependentFilters();
+
+    // Listener de cascata na montadora
+    const brandSel = el("filterBrand");
+    if (brandSel) {
+      // Remove listener antigo para não duplicar
+      const newBrandSel = brandSel.cloneNode(true);
+      brandSel.parentNode.replaceChild(newBrandSel, brandSel);
+      newBrandSel.addEventListener("change", () => {
+        // Reseta modelo e submodelo ao trocar montadora
+        const modelSel = el("filterModel");
+        const subSel = el("filterSubModel");
+        if (modelSel) modelSel.value = "";
+        if (subSel) subSel.value = "";
+        updateDependentFilters();
+        applyGroupFilters();
+      });
+    }
+
+    // Listener de cascata no modelo
+    const modelSel = el("filterModel");
+    if (modelSel) {
+      const newModelSel = modelSel.cloneNode(true);
+      modelSel.parentNode.replaceChild(newModelSel, modelSel);
+      newModelSel.addEventListener("change", () => {
+        const subSel = el("filterSubModel");
+        if (subSel) subSel.value = "";
+        updateDependentFilters();
+        applyGroupFilters();
+      });
+    }
+
+    // Listener no submodelo e ano (sem cascata, apenas filtra)
+    ["filterSubModel", "filterYear"].forEach(id => {
+      const s = el(id);
+      if (s) {
+        const newS = s.cloneNode(true);
+        s.parentNode.replaceChild(newS, s);
+        newS.addEventListener("change", applyGroupFilters);
+      }
+    });
+
+    // Segmento também sem cascata
+    const segSel = el("filterSegment");
+    if (segSel) {
+      const newSegSel = segSel.cloneNode(true);
+      segSel.parentNode.replaceChild(newSegSel, segSel);
+      newSegSel.addEventListener("change", applyGroupFilters);
+    }
+  }
+
+  function applyGroupFilters() {
     if (!window.currentGroupResults) return;
     
+    const fSegment = el("filterSegment")?.value || "";
     const fPlate = el("filterPlate")?.value.toLowerCase().trim() || "";
     const fBrand = el("filterBrand")?.value || "";
     const fModel = el("filterModel")?.value || "";
+    const fSubModel = el("filterSubModel")?.value || "";
     const fYear  = el("filterYear")?.value || "";
 
     const filtered = window.currentGroupResults.filter(item => {
       const plateVal = (item.placa || "").toLowerCase();
-      const brandVal = item.fabricante || "";
+      const tech = getTechnicalData(item);
+      const yearLabel = tech.year ? getYearLabel(tech.year) : "";
+
+      // Normaliza para comparação case-insensitive
+      const norm = (s) => String(s || "").trim().toUpperCase();
+
+      const matchSegment = !fSegment || tech.segment === fSegment;
+      const matchPlate   = !fPlate   || plateVal.includes(fPlate);
+      const matchBrand   = !fBrand   || norm(tech.brand) === norm(fBrand);
       
-      let modelVal = "";
-      if (item.apiResult) {
-        const api = item.apiResult;
-        const mBasico = api.modelo || api.model || api.texto_modelo || "";
-        const vBasico = api.versao || api.version || "";
-        modelVal = (mBasico && vBasico && !mBasico.includes(vBasico)) ? `${mBasico} ${vBasico}` : (mBasico || vBasico || "");
-      } else if (item.ob && item.ob.ob_chassi) {
-        modelVal = item.ob.ob_chassi;
-      }
+      // FIX 3: modelo compara a parte base (model), não fullModel completo
+      const matchModel = !fModel || (() => {
+        const fModelNorm = norm(fModel);
+        const techModel = norm(tech.model);
+        const techFull = norm(tech.fullModel);
+        return techModel === fModelNorm || techFull === fModelNorm || techFull.startsWith(fModelNorm + " ") || techFull.startsWith(fModelNorm + "-");
+      })();
+      
+      // FIX 1: submodelo compara APENAS o submodel (não confunde com model)
+      const matchSub = !fSubModel || (() => {
+        const fSubNorm = norm(fSubModel);
+        const techSub = norm(tech.submodel);
+        const techFull = norm(tech.fullModel);
+        return techSub === fSubNorm || techSub.includes(fSubNorm) || techFull.includes(fSubNorm);
+      })();
+      
+      const matchYear = !fYear || yearLabel === fYear;
 
-      let yearVal = "";
-      if (item.apiResult) {
-        const api = item.apiResult;
-        const anoFab = api.ano || api.ano_fabricacao || api.year || api.anoFabricacao;
-        const anoMod = api.ano_modelo || api.model_year || api.anoModelo;
-        yearVal = (anoFab && anoMod && anoFab !== anoMod) ? `${anoFab}/${anoMod}` : (anoFab || anoMod || "");
-      }
-
-      return (!fPlate || plateVal.includes(fPlate)) &&
-             (!fBrand || brandVal === fBrand) &&
-             (!fModel || modelVal === fModel) &&
-             (!fYear  || yearVal  === fYear);
+      return matchSegment && matchPlate && matchBrand && matchModel && matchSub && matchYear;
     });
 
     currentGroupPage = 1;
     renderGroupResults(filtered);
-  };
+  }
 
- function renderGroupResults(filteredList = null) {
+function renderGroupResults(filteredList = null) {
   const gResults = el("groupResults");
   if (!gResults || !window.currentGroupResults) return;
+  
   gResults.innerHTML = "";
 
   if (!filteredList) {
     populateGroupFilters(window.currentGroupResults);
   }
 
-  const displayList = filteredList || window.currentGroupResults;
+  // FIX 2: deduplica por vin+placa antes de renderizar
+  const rawList = filteredList || window.currentGroupResults;
+  const seenKeys = new Set();
+  const displayList = rawList.filter(itemData => {
+    const vin = String(itemData.vin || "").trim().toUpperCase();
+    const plate = String(itemData.placa || "").trim().toUpperCase();
+    const key = vin + "|" + plate;
+    if (key === "|") return true;
+    if (seenKeys.has(key)) return false;
+    seenKeys.add(key); return true;
+  });
   const totalPages = Math.ceil(displayList.length / GROUP_PAGE_SIZE);
   if (currentGroupPage > totalPages) currentGroupPage = totalPages;
   if (currentGroupPage < 1) currentGroupPage = 1;
@@ -1568,53 +2145,157 @@ const populateGroupFilters = (results) => {
     const vin = itemData.vin;
     const plate = itemData.placa;
 
-    let layout = "";
+    // Monta o layout do item usando DOM em vez de innerHTML para evitar erros de sintaxe
+    const codeDiv = document.createElement("div");
+    codeDiv.className = "code";
+
     if (vin && plate) {
       const isMismatch = itemData.status === 'error' && String(itemData.error_detail || "").includes("não pertence");
       const labelColor = isMismatch ? '#e74c3c' : 'var(--accent)';
       const labelText = isMismatch ? 'DIVERGÊNCIA ENCONTRADA' : 'VERIFICANDO PAR';
-      layout = `<div class="code"><span style="color:${labelColor};font-size:10px;display:block">${labelText}</span>${vin} / ${plate}</div>`;
+
+      const labelSpan = document.createElement("span");
+      labelSpan.style.cssText = "color:" + labelColor + ";font-size:10px;display:block";
+      labelSpan.textContent = labelText;
+      codeDiv.appendChild(labelSpan);
+
+      const vinContainer = document.createElement("span");
+      vinContainer.className = "vin-container";
+      vinContainer.textContent = vin + " ";
+      const btnCopyVin = document.createElement("button");
+      btnCopyVin.className = "group-copy-btn btn-copy-vin";
+      btnCopyVin.title = "Copiar Chassi";
+      btnCopyVin.textContent = "📋";
+      vinContainer.appendChild(btnCopyVin);
+      codeDiv.appendChild(vinContainer);
+
+      const sep = document.createTextNode(" / ");
+      codeDiv.appendChild(sep);
+
+      const plateContainer = document.createElement("span");
+      plateContainer.className = "plate-container";
+      plateContainer.textContent = plate + " ";
+      const btnCopyPlate = document.createElement("button");
+      btnCopyPlate.className = "group-copy-btn btn-copy-plate";
+      btnCopyPlate.title = "Copiar Placa";
+      btnCopyPlate.textContent = "📋";
+      plateContainer.appendChild(btnCopyPlate);
+      codeDiv.appendChild(plateContainer);
+
     } else if (vin) {
-      layout = `<div class="code"><span style="color:#e74c3c;font-size:10px;display:block">SEM PLACA</span>${vin}</div>`;
+      const labelSpan = document.createElement("span");
+      labelSpan.style.cssText = "color:#e74c3c;font-size:10px;display:block";
+      labelSpan.textContent = "SEM PLACA";
+      codeDiv.appendChild(labelSpan);
+
+      const vinContainer = document.createElement("span");
+      vinContainer.className = "vin-container";
+      vinContainer.textContent = vin + " ";
+      const btnCopyVin = document.createElement("button");
+      btnCopyVin.className = "group-copy-btn btn-copy-vin";
+      btnCopyVin.title = "Copiar Chassi";
+      btnCopyVin.textContent = "📋";
+      vinContainer.appendChild(btnCopyVin);
+      codeDiv.appendChild(vinContainer);
+
     } else {
-      layout = `<div class="code"><span style="color:#e74c3c;font-size:10px;display:block">SEM CHASSI</span>${plate}</div>`;
+      const labelSpan = document.createElement("span");
+      labelSpan.style.cssText = "color:#e74c3c;font-size:10px;display:block";
+      labelSpan.textContent = "SEM CHASSI";
+      codeDiv.appendChild(labelSpan);
+
+      const plateContainer = document.createElement("span");
+      plateContainer.className = "plate-container";
+      plateContainer.textContent = plate + " ";
+      const btnCopyPlate = document.createElement("button");
+      btnCopyPlate.className = "group-copy-btn btn-copy-plate";
+      btnCopyPlate.title = "Copiar Placa";
+      btnCopyPlate.textContent = "📋";
+      plateContainer.appendChild(btnCopyPlate);
+      codeDiv.appendChild(plateContainer);
     }
 
+    item.appendChild(codeDiv);
+
+    // Monta a linha de informações
     let statusHtml = "";
     if (itemData.status === 'ok') {
-      statusHtml = `<span style="color:#2ecc71">✔ Confirmado</span>`;
+      statusHtml = '<span style="color:#2ecc71">✔ Confirmado</span>';
     } else if (itemData.status === 'error') {
       if (String(itemData.error_detail).includes("402")) {
-        statusHtml = `<span style="color:#e74c3c">🔴 API SEM SALDO</span>`;
+        statusHtml = '<span style="color:#e74c3c">🔴 API SEM SALDO</span>';
       } else {
-        statusHtml = `<span style="color:#e74c3c">⚠ Divergência</span>`;
+        statusHtml = '<span style="color:#e74c3c">⚠ Divergência</span>';
       }
     } else if (itemData.status === 'pending') {
-      statusHtml = `<span style="color:var(--muted)">Aguardando...</span>`;
+      statusHtml = '<span style="color:var(--muted)">Aguardando...</span>';
     } else {
-      statusHtml = `<span style="color:#f1c40f">Item Órfão</span>`;
+      statusHtml = '<span style="color:#f1c40f">Item Órfão</span>';
     }
 
-    let modelInfo = "";
+    let modStr = "";
     if (itemData.apiResult) {
       const api = itemData.apiResult;
       const mBasico = api.modelo || api.model || api.texto_modelo || "";
       const vBasico = api.versao || api.version || "";
-      const mod = (mBasico && vBasico && !mBasico.includes(vBasico)) ? `${mBasico} ${vBasico}` : (mBasico || vBasico || "");
-      if (mod) modelInfo = ` • <span class="model-val">${mod}</span>`;
+      modStr = (mBasico && vBasico && !mBasico.includes(vBasico)) ? (mBasico + " " + vBasico) : (mBasico || vBasico || "");
+    } else if (itemData.result && itemData.result.type !== "UNKNOWN") {
+      const findToken = (lbl) => (itemData.result.tokens || []).find(t => t.label === lbl || t.key === lbl)?.value;
+      modStr = findToken("modelo") || findToken("Modelo") || findToken("Modelo do chassi") || findToken("Chassi/Motor") || "";
+    } else if (itemData.ob && itemData.ob.ob_chassi && itemData.ob.ob_chassi !== "—") {
+      modStr = itemData.ob.ob_chassi;
+    }
+    
+    let modelInfo = modStr ? (' • <span class="model-val">' + modStr + '</span>') : "";
 
+    let yearFull = "";
+    if (itemData.apiResult) {
+      const api = itemData.apiResult;
       const anoFab = api.ano || api.ano_fabricacao || api.year || api.anoFabricacao;
       const anoMod = api.ano_modelo || api.model_year || api.anoModelo;
-      const anoCompleto = (anoFab && anoMod && anoFab !== anoMod) ? `${anoFab}/${anoMod}` : (anoFab || anoMod || "");
-      if (anoCompleto) modelInfo += ` • <span class="model-val">${anoCompleto}</span>`;
-    } else if (itemData.ob && itemData.ob.ob_chassi) {
-      modelInfo = ` • <span class="model-val">${itemData.ob.ob_chassi}</span>`;
+      yearFull = (anoFab && anoMod && anoFab !== anoMod) ? (anoFab + "/" + anoMod) : (anoFab || anoMod || "");
+    } else if (itemData.result && itemData.result.type !== "UNKNOWN") {
+      const findToken = (lbl) => (itemData.result.tokens || []).find(t => t.label === lbl || t.key === lbl)?.value;
+      yearFull = itemData.result.year || findToken("ano") || findToken("Ano Modelo") || "";
+    }
+    
+    let yearInfo = "";
+    if (yearFull) {
+      const euroLabel = getYearLabel(yearFull);
+      yearInfo = ' • <span class="model-val" style="color:var(--accent-2)">' + euroLabel + '</span>';
     }
 
     const fleetInfo = (itemData.fleetName || "").trim();
-    const fleetHtml = fleetInfo ? ` • <span class="model-val">${fleetInfo}</span>` : "";
-    item.innerHTML = `${layout}<div class="info"><span>${itemData.fabricante || "—"}${modelInfo}${fleetHtml}</span><span class="status-msg">${statusHtml}</span></div>`;
+    const fleetHtml = fleetInfo ? (' • <span class="model-val" style="color:var(--muted)">📦 ' + fleetInfo + '</span>') : "";
+    const tech = getTechnicalData(itemData);
+    const segmentInfo = tech.segment ? ('<span class="model-val" style="color:var(--accent); font-weight:700;">' + tech.segment.toUpperCase() + '</span> • ') : "";
+    const displayBrand = tech.brand || "—";
+
+    const infoDiv = document.createElement("div");
+    infoDiv.className = "info";
+    infoDiv.innerHTML = '<span>' + segmentInfo + displayBrand + modelInfo + yearInfo + fleetHtml + '</span>' +
+      '<span class="status-msg">' + statusHtml + '</span>';
+    item.appendChild(infoDiv);
     
+    // Adiciona eventos para os botões de copiar
+    const btnCopyVinEl = item.querySelector('.btn-copy-vin');
+    if (btnCopyVinEl) {
+      btnCopyVinEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(vin);
+        showToast("Chassi copiado!");
+      });
+    }
+
+    const btnCopyPlateEl = item.querySelector('.btn-copy-plate');
+    if (btnCopyPlateEl) {
+      btnCopyPlateEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(plate);
+        showToast("Placa copiada!");
+      });
+    }
+
     item.addEventListener('click', (e) => {
       e.stopPropagation();
       const chassiParaModal = (vin && vin !== "") ? vin : (itemData.apiResult?.chassi_completo || itemData.apiResult?.chassi || "");
@@ -1641,7 +2322,7 @@ const populateGroupFilters = (results) => {
     btnPrev.onclick = (e) => { e.stopPropagation(); currentGroupPage--; renderGroupResults(filteredList); };
 
     const pageInfo = document.createElement("span");
-    pageInfo.textContent = `Página ${currentGroupPage} de ${totalPages}`;
+    pageInfo.textContent = "Página " + currentGroupPage + " de " + totalPages;
     pageInfo.style.fontSize = "14px";
     pageInfo.style.color = "var(--muted)";
 
@@ -1683,9 +2364,10 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     }
   }
 
+  const fleetName = (itemData?.fleetName || "").trim();
   mTitle.textContent = linkedPlate
-    ? `Análise Completa: ${linkedPlate}`
-    : (isPlate ? `Dados OB: ${code}` : `Detalhes: ${code}`);
+    ? ("Análise Completa: " + linkedPlate + (fleetName ? " (" + fleetName + ")" : ""))
+    : (isPlate ? ("Dados OB: " + code + (fleetName ? " (" + fleetName + ")" : "")) : ("Detalhes: " + code + (fleetName ? " (" + fleetName + ")" : "")));
   mSegs.innerHTML = "";
   mCards.innerHTML = "";
   mCards.removeAttribute("style");
@@ -1695,9 +2377,9 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     const isNoBalance = String(itemData.error_detail || "").includes("402");
     
     if (isNoBalance) {
-      mSegs.innerHTML = `<div class="seg" style="background:#e74c3c;color:white">🔴 API SEM SALDO</div>`;
+      mSegs.innerHTML = '<div class="seg" style="background:#e74c3c;color:white">🔴 API SEM SALDO</div>';
     } else {
-      mSegs.innerHTML = `<div class="seg" style="background:#e74c3c;color:white">⚠ DIVERGÊNCIA DETECTADA</div>`;
+      mSegs.innerHTML = '<div class="seg" style="background:#e74c3c;color:white">⚠ DIVERGÊNCIA DETECTADA</div>';
     }
 
     const errorCard = document.createElement("div");
@@ -1705,10 +2387,10 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     errorCard.style.cssText = "background: rgba(231, 76, 60, 0.1); border: 1px solid #e74c3c; color: #e74c3c; padding: 20px; border-radius: 8px; margin: 20px; font-weight: 600; text-align: center; grid-column: 1/-1;";
     
     if (isNoBalance) {
-       errorCard.innerHTML = `As consultas de validação de placa estão suspensas por falta de créditos na WDAPI.<br><small style="font-weight:normal">Por favor, recarregue seu saldo para continuar.</small>`;
+       errorCard.innerHTML = 'As consultas de validação de placa estão suspensas por falta de créditos na WDAPI.<br><small style="font-weight:normal">Por favor, recarregue seu saldo para continuar.</small>';
     } else if (String(itemData.error_detail || "").includes("não pertence")) {
       let api = itemData.apiResult || {};
-      let marcaPlaca =
+      let marcaPlaca = normalizeBrand(
         api.marca ||
         api.fabricante ||
         api.brand ||
@@ -1717,7 +2399,8 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
         api.FABRICANTE ||
         api.marcaNome ||
         api?.extra?.marca ||
-        "";
+        ""
+      );
       let modeloPlaca =
         api.modelo ||
         api.texto_modelo ||
@@ -1729,33 +2412,13 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
         "";
 
       // Em divergência, a API pode retornar só a mensagem de erro.
-      // Faz uma consulta extra por placa para exibir o veículo real no resumo.
       if ((!marcaPlaca || !modeloPlaca) && linkedPlate) {
         try {
           const apiSomentePlaca = await consultarPlacaPHP(linkedPlate, "");
           if (apiSomentePlaca && apiSomentePlaca.status === "ok") {
             api = { ...api, ...apiSomentePlaca };
-            marcaPlaca =
-              marcaPlaca ||
-              apiSomentePlaca.marca ||
-              apiSomentePlaca.fabricante ||
-              apiSomentePlaca.brand ||
-              apiSomentePlaca.texto_marca ||
-              apiSomentePlaca.MARCA ||
-              apiSomentePlaca.FABRICANTE ||
-              apiSomentePlaca.marcaNome ||
-              apiSomentePlaca?.extra?.marca ||
-              "";
-            modeloPlaca =
-              modeloPlaca ||
-              apiSomentePlaca.modelo ||
-              apiSomentePlaca.texto_modelo ||
-              apiSomentePlaca.model ||
-              apiSomentePlaca.MODELO ||
-              apiSomentePlaca.modelo_nome ||
-              apiSomentePlaca?.extra?.modelo ||
-              apiSomentePlaca?.extra?.submodelo ||
-              "";
+            marcaPlaca = marcaPlaca || apiSomentePlaca.marca || apiSomentePlaca.fabricante || apiSomentePlaca.brand || apiSomentePlaca.texto_marca || "";
+            modeloPlaca = modeloPlaca || apiSomentePlaca.modelo || apiSomentePlaca.texto_modelo || apiSomentePlaca.model || "";
           }
         } catch (_) {}
       }
@@ -1763,24 +2426,25 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
       if (!marcaPlaca) marcaPlaca = "Desconhecida";
       if (!modeloPlaca) modeloPlaca = "Não informado";
       const marcaChassi = result?.manufacturerName || itemData.fabricante || "Não identificado";
-      const resumo = `
-        <div style="margin-top:10px; text-align:left; display:inline-block; max-width:760px; font-weight:500; color:#fecaca;">
-          <div><strong>Resumo da divergência:</strong></div>
-          <div>• Chassi informado: <strong>${code}</strong> (${marcaChassi})</div>
-          <div>• Veículo retornado pela placa ${linkedPlate}: <strong>${marcaPlaca} ${modeloPlaca}</strong></div>
-          <div>• Motivo: os dados de chassi e placa apontam para veículos diferentes.</div>
-        </div>
-      `;
-      errorCard.innerHTML = `Este chassi (${code}) não pertence à placa (${linkedPlate}).<br><small style="font-weight:normal; margin-top: 5px; display: block;">Por segurança, os detalhes técnicos foram bloqueados.</small>${resumo}`;
+      const resumo = '<div style="margin-top:10px; text-align:left; display:inline-block; max-width:760px; font-weight:500; color:#fecaca;">' +
+        '<div><strong>Resumo da divergência:</strong></div>' +
+        '<div>• Chassi informado: <strong>' + code + '</strong> (' + marcaChassi + ')</div>' +
+        '<div>• Veículo retornado pela placa ' + linkedPlate + ': <strong>' + marcaPlaca + ' ' + modeloPlaca + '</strong></div>' +
+        '<div>• Motivo: os dados de chassi e placa apontam para veículos diferentes.</div>' +
+        '</div>';
+      errorCard.innerHTML = 'Este chassi (' + code + ') não pertence à placa (' + linkedPlate + ').<br>' +
+        '<small style="font-weight:normal; margin-top: 5px; display: block;">Por segurança, os detalhes técnicos foram bloqueados.</small>' + resumo;
      } else {
-       errorCard.innerHTML = `Não foi possível localizar os dígitos do chassi para a placa ${linkedPlate} em fontes públicas.<br><small style="font-weight:normal; margin-top: 5px; display: block;">Por segurança, os detalhes técnicos não serão exibidos.</small>`;
+       errorCard.innerHTML = 'Não foi possível localizar os dígitos do chassi para a placa ' + linkedPlate + ' em fontes públicas.<br>' +
+         '<small style="font-weight:normal; margin-top: 5px; display: block;">Por segurança, os detalhes técnicos não serão exibidos.</small>';
      }
     
     mCards.appendChild(errorCard);
     return;
   }
 
-  const renderKePlacaFallback = (container, kpData, titulo = "📋 Dados do Veículo (KePlaca)") => {
+  const renderKePlacaFallback = (container, kpData, titulo) => {
+    titulo = titulo || "📋 Dados do Veículo (KePlaca)";
     const h = document.createElement("h3");
     h.textContent = titulo;
     h.style.cssText = "font-size: 16px; color: var(--accent-2); margin: 20px 0 12px; border-top: 1px solid var(--border); padding-top: 20px; text-align: center; width: 100%;";
@@ -1795,11 +2459,11 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     const mBasico  = kp.modelo  || "";
     const vBasico  = kp.versao  || "";
     const modeloFull = (mBasico && vBasico && !mBasico.includes(vBasico))
-      ? `${mBasico} ${vBasico}` : (mBasico || "—");
+      ? (mBasico + " " + vBasico) : (mBasico || "—");
     const anoFab = kp.ano || "";
     const anoMod = kp.ano_modelo || "";
     const anoFull = (anoFab && anoMod && anoFab !== anoMod)
-      ? `${anoFab}/${anoMod}` : (anoFab || anoMod || "—");
+      ? (anoFab + "/" + anoMod) : (anoFab || anoMod || "—");
     const temFipe = kp.fipe_codigo && kp.fipe_codigo !== "—";
 
     if (kp.logo) {
@@ -1812,14 +2476,16 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
       kpCards.appendChild(logoWrapper);
     }
 
-    kpCards.appendChild(card("Montadora",       kp.marca       || "—", "KePlaca"));
+    const tech = getTechnicalData({ apiResult: kp });
+    kpCards.appendChild(card("Segmento",        tech.segment || "—",     "KePlaca"));
+    kpCards.appendChild(card("Montadora",       normalizeBrand(kp.marca) || "—", "KePlaca"));
     kpCards.appendChild(card("Modelo",          modeloFull,              "KePlaca"));
     kpCards.appendChild(card("Ano Fab./Modelo", anoFull,                 "KePlaca"));
     kpCards.appendChild(card("Código FIPE",     temFipe ? kp.fipe_codigo : "—", "KePlaca"));
     kpCards.appendChild(card("Modelo FIPE",     temFipe ? kp.fipe_modelo : "—", "KePlaca"));
     kpCards.appendChild(card("Combustível",     kp.combustivel || "—",   "KePlaca"));
     kpCards.appendChild(card("Cor",             kp.cor         || "—",   "KePlaca"));
-    const cidade = (kp.municipio && kp.uf) ? `${kp.municipio} / ${kp.uf}` : "—";
+    const cidade = (kp.municipio && kp.uf) ? (kp.municipio + " / " + kp.uf) : "—";
     kpCards.appendChild(card("Município / UF",  cidade,                  "KePlaca"));
     kpCards.appendChild(card("Situação",        kp.situacao    || "—",   "KePlaca"));
 
@@ -1833,7 +2499,8 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     }
   };
 
-  const injectOB = (p, container, kpFallback = null) => {
+  const injectOB = (p, container, kpFallback) => {
+    kpFallback = kpFallback || null;
     const obWrapper = document.createElement("div");
     obWrapper.style.marginTop = "16px";
     obWrapper.style.borderTop = "1px solid var(--border)";
@@ -1844,7 +2511,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     statusDiv.style.textAlign = "center";
     statusDiv.style.marginBottom = "16px";
     statusDiv.style.fontSize = "14px";
-    statusDiv.textContent = `Buscando ${p}...`;
+    statusDiv.textContent = "Buscando " + p + "...";
     obWrapper.appendChild(statusDiv);
 
     const obCards = document.createElement("div");
@@ -1852,6 +2519,13 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     obWrapper.appendChild(obCards);
     centerGrid(obCards);
     showSkeletons(obCards, 4);
+    
+    const tech = getTechnicalData({ apiResult: kpFallback });
+    const segmentVal = tech.segment || "Ônibus";
+    
+    const segmentCard = card("Segmento", segmentVal);
+    segmentCard.style.borderLeft = "4px solid var(--accent-2)";
+    obCards.appendChild(segmentCard);
 
     const mediaBox = document.createElement("div");
     mediaBox.style.display = "flex";
@@ -1865,12 +2539,6 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     fallbackContainer.style.width = "100%";
     obWrapper.appendChild(fallbackContainer);
 
-    let obFieldsPresent = {
-      encarrocadeira: false,
-      carroceria: false,
-      fabricante: false
-    };
-
     let obFieldCount = 0;
     let cleared = false;
     let fipeAdded = false;
@@ -1879,6 +2547,9 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     const checkClear = () => {
       if (!cleared) {
         obCards.innerHTML = "";
+        const techInner = getTechnicalData({ apiResult: kpFallback });
+        const segmentValInner = techInner.segment || "Ônibus";
+        obCards.appendChild(card("Segmento", segmentValInner));
         cleared = true;
       }
     };
@@ -1897,7 +2568,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
       const chassiApi = kpFallback.chassi_completo || kpFallback.chassi || kpFallback.final_chassi || kpFallback.vin || kpFallback.CHASSI || kpFallback.vin_completo;
       const anoFab = kpFallback.ano || kpFallback.ano_fabricacao || kpFallback.year || kpFallback.anoFabricacao;
       const anoMod = kpFallback.ano_modelo || kpFallback.model_year || kpFallback.anoModelo;
-      const anoCompleto = (anoFab && anoMod && anoFab !== anoMod) ? `${anoFab}/${anoMod}` : (anoFab || anoMod || null);
+      const anoCompleto = (anoFab && anoMod && anoFab !== anoMod) ? (anoFab + "/" + anoMod) : (anoFab || anoMod || null);
 
       if (chassiApi && chassiApi !== "—") {
         checkClear();
@@ -1932,7 +2603,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
         };
         if (id === "ob_encarrocadeira") return { set textContent(v) {
           if (v && v !== "—") { 
-            checkClear(); obFieldCount++; obFieldsPresent.encarrocadeira = true;
+            checkClear(); obFieldCount++;
             obCards.appendChild(card("Encarroçadora", v)); 
             if (itemData) {
                if (!itemData.ob) itemData.ob = {};
@@ -1942,7 +2613,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
         }};
         if (id === "ob_carroceria") return { set textContent(v) {
           if (v && v !== "—") { 
-            checkClear(); obFieldCount++; obFieldsPresent.carroceria = true;
+            checkClear(); obFieldCount++;
             obCards.appendChild(card("Carroceria", v)); 
             if (itemData) {
                if (!itemData.ob) itemData.ob = {};
@@ -1951,9 +2622,9 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
           }
         }};
         if (id === "ob_fabricante_chassi") return { set textContent(v) {
-          const fab = (v && v !== "—") ? v : null;
+          const fab = (v && v !== "—") ? normalizeBrand(v) : null;
           if (fab) { 
-            checkClear(); obFieldCount++; obFieldsPresent.fabricante = true;
+            checkClear(); obFieldCount++;
             obCards.appendChild(card("Fabricante Chassi", fab)); 
             if (itemData) {
                if (!itemData.ob) itemData.ob = {};
@@ -1991,15 +2662,14 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
 
       const enc = obDataObj.encarrocadeira || obDataObj.encarrocadora || obObj.ob_encarrocadeira;
       const carr = obDataObj.carroceria || obObj.ob_carroceria;
-      const fab = obDataObj.fabricante_chassi || obDataObj.fabricante || obObj.ob_fabricante_chassi || kpFallback?.marca;
+      const fab = normalizeBrand(obDataObj.fabricante_chassi || obDataObj.fabricante || obObj.ob_fabricante_chassi || kpFallback?.marca);
       const mod = obDataObj.modelo_chassi || obDataObj.chassi || obObj.ob_chassi || kpFallback?.modelo;
 
-      if (enc && enc !== "—") { checkClear(); obFieldCount++; obFieldsPresent.encarrocadeira = true; obCards.appendChild(card("Encarroçadora", enc)); }
-      if (carr && carr !== "—") { checkClear(); obFieldCount++; obFieldsPresent.carroceria = true; obCards.appendChild(card("Carroceria", carr)); }
-      if (fab && fab !== "—") { checkClear(); obFieldCount++; obFieldsPresent.fabricante = true; obCards.appendChild(card("Fabricante Chassi", fab)); }
+      if (enc && enc !== "—") { checkClear(); obFieldCount++; obCards.appendChild(card("Encarroçadora", enc)); }
+      if (carr && carr !== "—") { checkClear(); obFieldCount++; obCards.appendChild(card("Carroceria", carr)); }
+      if (fab && fab !== "—") { checkClear(); obFieldCount++; obCards.appendChild(card("Fabricante Chassi", fab)); }
       if (mod && mod !== "—") { checkClear(); obFieldCount++; obCards.appendChild(card("Modelo Chassi", mod)); }
       addApiExtras();
-
       addFipe();
 
       const foto = obDataObj.foto_url || obDataObj.foto;
@@ -2007,7 +2677,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
         const i=document.createElement("img"); i.src=foto; i.loading="lazy"; i.decoding="async"; i.style.width="100%"; i.style.maxWidth="600px"; i.style.borderRadius="12px"; i.style.boxShadow="var(--shadow)"; i.style.border="1px solid var(--border)"; mediaBox.prepend(i);
       }
       
-      const linkOB = obDataObj.fonte || `https://onibusbrasil.com/placa/${p}`;
+      const linkOB = obDataObj.fonte || ("https://onibusbrasil.com/placa/" + p);
       const a=document.createElement("a"); a.href=linkOB; a.target="_blank"; a.textContent="🔗 Ficha Completa no Ônibus Brasil"; a.style.cssText="display:inline-block;padding:12px 24px;border-radius:8px;background:rgba(56,189,248,0.1);border:1px solid var(--accent-2);color:var(--accent-2);font-size:14px;font-weight:600;"; mediaBox.appendChild(a);
       
       return;
@@ -2017,7 +2687,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
   };
 
   if (linkedPlate) {
-    mSegs.innerHTML = `<div class="seg" style="background:var(--accent);color:black">${linkedPlate}</div>`;
+    mSegs.innerHTML = '<div class="seg" style="background:var(--accent);color:black">' + linkedPlate + '</div>';
     
     const c1 = document.createElement("div");
     c1.className = "cards";
@@ -2080,12 +2750,12 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
       const mBasico = api.modelo || api.model || api.texto_modelo || "";
       const vBasico  = api.versao  || api.version || "";
       const modeloCompleto = (mBasico && vBasico && !mBasico.includes(vBasico))
-        ? `${mBasico} ${vBasico}` : (mBasico || vBasico || "—");
+        ? (mBasico + " " + vBasico) : (mBasico || vBasico || "—");
 
       const anoFab = api.ano || api.ano_fabricacao;
       const anoMod = api.ano_modelo;
       const anoCompleto = (anoFab && anoMod && anoFab !== anoMod)
-        ? `${anoFab}/${anoMod}` : (anoFab || anoMod || "—");
+        ? (anoFab + "/" + anoMod) : (anoFab || anoMod || "—");
 
       const findFipe = (obj) => {
         if (!obj || typeof obj !== 'object') return null;
@@ -2107,14 +2777,17 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
       const fipeMod = fData ? (fData.fipe_modelo || fData.modelo || fData.texto_modelo || fData.MODELO) : (api.fipe_modelo || api.modelo_fipe);
       const temFipe = fipeCod && fipeCod !== "—";
 
-      const mfr        = api.marca        || api.fabricante || api.brand || api.texto_marca || "—";
+      const mfr        = normalizeBrand(api.marca || api.fabricante || api.brand || api.texto_marca || "—");
       const chassiReal = api.chassi_completo || api.chassi   || api.vin  || "—";
+      const techData   = getTechnicalData({ apiResult: api, fabricante: mfr });
+      const segmentReal= techData.segment || "Veículos Leves";
       const combustivel= api.combustivel  || api.fuel        || api.texto_combustivel || "—";
       const cor        = api.cor          || api.color       || "—";
       const cidade     = (api.municipio && api.uf)
-        ? `${api.municipio} / ${api.uf}` : (api.cidade || api.municipio || "—");
+        ? (api.municipio + " / " + api.uf) : (api.cidade || api.municipio || "—");
       const situacao   = api.situacao     || "—";
 
+      genCards.appendChild(card("Segmento",        segmentReal));
       genCards.appendChild(card("Montadora",       mfr));
       genCards.appendChild(card("Modelo",          modeloCompleto));
       genCards.appendChild(card("Chassi",          chassiReal));
@@ -2133,12 +2806,12 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
             const lbl = c.querySelector(".label");
             return lbl && (lbl.textContent.includes("FIPE") || lbl.textContent.includes("Código"));
           })
-          .forEach(c => c.style.opacity = "0.5");
+          .forEach(c => { c.style.opacity = "0.5"; });
       }
     }
 
   } else if (isPlate) {
-    mSegs.innerHTML = `<div class="seg">${code}</div>`;
+    mSegs.innerHTML = '<div class="seg">' + code + '</div>';
     injectOB(code, mCards, null);
   } else {
     setSegments(result, mSegs);
@@ -2216,6 +2889,39 @@ async function main() {
       clearUI(false);
     };
 
+    const reportModal = el("reportModal");
+    if (el("closeReportModal")) {
+      el("closeReportModal").onclick = () => { if (reportModal) reportModal.style.display = "none"; };
+    }
+    if (el("btnExportFull")) {
+      el("btnExportFull").onclick = () => {
+        if (exportDataBuffer) exportCSV(exportDataBuffer, exportNameBuffer, true);
+        if (reportModal) reportModal.style.display = "none";
+      };
+    }
+    if (el("btnExportBasic")) {
+      el("btnExportBasic").onclick = () => {
+        if (exportDataBuffer) exportCSV(exportDataBuffer, exportNameBuffer, false);
+        if (reportModal) reportModal.style.display = "none";
+      };
+    }
+
+    // Atualiza o título dinâmico da frota enquanto o usuário digita
+    const fleetInput = el("fleetName");
+    const dynamicTitleDiv = el("dynamicFleetTitle");
+    if (fleetInput && dynamicTitleDiv) {
+      fleetInput.addEventListener('input', (e) => {
+        const val = e.target.value.trim();
+        const h2 = dynamicTitleDiv.querySelector('h2');
+        if (val) {
+          h2.textContent = val;
+          dynamicTitleDiv.style.display = "block";
+        } else {
+          dynamicTitleDiv.style.display = "none";
+        }
+      });
+    }
+
     const showReports = (mode, show) => {
       const id = mode === "single" ? "singleReportButtons" : "reportButtons";
       const e = el(id);
@@ -2232,8 +2938,12 @@ async function main() {
       const rt = el("resultTitle"); if (rt) rt.style.display = "none";
       const ob = el("secao-onibusbrasil"); if (ob) ob.style.display = "none";
       const gen = el("secao-veiculo-generico"); if (gen) gen.style.display = "none";
+
+      // Limpa o título dinâmico da frota ao limpar a UI
+      const dynamicTitleDiv = el("dynamicFleetTitle");
+      if (dynamicTitleDiv) dynamicTitleDiv.style.display = "none";
       
-      const genericCards = ["card_gen_montadora", "card_gen_modelo", "card_gen_chassi", "card_gen_ano", "card_gen_combustivel", "card_gen_cor", "card_gen_cidade", "card_fipe_codigo", "card_fipe_modelo"];
+      const genericCards = ["card_gen_segmento", "card_gen_montadora", "card_gen_modelo", "card_gen_chassi", "card_gen_ano", "card_gen_combustivel", "card_gen_cor", "card_gen_cidade", "card_fipe_codigo", "card_fipe_modelo"];
       genericCards.forEach(id => {
         const e = el(id);
         if (e) e.style.opacity = "1";
@@ -2242,7 +2952,7 @@ async function main() {
       const excelInput = el("excelFileInput");
       if (excelInput) excelInput.value = "";
 
-      ["filterBrand", "filterModel", "filterYear"].forEach(id => {
+      ["filterSegment", "filterBrand", "filterModel", "filterSubModel", "filterYear"].forEach(id => {
         const s = el(id);
         if (s) s.value = "";
       });
@@ -2260,6 +2970,12 @@ async function main() {
       }
       if (typeof window.validateGroupForm === "function") window.validateGroupForm();
     };
+
+    ["filterSegment", "filterBrand", "filterModel", "filterSubModel", "filterYear"].forEach(id => {
+      const s = el(id);
+      if (s) s.addEventListener('change', applyGroupFilters);
+    });
+    el("filterPlate")?.addEventListener('input', applyGroupFilters);
 
     if (btnSingle) btnSingle.disabled = true;
     if (btnPlateSingle) btnPlateSingle.disabled = true;
@@ -2292,13 +3008,18 @@ async function main() {
       }
 
       if (result.type === "UNKNOWN") {
-        el("errors").innerHTML = `<div class="error">Chassi não reconhecido. Certifique-se de que o código está correto.</div>`;
+        el("errors").innerHTML = '<div class="error">Chassi não reconhecido. Certifique-se de que o código está correto.</div>';
         return;
       }
 
       const rt = el("resultTitle"); if (rt) rt.style.display = "block";
       const segs = el("segments"); if (segs) { segs.innerHTML = ""; segs.style.display = "none"; }
       
+      const tech = getTechnicalData({ result: result, fabricante: result.manufacturerName });
+      if (tech.segment && !result.tokens.some(t => t.label === "Segmento")) {
+        result.tokens.unshift({ key: "segment", label: "Segmento", value: tech.segment });
+      }
+
       renderResult(result, text);
       
       if (!window.currentSingleResult) {
@@ -2306,7 +3027,7 @@ async function main() {
           tipo: result.type,
           vin: text,
           placa: plate,
-          fabricante: result.manufacturerName || "Desconhecido",
+          fabricante: normalizeBrand(result.manufacturerName) || "Desconhecido",
           result: result,
           ob: {}
         };
@@ -2315,7 +3036,7 @@ async function main() {
         window.currentSingleResult.vin = text;
         window.currentSingleResult.result = result;
         if (!window.currentSingleResult.fabricante || window.currentSingleResult.fabricante === "Desconhecido") {
-          window.currentSingleResult.fabricante = result.manufacturerName || "Desconhecido";
+          window.currentSingleResult.fabricante = normalizeBrand(result.manufacturerName) || "Desconhecido";
         }
       }
 
@@ -2339,7 +3060,7 @@ async function main() {
       window.lastSingleFingerprint = JSON.stringify({ vin: vin, plate: p });
 
       if (p.length < 6 || p.length > 7) {
-        el("errors").innerHTML = `<div class="error">A placa deve ter 6 ou 7 caracteres.</div>`;
+        el("errors").innerHTML = '<div class="error">A placa deve ter 6 ou 7 caracteres.</div>';
         return;
       }
 
@@ -2351,8 +3072,12 @@ async function main() {
       if (btnDecode) btnDecode.disabled = true;
 
       const copyChassiBtn = el("copy_chassi_btn");
+      const copyPlateBtn = el("copy_plate_btn");
+      const copyPlateBtnOb = el("copy_plate_btn_ob");
       const copyFipeBtn = el("copy_fipe_btn");
       if (copyChassiBtn) copyChassiBtn.style.display = "none";
+      if (copyPlateBtn) copyPlateBtn.style.display = "none";
+      if (copyPlateBtnOb) copyPlateBtnOb.style.display = "none";
       if (copyFipeBtn) copyFipeBtn.style.display = "none";
 
       isPlateValidated = false;
@@ -2371,7 +3096,7 @@ async function main() {
       el("errors").innerHTML = "";
       
       const chassiDigitado = vinInputSingle ? vinInputSingle.value.trim().toUpperCase() : "";
-      if (verifEl) verifEl.innerHTML = `<span style="color:var(--muted); font-weight:normal">Verificando placa...</span>`;
+      if (verifEl) verifEl.innerHTML = '<span style="color:var(--muted); font-weight:normal">Verificando placa...</span>';
 
       try {
         const apiResult = await consultarPlacaPHP(p, chassiDigitado);
@@ -2400,12 +3125,22 @@ async function main() {
           const apiAnoFab = apiResult.ano || apiResult.ano_fabricacao || apiResult.year || apiResult.anoFabricacao;
           const apiAnoMod = apiResult.ano_modelo || apiResult.model_year || apiResult.anoModelo;
           const apiAnoCompleto = (apiAnoFab && apiAnoMod && apiAnoFab !== apiAnoMod)
-            ? `${apiAnoFab}/${apiAnoMod}`
+            ? (apiAnoFab + "/" + apiAnoMod)
             : (apiAnoFab || apiAnoMod || "—");
 
           if (isBus) {
-            if (verifEl) verifEl.innerHTML = `<span style="color:#2ecc71">${apiResult.mensagem || "✔ Veículo identificado (Ônibus)"}</span>`;
+            if (verifEl) verifEl.innerHTML = '<span style="color:#2ecc71">' + (apiResult.mensagem || "✔ Veículo identificado (Ônibus)") + '</span>';
             if (obSec) obSec.style.display = "block";
+
+            if (el("ob_placa")) el("ob_placa").textContent = p;
+            if (copyPlateBtnOb) {
+              copyPlateBtnOb.style.display = "block";
+              copyPlateBtnOb.onclick = (e) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(p);
+                showToast("Placa copiada!");
+              };
+            }
 
             if (obData && obData.success === true && 
                 (obData.encarrocadeira || obData.carroceria || obData.fabricante_chassi || obData.modelo_chassi)) {
@@ -2415,12 +3150,15 @@ async function main() {
 
               const obContainer = el("ob_container");
               if (obContainer) {
-
-                const cardsParaLimpar = obContainer.querySelectorAll(".card.card-plate");
+                const cardsParaLimpar = obContainer.querySelectorAll(".card.card-plate:not(#card_ob_placa)");
                 cardsParaLimpar.forEach(c => c.remove());
               }
 
+              const techData = getTechnicalData({ apiResult: apiResult, fabricante: apiResult.marca });
+              const segmentVal = techData.segment || "Ônibus";
+
               const camposOB = [
+                { label: "Segmento",          valor: segmentVal, id: "ob_segmento" },
                 { label: "Encarroçadora",    valor: obData.encarrocadeira    || obData.encarrocadora || "—", id: "ob_encarrocadeira" },
                 { label: "Carroceria",        valor: obData.carroceria        || "—",                        id: "ob_carroceria" },
                 { label: "Fabricante Chassi", valor: obData.fabricante_chassi || obData.fabricante   || apiResult.marca || "—", id: "ob_fabricante_chassi" },
@@ -2435,7 +3173,7 @@ async function main() {
                 if (valor && valor !== "—") {
                   const newCard = document.createElement("div");
                   newCard.className = "card card-plate";
-                  newCard.innerHTML = `<div class="label">${label}</div><div class="value" id="${id}">${valor}</div>`;
+                  newCard.innerHTML = '<div class="label">' + label + '</div><div class="value" id="' + id + '">' + valor + '</div>';
                   obContainer.insertBefore(newCard, el("ob_media_container"));
                 }
               });
@@ -2446,7 +3184,7 @@ async function main() {
               }
               const fonteEl = el("ob_fonte");
               if (fonteEl) {
-                fonteEl.href = `https://onibusbrasil.com/placa/${p}`;
+                fonteEl.href = "https://onibusbrasil.com/placa/" + p;
                 fonteEl.style.display = "inline-block";
               }
 
@@ -2459,10 +3197,14 @@ async function main() {
 
                 const obContainer = el("ob_container");
                 if (obContainer) {
-                  const cardsParaLimpar = obContainer.querySelectorAll(".card.card-plate");
+                  const cardsParaLimpar = obContainer.querySelectorAll(".card.card-plate:not(#card_ob_placa)");
                   cardsParaLimpar.forEach(c => c.remove());
                   
+                  const techDataLive = getTechnicalData({ apiResult: apiResult, fabricante: apiResult.marca });
+                  const segmentValLive = techDataLive.segment || "Ônibus";
+
                   const camposLive = [
+                    { label: "Segmento",          valor: segmentValLive, id: "ob_segmento" },
                     { label: "Encarroçadora",    valor: obLive?.encarrocadeira    || obLive?.encarrocadora || "—", id: "ob_encarrocadeira" },
                     { label: "Carroceria",        valor: obLive?.carroceria        || "—", id: "ob_carroceria" },
                     { label: "Fabricante Chassi", valor: obLive?.fabricante_chassi || obLive?.fabricante || apiResult.marca || "—", id: "ob_fabricante_chassi" },
@@ -2481,7 +3223,7 @@ async function main() {
                       }
                       const newCard = document.createElement("div");
                       newCard.className = "card card-plate";
-                      newCard.innerHTML = `<div class="label">${label}</div><div class="value" id="${id}">${valor}</div>`;
+                      newCard.innerHTML = '<div class="label">' + label + '</div><div class="value" id="' + id + '">' + valor + '</div>';
                       obContainer.insertBefore(newCard, el("ob_media_container"));
                     }
                   });
@@ -2495,7 +3237,7 @@ async function main() {
             }
 
           } else {
-            if (verifEl) verifEl.innerHTML = `<span style="color:var(--accent-2)">✔ Veículo identificado</span>`;
+            if (verifEl) verifEl.innerHTML = '<span style="color:var(--accent-2)">✔ Veículo identificado</span>';
             if (genSec) genSec.style.display = "block";
 
             if (el("card_fipe_codigo")) {
@@ -2510,20 +3252,23 @@ async function main() {
             const mBasico = apiResult.modelo || apiResult.model || apiResult.texto_modelo || "";
             const vBasico = apiResult.versao || apiResult.version || "";
             const modeloCompleto = (mBasico && vBasico && !mBasico.includes(vBasico)) 
-              ? `${mBasico} ${vBasico}` 
+              ? (mBasico + " " + vBasico) 
               : (mBasico || vBasico || "—");
 
             const anoFab = apiResult.ano || apiResult.ano_fabricacao || apiResult.year || apiResult.anoFabricacao;
             const anoMod = apiResult.ano_modelo || apiResult.model_year || apiResult.anoModelo;
             const anoCompleto = (anoFab && anoMod && anoFab !== anoMod)
-              ? `${anoFab}/${anoMod}`
+              ? (anoFab + "/" + anoMod)
               : (anoFab || anoMod || "—");
 
-            const mfr = apiResult.marca || apiResult.fabricante || apiResult.brand || apiResult.texto_marca || apiResult.MARCA || apiResult.FABRICANTE || apiResult.marcaNome || "—";
+            const mfr = normalizeBrand(apiResult.marca || apiResult.fabricante || apiResult.brand || apiResult.texto_marca || apiResult.MARCA || apiResult.FABRICANTE || apiResult.marcaNome || "—");
             const chassiReal = apiResult.chassi_completo || apiResult.chassi || apiResult.final_chassi || apiResult.vin || apiResult.CHASSI || apiResult.vin_completo || "—";
             const combustivelReal = apiResult.combustivel || apiResult.fuel || apiResult.texto_combustivel || apiResult.COMBUSTIVEL || apiResult.tipo_combustivel || "—";
             const corReal = apiResult.cor || apiResult.color || apiResult.COR || apiResult.cor_veiculo || "—";
-            const cidadeReal = (apiResult.municipio && apiResult.uf) ? `${apiResult.municipio} / ${apiResult.uf}` : (apiResult.cidade || apiResult.municipio || apiResult.MUNICIPIO || apiResult.CIDADE || apiResult.nome_cidade || "—");
+            const cidadeReal = (apiResult.municipio && apiResult.uf) ? (apiResult.municipio + " / " + apiResult.uf) : (apiResult.cidade || apiResult.municipio || apiResult.MUNICIPIO || apiResult.CIDADE || apiResult.nome_cidade || "—");
+
+            const techData = getTechnicalData({ apiResult: apiResult, fabricante: apiResult.marca });
+            const segmentReal = techData.segment || "Outros";
 
             const setValWithStyle = (id, cardId, value) => {
               const elVal = el(id);
@@ -2533,18 +3278,34 @@ async function main() {
               if (elCard) elCard.style.opacity = exists ? "1" : "0.5";
             };
 
+            setValWithStyle("gen_segmento", "card_gen_segmento", segmentReal);
             setValWithStyle("gen_montadora", "card_gen_montadora", mfr);
             setValWithStyle("gen_modelo", "card_gen_modelo", modeloCompleto);
+            setValWithStyle("gen_placa", "card_gen_placa", p);
             setValWithStyle("gen_chassi", "card_gen_chassi", chassiReal);
             setValWithStyle("gen_ano", "card_gen_ano", anoCompleto);
             setValWithStyle("gen_combustivel", "card_gen_combustivel", combustivelReal);
             setValWithStyle("gen_cor", "card_gen_cor", corReal);
             setValWithStyle("gen_cidade", "card_gen_cidade", cidadeReal);
 
+            if (copyPlateBtn) {
+              if (p && (p.length === 7 || p.length === 6)) {
+                copyPlateBtn.style.display = "block";
+                copyPlateBtn.onclick = (e) => {
+                  e.stopPropagation();
+                  navigator.clipboard.writeText(p);
+                  showToast("Placa copiada para a área de transferência!");
+                };
+              } else {
+                copyPlateBtn.style.display = "none";
+              }
+            }
+
             if (copyChassiBtn) {
               if (chassiReal && chassiReal.length === 17) {
                 copyChassiBtn.style.display = "block";
-                copyChassiBtn.onclick = () => {
+                copyChassiBtn.onclick = (e) => {
+                  e.stopPropagation();
                   navigator.clipboard.writeText(chassiReal);
                   showToast("Chassi copiado para a área de transferência!");
                 };
@@ -2617,9 +3378,7 @@ async function main() {
             if (!apiResult.fipe_codigo && !apiResult.fipe_modelo && !apiResult.marca && !apiResult.modelo) {
               const errorArea = el("errors");
               if (errorArea) {
-                errorArea.innerHTML = `<div class="error" style="background: rgba(56, 189, 248, 0.1); border: 1px solid var(--accent-2); color: var(--accent-2); padding: 15px; border-radius: 8px; margin-top: 10px; text-align: center;">
-                  ℹ️ Algumas informações técnicas não foram retornadas pela API para este veículo.
-                </div>`;
+                errorArea.innerHTML = '<div class="error" style="background: rgba(56, 189, 248, 0.1); border: 1px solid var(--accent-2); color: var(--accent-2); padding: 15px; border-radius: 8px; margin-top: 10px; text-align: center;">ℹ️ Algumas informações técnicas não foram retornadas pela API para este veículo.</div>';
               }
             }
           }
@@ -2656,7 +3415,7 @@ async function main() {
             errorMsg = "🔴 API SEM SALDO";
             subMsg = "As consultas de validação de placa estão suspensas por falta de créditos na WDAPI.";
           } else if (String(apiResult.mensagem).includes("não pertence")) {
-            errorMsg = `Este chassi (${chassiDigitado}) não pertence à placa (${p}).`;
+            errorMsg = "Este chassi (" + chassiDigitado + ") não pertence à placa (" + p + ").";
 
             // Busca dados da placa sem chassi para explicar o motivo da divergência.
             let apiPlaca = apiResult;
@@ -2665,14 +3424,15 @@ async function main() {
               if (placaOnly && placaOnly.status === "ok") apiPlaca = placaOnly;
             } catch (_) {}
 
-            const marcaPlaca =
+            const marcaPlaca = normalizeBrand(
               apiPlaca.marca ||
               apiPlaca.fabricante ||
               apiPlaca.brand ||
               apiPlaca.texto_marca ||
               apiPlaca.MARCA ||
               apiPlaca.FABRICANTE ||
-              "Desconhecida";
+              "Desconhecida"
+            );
             const modeloPlaca =
               apiPlaca.modelo ||
               apiPlaca.texto_modelo ||
@@ -2680,34 +3440,32 @@ async function main() {
               apiPlaca.MODELO ||
               apiPlaca.versao ||
               "Não informado";
-            const marcaChassi = window.currentSingleResult?.result?.manufacturerName || "Não identificado";
+            const marcaChassi = normalizeBrand(window.currentSingleResult?.result?.manufacturerName || "Não identificado");
 
-            resumoDivergencia = `
-              <div style="margin-top: 10px; text-align: left; display: inline-block; max-width: 760px; font-weight: 500; color: #fecaca;">
-                <div><strong>Resumo da divergência:</strong></div>
-                <div>• Chassi informado: <strong>${chassiDigitado || "—"}</strong> (${marcaChassi})</div>
-                <div>• Veículo da placa ${p}: <strong>${marcaPlaca} ${modeloPlaca}</strong></div>
-                <div>• Motivo: chassi e placa pertencem a veículos diferentes.</div>
-              </div>
-            `;
+            resumoDivergencia = '<div style="margin-top: 10px; text-align: left; display: inline-block; max-width: 760px; font-weight: 500; color: #fecaca;">' +
+              '<div><strong>Resumo da divergência:</strong></div>' +
+              '<div>• Chassi informado: <strong>' + (chassiDigitado || "—") + '</strong> (' + marcaChassi + ')</div>' +
+              '<div>• Veículo da placa ' + p + ': <strong>' + marcaPlaca + ' ' + modeloPlaca + '</strong></div>' +
+              '<div>• Motivo: chassi e placa pertencem a veículos diferentes.</div>' +
+              '</div>';
           } else {
-            errorMsg = `Não foi possível localizar os dígitos do chassi para a placa ${p} em fontes públicas.`;
+            errorMsg = "Não foi possível localizar os dígitos do chassi para a placa " + p + " em fontes públicas.";
           }
 
-          if (verifEl) verifEl.innerHTML = `<span style="color:#e74c3c">${errorMsg}</span>`;
+          if (verifEl) verifEl.innerHTML = '<span style="color:#e74c3c">' + errorMsg + '</span>';
           
           if (obSec) obSec.style.display = "none";
           showReports("single", false);
 
-          el("errors").innerHTML = `<div class="error" style="background: rgba(231, 76, 60, 0.1); border: 1px solid #e74c3c; color: #e74c3c; padding: 20px; border-radius: 8px; margin-top: 15px; font-weight: 600; text-align: center; width: 100%;">
-            ${errorMsg}
-            <br><small style="font-weight: normal; opacity: 0.8; margin-top: 5px; display: block;">${subMsg}</small>
-            ${resumoDivergencia}
-          </div>`;
+          el("errors").innerHTML = '<div class="error" style="background: rgba(231, 76, 60, 0.1); border: 1px solid #e74c3c; color: #e74c3c; padding: 20px; border-radius: 8px; margin-top: 15px; font-weight: 600; text-align: center; width: 100%;">' +
+            errorMsg +
+            '<br><small style="font-weight: normal; opacity: 0.8; margin-top: 5px; display: block;">' + subMsg + '</small>' +
+            resumoDivergencia +
+            '</div>';
         }
       } catch (e) {
         console.error("Erro no fluxo de validação:", e);
-        if (verifEl) verifEl.innerHTML = `<span style="color:#e74c3c">Erro de conexão</span>`;
+        if (verifEl) verifEl.innerHTML = '<span style="color:#e74c3c">Erro de conexão</span>';
       } finally {
         isValidating = false;
         if (btnPlate) { 
@@ -2736,7 +3494,7 @@ async function main() {
         
         const counter = el("vinCounter");
         if (counter) {
-          counter.textContent = `${val.length}/17`;
+          counter.textContent = val.length + "/17";
           if (val.length === 17 || val.length === 8) {
             vinInputSingle.classList.add("input-valid");
             vinInputSingle.classList.remove("input-invalid");
@@ -2766,7 +3524,7 @@ async function main() {
         
         const counter = el("plateCounter");
         if (counter) {
-          counter.textContent = `${val.length}/7`;
+          counter.textContent = val.length + "/7";
           if (val.length >= 6) {
             plateInputSingle.classList.add("input-valid");
             plateInputSingle.classList.remove("input-invalid");
@@ -2913,10 +3671,7 @@ async function main() {
       });
     }
 
-    ["filterBrand", "filterModel", "filterYear"].forEach(id => {
-      el(id)?.addEventListener("change", () => applyGroupFilters());
-    });
-    el("filterPlate")?.addEventListener("input", () => applyGroupFilters());
+    el("filterPlate")?.addEventListener('input', applyGroupFilters);
 
     gBtn.onclick = async () => {
       const fleetEl = el("fleetName");
@@ -2942,14 +3697,12 @@ async function main() {
       if (groupProgress) groupProgress.style.display = "block";
       if (progressBar) progressBar.style.width = "0%";
 
-      ["filterBrand", "filterModel", "filterYear"].forEach(id => {
+      ["filterBrand", "filterModel", "filterSubModel", "filterYear"].forEach(id => {
         const s = el(id);
         if (s) s.value = "";
       });
       const fPlateEl = el("filterPlate");
       if (fPlateEl) fPlateEl.value = "";
-
-      addGroupHistoryEntry(gInput.value, gPlateInput.value);
 
       const fleetNameAtual = (el("fleetName")?.value || "").trim();
       window.currentGroupResults = [];
@@ -2978,12 +3731,35 @@ async function main() {
           showReports("group", true);
           populateGroupFilters(window.currentGroupResults);
           renderGroupResults();
+
+          // Salva no histórico somente após concluir, para ter todos os metadados
+          addGroupHistoryEntry(gInput.value, gPlateInput.value, window.currentGroupResults);
+
+          const fleetNameParaBanco = (el('fleetName')?.value || '').trim(); 
+          // Tenta pegar o history_id que foi salvo ao chamar addGroupHistoryEntry 
+          // (como addGroupHistoryEntry é async via dvbHistoricoUsuarioPost, usamos um pequeno delay) 
+          setTimeout(async () => { 
+            let hId = null; 
+            // Tenta recuperar o id do último registro do servidor 
+            try { 
+              const token = localStorage.getItem('dvb_token'); 
+              if (token && typeof window.dvbHistoricoUsuarioGet === 'function') { 
+                const hist = await window.dvbHistoricoUsuarioGet(); 
+                if (hist && hist.ok && Array.isArray(hist.group) && hist.group.length > 0) { 
+                  hId = hist.group[0].id || null; 
+                } 
+              } 
+            } catch (_) {} 
+           
+            await salvarFrotaNoBanco(fleetNameParaBanco, hId, window.currentGroupResults || []); 
+          }, 1500); // aguarda o histórico ser salvo primeiro
+
           if (window.dvbRegistrarPesquisa) {
             const fn = el("fleetName");
             const fleetName = fn ? fn.value.trim() : "";
             window.dvbRegistrarPesquisa({
               tipo: "grupo",
-              detalhe: `Lote: ${totalItems} veículo(s)`,
+              detalhe: "Lote: " + totalItems + " veículo(s)",
               fleetName: fleetName || undefined
             });
           }
@@ -2991,8 +3767,8 @@ async function main() {
         }
 
         const progressPercent = (currentIndex / totalItems) * 100;
-        if (progressBar) progressBar.style.width = `${progressPercent}%`;
-        if (groupProgress) groupProgress.textContent = `Processando ${currentIndex} de ${totalItems} itens...`;
+        if (progressBar) progressBar.style.width = progressPercent + "%";
+        if (groupProgress) groupProgress.textContent = "Processando " + currentIndex + " de " + totalItems + " itens...";
 
         const apiCalls = batch.map(pair => (async () => {
           const { vin, plate } = pair;
@@ -3019,10 +3795,6 @@ async function main() {
               const norm = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
               const chassiDigitadoNorm = norm(vin);
 
-              // Pega os últimos 5 do chassi digitado
-              const final5Digitado = chassiDigitadoNorm.slice(-5);
-
-              // Coleta o chassi retornado pela API (todas as fontes possíveis)
               const chassiRetornadoNorm = norm(
                 apiResult.chassi_completo || 
                 apiResult.chassi || 
@@ -3030,7 +3802,6 @@ async function main() {
                 ""
               );
 
-              // Compara os últimos 5 dígitos
               const compativelPorFinal5 = 
                 chassiDigitadoNorm.length >= 5 &&
                 chassiRetornadoNorm.length >= 5 &&
@@ -3049,8 +3820,6 @@ async function main() {
 
                 itemData.fabricante = apiResult.marca || apiResult.fabricante || itemData.fabricante;
 
-                // Quando confirmou por parcial, NÃO substitui o chassi pelo retornado da API
-                // pois ele pode estar incompleto. Mantém o digitado.
                 if (!confirmouPorFinalParcial && (apiResult.chassi_completo || apiResult.chassi)) {
                   const apiChassi = apiResult.chassi_completo || apiResult.chassi;
                   itemData.vin = apiChassi;
@@ -3121,12 +3890,256 @@ async function main() {
       };
     }
 
+    // ============================================================ 
+ // BLOCO 2 — Modal de Pesquisa de Frota 
+ // Cole no final do main.js, dentro da função main(), 
+ // logo antes do: renderHistory(); 
+ // ============================================================ 
+  
+ (function iniciarPesquisaFrota() { 
+  
+   // ---- Cria o modal de resultados ---- 
+   const modal = document.createElement('div'); 
+   modal.id = 'fleetSearchModal'; 
+   modal.style.cssText = [ 
+     'display:none', 
+     'position:fixed', 
+     'inset:0', 
+     'background:rgba(0,0,0,0.65)', 
+     'backdrop-filter:blur(4px)', 
+     'z-index:9990', 
+     'align-items:center', 
+     'justify-content:center', 
+     'padding:20px', 
+   ].join(';'); 
+  
+   modal.innerHTML = ` 
+     <div style=" 
+       width: min(860px, 100%); 
+       max-height: 88vh; 
+       background: var(--bg-elev); 
+       border: 1px solid var(--border); 
+       border-radius: 16px; 
+       display: flex; 
+       flex-direction: column; 
+       box-shadow: 0 24px 64px rgba(0,0,0,0.5); 
+       overflow: hidden; 
+     "> 
+       <!-- Cabeçalho --> 
+       <div style=" 
+         padding: 18px 24px; 
+         border-bottom: 1px solid var(--border); 
+         display: flex; 
+         align-items: center; 
+         justify-content: space-between; 
+         gap: 12px; 
+         flex-shrink: 0; 
+       "> 
+         <div> 
+           <div style="font-weight:700;font-size:16px;color:var(--text)">🔍 Pesquisa de Frota no Banco</div> 
+           <div style="font-size:12px;color:var(--muted);margin-top:2px" id="fleetSearchCount">Nenhum filtro aplicado</div> 
+         </div> 
+         <button id="closeFleetSearchModal" style=" 
+           background:transparent; 
+           border:1px solid var(--border); 
+           border-radius:8px; 
+           color:var(--muted); 
+           padding:6px 12px; 
+           cursor:pointer; 
+           font-size:18px; 
+           line-height:1; 
+         ">✕</button> 
+       </div> 
+  
+       <!-- Área de resultados --> 
+       <div id="fleetSearchResults" style=" 
+         flex:1; 
+         overflow-y:auto; 
+         padding:16px 24px; 
+       "> 
+         <div style="color:var(--muted);text-align:center;padding:40px 0"> 
+           Use os filtros no histórico e clique em <strong>Pesquisar Frota</strong>. 
+         </div> 
+       </div> 
+  
+       <!-- Rodapé --> 
+       <div style=" 
+         padding:14px 24px; 
+         border-top:1px solid var(--border); 
+         display:flex; 
+         align-items:center; 
+         justify-content:space-between; 
+         flex-shrink:0; 
+         gap:12px; 
+         flex-wrap:wrap; 
+       "> 
+         <span id="fleetSearchPagInfo" style="font-size:13px;color:var(--muted)"></span> 
+         <div style="display:flex;gap:8px"> 
+           <button id="fleetSearchPrev" class="btn-page" style="display:none">← Anterior</button> 
+           <button id="fleetSearchNext" class="btn-page" style="display:none">Próximo →</button> 
+           <button id="btnExportFleetSearch" class="btn-page" style="display:none">📄 Exportar CSV</button> 
+         </div> 
+       </div> 
+     </div> 
+   `; 
+  
+   document.body.appendChild(modal); 
+  
+   // Fecha ao clicar fora ou no X 
+   modal.addEventListener('click', e => { if (e.target === modal) fecharModal(); }); 
+   document.getElementById('closeFleetSearchModal').onclick = fecharModal; 
+   function fecharModal() { modal.style.display = 'none'; } 
+  
+   // ---- Estado da pesquisa ---- 
+   let currentOffset   = 0; 
+   let currentTotal    = 0; 
+   const PAGE_SIZE     = 50; 
+   let lastFiltros     = {}; 
+   let allResultsCache = []; 
+  
+   // ---- Renderiza os resultados no modal ---- 
+   function renderResultados(data) { 
+     const container = document.getElementById('fleetSearchResults'); 
+     const countEl   = document.getElementById('fleetSearchCount'); 
+     const pagInfo   = document.getElementById('fleetSearchPagInfo'); 
+     const btnPrev   = document.getElementById('fleetSearchPrev'); 
+     const btnNext   = document.getElementById('fleetSearchNext'); 
+     const btnExport = document.getElementById('btnExportFleetSearch'); 
+  
+     if (!data || !data.ok) { 
+       container.innerHTML = '<div style="color:#e74c3c;text-align:center;padding:40px 0">Erro ao buscar dados. Tente novamente.</div>'; 
+       return; 
+     } 
+  
+     currentTotal    = data.total || 0; 
+     allResultsCache = data.results || []; 
+  
+     countEl.textContent = currentTotal + ' veículo(s) encontrado(s)'; 
+  
+     if (allResultsCache.length === 0) { 
+       container.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px 0">Nenhum veículo encontrado com esses filtros.</div>'; 
+       btnPrev.style.display = 'none'; 
+       btnNext.style.display = 'none'; 
+       btnExport.style.display = 'none'; 
+       pagInfo.textContent   = ''; 
+       return; 
+     } 
+  
+     // Tabela de resultados 
+     const inicio = currentOffset + 1; 
+     const fim    = Math.min(currentOffset + allResultsCache.length, currentTotal); 
+     pagInfo.textContent    = 'Exibindo ' + inicio + '–' + fim + ' de ' + currentTotal; 
+     btnPrev.style.display  = currentOffset > 0 ? 'inline-block' : 'none'; 
+     btnNext.style.display  = fim < currentTotal ? 'inline-block' : 'none'; 
+     btnExport.style.display = 'inline-block'; 
+  
+     container.innerHTML = ''; 
+  
+     // Wrapper com scroll horizontal para telas menores 
+     const wrapper = document.createElement('div'); 
+     wrapper.style.overflowX = 'auto'; 
+  
+     const table = document.createElement('table'); 
+     table.style.cssText = 'width:100%;border-collapse:collapse;font-size:13px;'; 
+  
+     const thead = document.createElement('thead'); 
+     thead.innerHTML = ` 
+       <tr style="background:var(--bg);border-bottom:2px solid var(--border);"> 
+         ${['Frota','VIN','Placa','Montadora','Modelo','Submodelo','Ano','Carroceria','Encarroçadora','Segmento'] 
+           .map(h => `<th style="padding:10px 12px;text-align:left;color:var(--muted);font-size:11px;font-weight:600;white-space:nowrap">${h}</th>`) 
+           .join('')} 
+       </tr> 
+     `; 
+     table.appendChild(thead); 
+  
+     const tbody = document.createElement('tbody'); 
+     allResultsCache.forEach((row, i) => { 
+       const tr = document.createElement('tr'); 
+       tr.style.cssText = 'border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s'; 
+       tr.onmouseenter = () => tr.style.background = 'var(--bg)'; 
+       tr.onmouseleave = () => tr.style.background = ''; 
+  
+       const cols = [ 
+         row.fleet_name   || '—', 
+         row.vin          || '—', 
+         row.placa        || '—', 
+         row.montadora    || '—', 
+         row.modelo       || '—', 
+         row.submodelo    || '—', 
+         row.ano          || '—', 
+         row.carroceria   || '—', 
+         row.encarrocadora || '—', 
+         row.segmento     || '—', 
+       ]; 
+  
+       tr.innerHTML = cols.map(val => ` 
+         <td style="padding:10px 12px;color:var(--text);white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${val}">${val}</td> 
+       `).join(''); 
+  
+       tbody.appendChild(tr); 
+     }); 
+  
+     table.appendChild(tbody); 
+     wrapper.appendChild(table); 
+     container.appendChild(wrapper); 
+   } 
+  
+   // ---- Executa a pesquisa ---- 
+   async function executarPesquisa(filtros, offset = 0) { 
+     const container = document.getElementById('fleetSearchResults'); 
+     container.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px 0">⏳ Buscando...</div>'; 
+     modal.style.display = 'flex'; 
+  
+     lastFiltros    = filtros; 
+     currentOffset  = offset; 
+  
+     const data = await buscarFrotaNoBanco({ ...filtros, limit: PAGE_SIZE, offset }); 
+     renderResultados(data); 
+   } 
+  
+   // Paginação 
+   document.getElementById('fleetSearchPrev').onclick = () => 
+     executarPesquisa(lastFiltros, Math.max(0, currentOffset - PAGE_SIZE)); 
+   document.getElementById('fleetSearchNext').onclick = () => 
+     executarPesquisa(lastFiltros, currentOffset + PAGE_SIZE); 
+  
+   // Exportar CSV dos resultados 
+   document.getElementById('btnExportFleetSearch').onclick = () => { 
+     if (!allResultsCache.length) return; 
+  
+     const cols   = ['Frota','VIN','Placa','Montadora','Modelo','Submodelo','Ano','Carroceria','Encarroçadora','Segmento']; 
+     const keys   = ['fleet_name','vin','placa','montadora','modelo','submodelo','ano','carroceria','encarrocadora','segmento']; 
+     let csv      = '\ufeff' + cols.join(';') + '\n'; 
+  
+     allResultsCache.forEach(row => { 
+       csv += keys.map(k => String(row[k] || '—').replace(/;/g, ',')).join(';') + '\n'; 
+     }); 
+  
+     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); 
+     const url  = URL.createObjectURL(blob); 
+     const link = document.createElement('a'); 
+     link.href  = url; 
+     link.download = 'pesquisa_frota_' + Date.now() + '.csv'; 
+     link.click(); 
+   }; 
+  
+   // ---- Expõe globalmente para ser chamado pelo botão no histórico ---- 
+   window.abrirPesquisaFrota = function(filtros) { 
+     executarPesquisa(filtros || {}); 
+   }; 
+  
+ })(); 
+
     renderHistory();
+
+    if (window.populateGroupFilters && window.currentGroupResults) {
+      populateGroupFilters(window.currentGroupResults);
+    }
 
   } catch (err) {
     console.error("Erro fatal na inicialização:", err);
     const errs = el("errors");
-    if (errs) errs.innerHTML = `<div class="error">Erro ao carregar sistema: ${err.message}</div>`;
+    if (errs) errs.innerHTML = '<div class="error">Erro ao carregar sistema: ' + err.message + '</div>';
   }
 }
 

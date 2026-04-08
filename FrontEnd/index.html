@@ -78,6 +78,11 @@
         <p id="ob_status" style="font-size: 14px; color: var(--muted); text-align: center; margin-bottom: 16px;"></p>
 
         <div id="ob_container" class="cards">
+          <div class="card card-plate" id="card_ob_placa">
+            <div class="label">Placa</div>
+            <div class="value" id="ob_placa">—</div>
+            <button class="copy-btn" id="copy_plate_btn_ob" title="Copiar Placa" style="display: none;">📋</button>
+          </div>
           <div class="card card-plate">
             <div class="label">Encarroçadeira</div>
             <div class="value" id="ob_encarrocadeira">—</div>
@@ -108,8 +113,10 @@
           <h3 style="font-size: 16px; color: var(--accent); margin:0;">🚗 Dados do Veículo</h3> 
         </div> 
         <div id="cards-genericos" class="cards"> 
+          <div class="card card-generic" id="card_gen_segmento"><div class="label">Segmento</div><div class="value" id="gen_segmento">—</div></div> 
           <div class="card card-generic" id="card_gen_montadora"><div class="label">Montadora</div><div class="value" id="gen_montadora">—</div></div> 
           <div class="card card-generic" id="card_gen_modelo"><div class="label">Modelo</div><div class="value" id="gen_modelo">—</div></div> 
+          <div class="card card-generic" id="card_gen_placa"><div class="label">Placa</div><div class="value" id="gen_placa">—</div><button class="copy-btn" id="copy_plate_btn" title="Copiar Placa" style="display: none;">📋</button></div> 
           <div class="card card-generic" id="card_gen_chassi"><div class="label">Chassi</div><div class="value" id="gen_chassi">—</div><button class="copy-btn" id="copy_chassi_btn" title="Copiar Chassi" style="display: none;">📋</button></div> 
           <div class="card card-generic" id="card_fipe_codigo"><div class="label">Código FIPE</div><div class="value" id="gen_fipe_codigo">—</div><button class="copy-btn" id="copy_fipe_btn" title="Copiar Código FIPE" style="display: none;">📋</button></div> 
           <div class="card card-generic" id="card_fipe_modelo"><div class="label">Modelo FIPE</div><div class="value" id="gen_fipe_modelo">—</div></div> 
@@ -144,6 +151,12 @@
         <label style="display:block; margin-bottom:8px; font-size:14px; color:var(--accent-2);">Identificação do Lote / Frota <span style="color:var(--danger);font-weight:700">*</span></label>
         <input id="fleetName" type="text" required autocomplete="organization" placeholder="Obrigatório — ex.: Frota São Paulo - Lote 01" style="width:100%;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;outline:none;font-family:inherit">
       </div>
+      
+      <!-- Título dinâmico da frota -->
+      <div id="dynamicFleetTitle" style="grid-column: 1 / -1; text-align: center; padding: 10px; display: none;">
+        <h2 style="margin: 0; color: var(--accent-2); font-size: 20px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;"></h2>
+      </div>
+
       <div class="bar-group">
         <div class="group-col-head" style="height: 24px; display: flex; align-items: center; margin-bottom: 8px;">
           <label style="margin:0; font-size:14px; color:var(--accent);">Placas (6 ou 7 chars)</label>
@@ -178,6 +191,14 @@
     
     <div id="reportButtons" style="display: none; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
       <div id="groupFilters" style="display: flex; gap: 8px; flex: 1; flex-wrap: wrap; align-items: center;">
+        <select id="filterSegment" style="flex: 0.8; min-width: 110px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text); font-size: 13px; outline: none; cursor: pointer;">
+          <option value="">Segmento (Todos)</option>
+          <option value="Caminhão">Caminhão</option>
+          <option value="Ônibus">Ônibus</option>
+          <option value="Leves">Leves</option>
+          <option value="Agrícola">Agrícola</option>
+          <option value="Florestal">Florestal</option>
+        </select>
         <input type="text" id="filterPlate" placeholder="🔍 Placa..." 
                style="flex: 0.8; min-width: 100px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text); font-size: 13px; outline: none;">
         <select id="filterBrand" style="flex: 1; min-width: 130px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text); font-size: 13px; outline: none; cursor: pointer;">
@@ -185,6 +206,9 @@
         </select>
         <select id="filterModel" style="flex: 1; min-width: 130px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text); font-size: 13px; outline: none; cursor: pointer;">
           <option value="">Modelo (Todos)</option>
+        </select>
+        <select id="filterSubModel" style="flex: 1; min-width: 130px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text); font-size: 13px; outline: none; cursor: pointer;">
+          <option value="">Submodelo (Todos)</option>
         </select>
         <select id="filterYear" style="flex: 1; min-width: 100px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text); font-size: 13px; outline: none; cursor: pointer;">
           <option value="">Ano (Todos)</option>
