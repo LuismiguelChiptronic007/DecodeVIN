@@ -222,6 +222,7 @@ async function buscarFallbackKePlaca(placa) {
    if (filtros.placa)      params.set('placa',      filtros.placa); 
    if (filtros.fleet_name) params.set('fleet_name', filtros.fleet_name); 
    if (filtros.history_ids) params.set('history_ids', filtros.history_ids); 
+   if (filtros.q)           params.set('q', filtros.q);
    params.set('limit',  String(filtros.limit  || 200)); 
    params.set('offset', String(filtros.offset || 0)); 
   
@@ -240,6 +241,27 @@ async function buscarFallbackKePlaca(placa) {
    }); 
    return await res.json(); 
  } 
+
+async function buscarPlacasCache(cursor = null, busca = '', prefix = 'ob:') {
+  const token = localStorage.getItem('dvb_token');
+  if (!token) return null;
+
+  const params = new URLSearchParams();
+  params.set('limit', '100');
+  params.set('prefix', prefix);
+  if (cursor) params.set('cursor', cursor);
+  if (busca)  params.set('q', busca);
+
+  try {
+    const res = await fetch(AUTH_WORKER + '/admin/placas-cache?' + params.toString(), {
+      headers: { 'Authorization': 'Bearer ' + token },
+    });
+    return await res.json();
+  } catch (e) {
+    console.error('[PlacasCache] Erro:', e);
+    return { ok: false, mensagem: 'Erro de conexão' };
+  }
+}
 
 function el(id) {
   return document.getElementById(id);
@@ -1522,6 +1544,8 @@ function renderGroupHistoryItems(list, sessUser) {
         return;
       }
 
+      showScreen(groupDecoder);
+
       const gInput = el("groupInput");
       const gPlateInput = el("groupPlateInput");
       const bGroup = el("btnGroupDecode");
@@ -1758,10 +1782,24 @@ function exportCSV(data, name, includeFipe = true) {
     }
 
     const fipeCodFinal = bestFipe ? (bestFipe.codigo_fipe || bestFipe.fipe_codigo || bestFipe.CODIGO_FIPE || bestFipe.FIPE_CODIGO || "—") : (api.fipe_codigo || "—");
-    const fipeModFinal = bestFipe ? (bestFipe.fipe_modelo || bestFipe.texto_modelo || bestFipe.modelo || bestFipe.MODELO || bestFipe.NOME || "—") : (api.fipe_modelo || api.texto_modelo || api.modelo || "—");
+    
+    // Busca o modelo mais completo possível
+    let fipeModFinal = "—";
+    if (bestFipe) {
+      fipeModFinal = [bestFipe.fipe_modelo, bestFipe.texto_modelo, bestFipe.modelo, bestFipe.MODELO, bestFipe.NOME, bestFipe.MODELO_FIPE]
+        .filter(s => s && String(s).trim() !== "" && String(s).trim() !== "—")
+        .sort((a, b) => String(b).length - String(a).length)[0] || "—";
+    }
+    if (fipeModFinal === "—") {
+      fipeModFinal = [api.fipe_modelo, api.texto_modelo, api.modelo, item.fipe_modelo]
+        .filter(s => s && String(s).trim() !== "" && String(s).trim() !== "—")
+        .sort((a, b) => String(b).length - String(a).length)[0] || "—";
+    }
 
-    // Garantia para quando exportamos da pesquisa de frota
-    const finalFipeMod = (fipeModFinal === "—" || fipeModFinal === api.modelo) ? (api.fipe_modelo || fipeModFinal) : fipeModFinal;
+    // Garantia para quando exportamos da pesquisa de frota ou histórico
+    const finalFipeMod = (fipeModFinal === "—" || fipeModFinal === api.modelo || fipeModFinal === item.modelo) 
+      ? (api.fipe_modelo || item.fipe_modelo || fipeModFinal) 
+      : fipeModFinal;
 
     let row = [];
     if (includeFipe) {
@@ -1795,7 +1833,7 @@ function exportCSV(data, name, includeFipe = true) {
     }
 
     csv += row.map(val => {
-      let s = String(val).trim();
+      let s = String(val).trim().replace(/[\r\n\t]+/g, " ");
       return (s === "" || s === "—" || s === "undefined") ? "—" : s.replace(/;/g, ",");
     }).join(";") + "\n";
   });
@@ -2923,6 +2961,8 @@ async function main() {
     const selectionScreen = el("selectionScreen");
     const singleDecoder = el("singleDecoder");
     const groupDecoder = el("groupDecoder");
+    const historyScreen = el("historyScreen");
+    const placasCacheScreen = el("placasCacheScreen");
     const vinInputSingle = el("vinInputSingle");
     const plateInputSingle = el("plateInputSingle");
     const btnSingle = el("btnDecodeSingle");
@@ -2934,7 +2974,7 @@ async function main() {
     const gResults = el("groupResults");
 
     const showScreen = (screen) => {
-      [selectionScreen, singleDecoder, groupDecoder].forEach(s => {
+      [selectionScreen, singleDecoder, groupDecoder, historyScreen, placasCacheScreen].forEach(s => {
         if (s) {
           s.style.display = "none";
           s.classList.remove("screen-fade-in");
@@ -2968,6 +3008,16 @@ async function main() {
       showScreen(selectionScreen);
       clearUI(false);
     };
+    el("backFromHistory").onclick = () => {
+      showScreen(groupDecoder);
+    };
+    el("backFromPlacasCache").onclick = () => {
+      showScreen(selectionScreen);
+    };
+    el("btnGoToGroupHistory").onclick = () => {
+      showScreen(historyScreen);
+      renderGroupHistory();
+    };
 
     const reportModal = el("reportModal");
     if (el("closeReportModal")) {
@@ -2985,6 +3035,183 @@ async function main() {
         if (reportModal) reportModal.style.display = "none";
       };
     }
+
+    // Modal de Histórico (Somente Grupos/Lotes)
+    window.abrirHistorico = () => {
+      showScreen(historyScreen);
+      renderGroupHistory();
+    };
+
+    // ── Tela Placas Cache (admin aplicação) ────────────────────── 
+    const placasCacheCursors = [null]; // índice 0 = primeira página 
+    let   placasCachePage   = 0; 
+    
+    // Botão de acesso — só aparece para admin + setor aplicação 
+    const sessUser = JSON.parse(localStorage.getItem('dvb_user') || 'null'); 
+    const btnAbrirPlacasCache = el('btnAbrirPlacasCache'); 
+    if (btnAbrirPlacasCache) { 
+      const setorNorm = String(sessUser?.setor || '').toLowerCase();
+      const isAplicacao = setorNorm === 'aplicacao' || setorNorm === 'aplicação';
+      const podeVer = sessUser && sessUser.admin && isAplicacao;
+      btnAbrirPlacasCache.style.display = podeVer ? 'flex' : 'none'; 
+    
+      btnAbrirPlacasCache.onclick = () => { 
+        showScreen(placasCacheScreen); 
+        carregarPlacasCache(null); // carrega a 1ª página ao abrir 
+      }; 
+    } 
+    
+    async function carregarPlacasCache(cursor) { 
+      const busca  = (el('placasCacheBusca')?.value  || '').trim(); 
+      const prefix = (el('placasCachePrefix')?.value || 'ob:'); 
+      const cont   = el('placasCacheResults'); 
+      const pag    = el('placasCachePagination'); 
+    
+      if (cont) cont.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Carregando...</div>'; 
+    
+      const data = await buscarPlacasCache(cursor, busca, prefix); 
+    
+      if (!data || !data.ok) { 
+        if (cont) cont.innerHTML = '<div style="color:#e74c3c;text-align:center;padding:40px">' + 
+          (data?.mensagem || 'Erro ao carregar dados') + '</div>'; 
+        return; 
+      } 
+    
+      // Atualiza total 
+      const totalEl = el('placasCacheTotal'); 
+      if (totalEl) totalEl.textContent = data.entries.length + ' registros nesta página'; 
+    
+      // Renderiza tabela 
+      if (!data.entries.length) { 
+        if (cont) cont.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px">Nenhum registro encontrado.</div>'; 
+        if (pag) pag.style.display = 'none'; 
+        return; 
+      } 
+    
+      // Detecta colunas dinamicamente a partir dos dados reais 
+      const allKeys = new Set(); 
+      data.entries.forEach(row => Object.keys(row).forEach(k => allKeys.add(k))); 
+      
+      // Prioriza campos importantes na visualização
+      const CAMPOS_PRIORITARIOS = ['key', 'query', 'empresa', 'encarrocadora', 'carroceria', 
+        'fabricante', 'chassi', 'modelo_completo', 'ano', 'foto_url', 'fonte']; 
+      const outrosCampos = Array.from(allKeys) 
+        .filter(k => !CAMPOS_PRIORITARIOS.includes(k)) 
+        .sort(); 
+      const COLUNAS = [...CAMPOS_PRIORITARIOS.filter(k => allKeys.has(k) || k === 'key'), ...outrosCampos]; 
+      
+      const wrapper = document.createElement('div'); 
+      wrapper.style.overflowX = 'auto'; 
+    
+      const table = document.createElement('table'); 
+      table.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px;'; 
+    
+      // Cabeçalho dinâmico 
+      const thead = document.createElement('thead'); 
+      const trH   = document.createElement('tr'); 
+      trH.style.cssText = 'background:var(--bg);border-bottom:2px solid var(--border);'; 
+      COLUNAS.forEach(col => { 
+        const th = document.createElement('th'); 
+        th.style.cssText = 'padding:8px 10px;text-align:left;color:var(--muted);font-size:11px;font-weight:600;white-space:nowrap;'; 
+        th.textContent = col; 
+        trH.appendChild(th); 
+      }); 
+      thead.appendChild(trH); 
+      table.appendChild(thead); 
+    
+      // Corpo dinâmico 
+      const tbody = document.createElement('tbody'); 
+      data.entries.forEach(row => { 
+        const tr = document.createElement('tr'); 
+        tr.style.cssText = 'border-bottom:1px solid var(--border);transition:background .15s;cursor:default;'; 
+        tr.onmouseenter = () => tr.style.background = 'var(--bg)'; 
+        tr.onmouseleave = () => tr.style.background = ''; 
+    
+        COLUNAS.forEach(col => { 
+          const td = document.createElement('td'); 
+          td.style.cssText = 'padding:8px 10px;color:var(--text);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;'; 
+          const val = row[col]; 
+          const display = (val === null || val === undefined) ? '—' : String(val); 
+          td.textContent = display; 
+          td.title = display; 
+          
+          // Links especiais 
+          if (col === 'foto_url' && val) { 
+            td.innerHTML = ''; 
+            const a = document.createElement('a'); 
+            a.href = val; a.target = '_blank'; 
+            a.textContent = '🖼️ Ver foto'; 
+            a.style.color = 'var(--accent-2)'; 
+            td.appendChild(a); 
+          } 
+          if (col === 'fonte' && val) { 
+            td.innerHTML = ''; 
+            const a = document.createElement('a'); 
+            a.href = val; a.target = '_blank'; 
+            a.textContent = '🔗 OB'; 
+            a.style.color = 'var(--accent-2)'; 
+            td.appendChild(a); 
+          } 
+          tr.appendChild(td); 
+        }); 
+        tbody.appendChild(tr); 
+      }); 
+      table.appendChild(tbody); 
+      wrapper.appendChild(table); 
+      if (cont) { cont.innerHTML = ''; cont.appendChild(wrapper); } 
+    
+      // Paginação via cursor 
+      const proxCursor = data.cursor; 
+      const isComplete = data.list_complete; 
+    
+      if (pag) { 
+        pag.style.display = 'flex'; 
+        const btnAnterior = el('btnPlacasCacheAnterior'); 
+        const btnProximo  = el('btnPlacasCacheProximo'); 
+        const pagInfo     = el('placasCachePagInfo'); 
+    
+        if (btnAnterior) btnAnterior.disabled = placasCachePage === 0; 
+        if (btnProximo)  btnProximo.disabled  = isComplete || !proxCursor; 
+        if (pagInfo)     pagInfo.textContent  = 'Página ' + (placasCachePage + 1); 
+    
+        if (btnAnterior) { 
+          btnAnterior.onclick = () => { 
+            if (placasCachePage > 0) { 
+              placasCachePage--; 
+              carregarPlacasCache(placasCacheCursors[placasCachePage] || null); 
+            } 
+          }; 
+        } 
+        if (btnProximo && proxCursor) { 
+          btnProximo.onclick = () => { 
+            placasCachePage++; 
+            if (!placasCacheCursors[placasCachePage]) { 
+              placasCacheCursors[placasCachePage] = proxCursor; 
+            } 
+            carregarPlacasCache(proxCursor); 
+          }; 
+        } 
+      } 
+    } 
+    
+    // Busca ao clicar ou pressionar Enter 
+    el('btnPlacasCacheBuscar')?.addEventListener('click', () => { 
+      placasCachePage = 0; 
+      placasCacheCursors.length = 1; 
+      placasCacheCursors[0] = null; 
+      carregarPlacasCache(null); 
+    }); 
+    el('placasCacheBusca')?.addEventListener('keydown', e => { 
+      if (e.key === 'Enter') el('btnPlacasCacheBuscar')?.click(); 
+    }); 
+    el('placasCachePrefix')?.addEventListener('change', () => { 
+      el('btnPlacasCacheBuscar')?.click(); 
+    }); 
+
+    window.abrirPlacasCache = () => {
+      showScreen(placasCacheScreen);
+      carregarPlacasCache(null);
+    };
 
     // Atualiza o título dinâmico da frota enquanto o usuário digita
     const fleetInput = el("fleetName");
@@ -4015,16 +4242,19 @@ async function main() {
            <div style="font-weight:700;font-size:16px;color:var(--text)">🔍 Pesquisa de Frota no Banco</div> 
            <div style="font-size:12px;color:var(--muted);margin-top:2px" id="fleetSearchCount">Nenhum filtro aplicado</div> 
          </div> 
-         <button id="closeFleetSearchModal" style=" 
-           background:transparent; 
-           border:1px solid var(--border); 
-           border-radius:8px; 
-           color:var(--muted); 
-           padding:6px 12px; 
-           cursor:pointer; 
-           font-size:18px; 
-           line-height:1; 
-         ">✕</button> 
+         <div style="display:flex; align-items:center; gap:12px;">
+           <input id="quickFleetSearch" type="text" placeholder="Pesquisa rápida..." style="background:var(--bg); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:8px; font-size:13px; width:200px; outline:none;">
+           <button id="closeFleetSearchModal" style=" 
+             background:transparent; 
+             border:1px solid var(--border); 
+             border-radius:8px; 
+             color:var(--muted); 
+             padding:6px 12px; 
+             cursor:pointer; 
+             font-size:18px; 
+             line-height:1; 
+           ">✕</button> 
+         </div>
        </div> 
   
        <!-- Área de resultados --> 
@@ -4067,10 +4297,11 @@ async function main() {
    function fecharModal() { modal.style.display = 'none'; } 
   
    // ---- Estado da pesquisa ---- 
+   let filtrosOriginais = {}; // Salva os filtros iniciais (lote/histórico)
+   let lastFiltros     = {}; 
    let currentOffset   = 0; 
    let currentTotal    = 0; 
    const PAGE_SIZE     = 50; 
-   let lastFiltros     = {}; 
    let allResultsCache = []; 
   
    // ---- Renderiza os resultados no modal ---- 
@@ -4083,7 +4314,8 @@ async function main() {
      const btnExport = document.getElementById('btnExportFleetSearch'); 
   
      if (!data || !data.ok) { 
-       container.innerHTML = '<div style="color:#e74c3c;text-align:center;padding:40px 0">Erro ao buscar dados. Tente novamente.</div>'; 
+       container.innerHTML = `<div style="color:#e74c3c;text-align:center;padding:40px 0">${data?.mensagem || "Erro ao buscar dados. Tente novamente."}</div>`; 
+       if (countEl) countEl.textContent = "Erro na busca";
        return; 
      } 
   
@@ -4183,34 +4415,39 @@ async function main() {
    // ---- Executa a pesquisa ---- 
    async function executarPesquisa(filtros, offset = 0) { 
      const container = document.getElementById('fleetSearchResults'); 
-     container.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px 0">⏳ Buscando...</div>'; 
+     const countEl   = document.getElementById('fleetSearchCount');
+     
+     if (countEl) countEl.innerHTML = '⏳ Buscando no servidor...';
      modal.style.display = 'flex'; 
   
      lastFiltros    = filtros; 
      currentOffset  = offset; 
   
-     const data = await buscarFrotaNoBanco({ ...filtros, limit: PAGE_SIZE, offset }); 
-     
-     // Filtro adicional no cliente para garantir correspondência exata de modelo se solicitado 
-     if (filtros.modelo && data.ok && Array.isArray(data.results)) { 
-       const fModelNorm = filtros.modelo.trim().toUpperCase(); 
-       data.results = data.results.filter(row => { 
-         const m = String(row.modelo || "").trim().toUpperCase(); 
-         // Permite o modelo exato (ex: "R"), o modelo seguido de espaço/hífen (ex: "R 450"),
-         // ou o modelo colado com números (ex: "R450") para casos não normalizados no banco.
-         return m === fModelNorm || 
-                m.startsWith(fModelNorm + " ") || 
-                m.startsWith(fModelNorm + "-") ||
-                (fModelNorm.length === 1 && m.startsWith(fModelNorm) && /^\d/.test(m.slice(1)));
-       }); 
+     try {
+       const data = await buscarFrotaNoBanco({ ...filtros, limit: PAGE_SIZE, offset }); 
        
-       // Se o filtro local reduziu os itens, ajustamos o total exibido para não confundir o usuário
-       if (data.results.length < (data.results_count_in_page || PAGE_SIZE) && data.total > data.results.length) {
-         data.total = data.results.length + (currentOffset > 0 ? currentOffset : 0);
+       if (!data || !data.ok) {
+         renderResultados({ ok: false, mensagem: data?.erro || "Falha na conexão" });
+         return;
        }
-     } 
-  
-     renderResultados(data); 
+
+       // Filtro adicional no cliente para garantir correspondência exata de modelo se solicitado 
+       if (filtros.modelo && data.ok && Array.isArray(data.results)) { 
+         const fModelNorm = filtros.modelo.trim().toUpperCase(); 
+         data.results = data.results.filter(row => { 
+           const m = String(row.modelo || "").trim().toUpperCase(); 
+           return m === fModelNorm || 
+                  m.startsWith(fModelNorm + " ") || 
+                  m.startsWith(fModelNorm + "-") ||
+                  (fModelNorm.length === 1 && m.startsWith(fModelNorm) && /^\d/.test(m.slice(1)));
+         }); 
+       } 
+    
+       renderResultados(data); 
+     } catch (e) {
+       console.error("[Fleet] Erro ao pesquisar:", e);
+       renderResultados({ ok: false, mensagem: "Erro inesperado ao buscar dados." });
+     }
    } 
   
    // Paginação 
@@ -4218,6 +4455,23 @@ async function main() {
      executarPesquisa(lastFiltros, Math.max(0, currentOffset - PAGE_SIZE)); 
    document.getElementById('fleetSearchNext').onclick = () => 
      executarPesquisa(lastFiltros, currentOffset + PAGE_SIZE); 
+
+   // Pesquisa rápida global (todas as páginas do banco)
+   let fleetSearchTimeout;
+   document.getElementById('quickFleetSearch').oninput = (e) => {
+     clearTimeout(fleetSearchTimeout);
+     const term = e.target.value.trim();
+     
+     fleetSearchTimeout = setTimeout(() => {
+       if (term !== '') { 
+         // Busca global — ignora filtros de lote, usa só o texto 
+         executarPesquisa({ q: term }, 0); 
+       } else { 
+         // Sem texto — volta para os filtros originais de lote/histórico 
+         executarPesquisa(filtrosOriginais, 0); 
+       } 
+     }, 450);
+   };
   
    // Exportar Relatórios dos resultados (com opções de FIPE/Sem FIPE)
    document.getElementById('btnExportFleetSearch').onclick = () => { 
@@ -4230,9 +4484,12 @@ async function main() {
          placa: row.placa,
          vin:   row.vin,
          fabricante: row.montadora,
+         modelo:     row.modelo, // Adicionado ao top level
+         fipe_modelo: row.fipe_modelo, // Adicionado ao top level
          apiResult: {
            marca:       row.montadora,
            modelo:      row.modelo,
+           texto_modelo: row.fipe_modelo, // Fallback importante para exportCSV
            versao:      row.submodelo,
            ano:         row.ano,
            fipe_codigo: row.fipe_codigo,
@@ -4270,7 +4527,10 @@ async function main() {
   
    // ---- Expõe globalmente para ser chamado pelo botão no histórico ---- 
    window.abrirPesquisaFrota = function(filtros) { 
-     executarPesquisa(filtros || {}); 
+     filtrosOriginais = filtros || {}; // Salva o estado original (lote/histórico)
+     const qInput = document.getElementById('quickFleetSearch');
+     if (qInput) qInput.value = ""; // Limpa campo de busca ao abrir nova frota
+     executarPesquisa(filtrosOriginais, 0); 
    }; 
   
  })(); 

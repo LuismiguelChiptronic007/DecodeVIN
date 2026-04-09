@@ -566,6 +566,20 @@ function mostrarApp(usuario) {
   const setorExibido = usuario.setor || 'Operador';
   const emailExibido = usuario.email || '';
 
+  const historyIcon = `
+    <div id="dvb-history-trigger" onclick="if(window.abrirHistorico) window.abrirHistorico()" style="position:relative; cursor:pointer; margin-right:15px; display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid var(--border); transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'" title="Histórico de Lotes">
+      <span style="font-size:18px;">📦</span>
+    </div>
+  `;
+
+  const setor = String(usuario.setor || '').toLowerCase();
+  const isAplicacao = setor === 'aplicacao' || setor === 'aplicação';
+  const placasCacheIcon = (usuario.admin && isAplicacao) ? `
+    <div onclick="if(window.abrirPlacasCache) window.abrirPlacasCache()" style="position:relative; cursor:pointer; margin-right:15px; display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid var(--border); transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'" title="Informações do Banco (API)">
+      <span style="font-size:18px;">🗄️</span>
+    </div>
+  ` : '';
+
   const notificationIcon = usuario.admin ? `
     <div id="dvb-notif-trigger" style="position:relative; cursor:pointer; margin-right:15px; display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid var(--border); transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
       <span style="font-size:18px;">🔔</span>
@@ -605,6 +619,7 @@ function mostrarApp(usuario) {
     </div>
 
     <div style="display:flex; align-items:center;">
+      ${placasCacheIcon}
       ${notificationIcon}
       <div style="position:relative;">
         <div id="dvb-user-trigger" style="
@@ -1007,14 +1022,14 @@ window.dvbSalvarPerfil = async function() {
     user.setor = setor;
     localStorage.setItem('dvb_user', JSON.stringify(user));
 
-    msgEl.textContent = "Perfil atualizado com sucesso!";
+    msgEl.textContent = "Perfil atualizado! Deslogando para aplicar as mudanças...";
     msgEl.style.color = "#86efac";
     
     setTimeout(() => {
       const editOverlay = document.getElementById('dvb-edit-profile-overlay');
       if (editOverlay) editOverlay.remove();
-      location.reload(); // Recarrega para atualizar o nome na barra superior
-    }, 1500);
+      dvbLogout(); // Desloga o usuário para carregar as novas informações
+    }, 2000);
 
   } catch (err) {
     msgEl.textContent = "Erro de conexão.";
@@ -1293,22 +1308,38 @@ window.dvbAprovarResetSenha = async function(id, aprovado) {
 
 window.dvbAprovar = async function(id, aprovado) {
   const token = getToken();
+  const user = getUser();
   await fetch(`${AUTH_WORKER}/admin/approve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ id, aprovado })
   });
+  
+  // Se estiver aprovando/revogando a SI MESMO, desloga
+  if (user && user.id == id) {
+    dvbLogout();
+    return;
+  }
+
   document.getElementById('dvb-admin-modal').remove();
   dvbAdmin();
 };
 
 window.dvbPromover = async function(id, admin) {
   const token = getToken();
+  const user = getUser();
   await fetch(`${AUTH_WORKER}/admin/promote`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ id, admin })
   });
+  
+  // Se estiver promovendo/rebaixando a SI MESMO, desloga
+  if (user && user.id == id) {
+    dvbLogout();
+    return;
+  }
+
   document.getElementById('dvb-admin-modal').remove();
   dvbAdmin();
 };

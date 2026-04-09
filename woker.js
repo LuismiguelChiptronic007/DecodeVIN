@@ -97,10 +97,11 @@ export default {
 
     if (method === 'OPTIONS') return new Response(null, { headers: CORS });
 
-    // ============================================================
-    // POST /register
-    // ============================================================
-    if (method === 'POST' && path === '/register') {
+    try {
+      // ============================================================
+      // POST /register
+      // ============================================================
+      if (method === 'POST' && path === '/register') {
       const { nome, email, senha, setor } = await request.json();
       if (!nome || !email || !senha || !setor)
         return json({ erro: 'Todos os campos são obrigatórios (nome, email, senha, setor)' }, 400);
@@ -776,31 +777,42 @@ if (method === 'GET' && path === '/fleet/search') {
     const placa        = url.searchParams.get('placa')        || '';
     const fleet_name   = url.searchParams.get('fleet_name')   || '';
     const history_ids  = url.searchParams.get('history_ids')  || '';
+    const q = url.searchParams.get('q') || '';
     const limit        = Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit')  || '100')));
     const offset       = Math.max(0, parseInt(url.searchParams.get('offset') || '0'));
 
     let whereClauses = [];
     let bindings     = [];
 
-    // Admin vê tudo, usuário comum vê só os seus
-    if (!isAdmin) {
-      whereClauses.push('user_id = ?');
-      bindings.push(String(userId));
-    }
+    // Se houver busca global (q), ignoramos outros filtros de atributo
+    if (q) {
+      const qUp = '%' + q.toUpperCase().trim() + '%';
+      whereClauses.push(`(
+        placa LIKE ? OR vin LIKE ? OR montadora LIKE ? OR modelo LIKE ? OR 
+        fleet_name LIKE ? OR encarrocadora LIKE ? OR fipe_modelo LIKE ?
+      )`);
+      bindings.push(qUp, qUp, qUp, qUp, qUp, qUp, qUp);
+    } else {
+      // Admin vê tudo, usuário comum vê só os seus
+      if (!isAdmin) {
+        whereClauses.push('user_id = ?');
+        bindings.push(String(userId));
+      }
 
-    if (montadora)  { whereClauses.push('montadora = ?');          bindings.push(montadora.toUpperCase()); }
-    if (modelo)     { whereClauses.push('modelo LIKE ?');           bindings.push('%' + modelo.toUpperCase() + '%'); }
-    if (submodelo)  { whereClauses.push('submodelo LIKE ?');        bindings.push('%' + submodelo.toUpperCase() + '%'); }
-    if (ano)        { whereClauses.push('ano LIKE ?');              bindings.push('%' + ano + '%'); }
-    if (segmento)   { whereClauses.push('segmento = ?');            bindings.push(segmento); }
-    if (placa)      { whereClauses.push('placa LIKE ?');            bindings.push('%' + placa.toUpperCase() + '%'); }
-    if (fleet_name) { whereClauses.push('fleet_name LIKE ?');       bindings.push('%' + fleet_name + '%'); }
+      if (montadora)  { whereClauses.push('montadora = ?');          bindings.push(montadora.toUpperCase()); }
+      if (modelo)     { whereClauses.push('modelo LIKE ?');           bindings.push('%' + modelo.toUpperCase() + '%'); }
+      if (submodelo)  { whereClauses.push('submodelo LIKE ?');        bindings.push('%' + submodelo.toUpperCase() + '%'); }
+      if (ano)        { whereClauses.push('ano LIKE ?');              bindings.push('%' + ano + '%'); }
+      if (segmento)   { whereClauses.push('segmento = ?');            bindings.push(segmento); }
+      if (placa)      { whereClauses.push('placa LIKE ?');            bindings.push('%' + placa.toUpperCase() + '%'); }
+      if (fleet_name) { whereClauses.push('fleet_name LIKE ?');       bindings.push('%' + fleet_name + '%'); }
 
-    if (history_ids) {
-      const ids = history_ids.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
-      if (ids.length > 0) {
-        whereClauses.push(`history_id IN (${ids.map(() => '?').join(',')})`);
-        bindings.push(...ids.map(id => Number(id)));
+      if (history_ids) {
+        const ids = history_ids.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
+        if (ids.length > 0) {
+          whereClauses.push(`history_id IN (${ids.map(() => '?').join(',')})`);
+          bindings.push(...ids.map(id => Number(id)));
+        }
       }
     }
 
@@ -883,39 +895,137 @@ if (method === 'GET' && path === '/fleet/options') {
 }
 
 // ============================================================
-// DELETE /fleet/vehicles  — remove veículos de um lote
-// Body: { history_id } ou { fleet_name }
-// ============================================================
-if (method === 'DELETE' && path === '/fleet/vehicles') {
-  try {
-    const payload = await requireAuth(request, env);
-    if (!payload) return json({ erro: 'Não autorizado' }, 401);
+    // DELETE /fleet/vehicles  — remove veículos de um lote
+    // ============================================================
+    if (method === 'DELETE' && path === '/fleet/vehicles') {
+      try {
+        const payload = await requireAuth(request, env);
+        if (!payload) return json({ erro: 'Não autorizado' }, 401);
 
-    const userId = getUserId(payload);
-    if (!userId) return json({ erro: 'user_id inválido no token' }, 400);
+        const userId = getUserId(payload);
+        if (!userId) return json({ erro: 'user_id inválido no token' }, 400);
 
-    const body       = await request.json().catch(() => ({}));
-    const history_id = body.history_id ? Number(body.history_id) : null;
-    const fleet_name = body.fleet_name ? String(body.fleet_name) : null;
+        const body       = await request.json().catch(() => ({}));
+        const history_id = body.history_id ? Number(body.history_id) : null;
+        const fleet_name = body.fleet_name ? String(body.fleet_name) : null;
 
-    if (!history_id && !fleet_name)
-      return json({ erro: 'Informe history_id ou fleet_name' }, 400);
+        if (!history_id && !fleet_name)
+          return json({ erro: 'Informe history_id ou fleet_name' }, 400);
 
-    if (history_id) {
-      await env.DB.prepare(
-        'DELETE FROM fleet_vehicles WHERE user_id = ? AND history_id = ?'
-      ).bind(String(userId), history_id).run();
-    } else {
-      await env.DB.prepare(
-        'DELETE FROM fleet_vehicles WHERE user_id = ? AND fleet_name = ?'
-      ).bind(String(userId), fleet_name).run();
+        if (history_id) {
+          await env.DB.prepare(
+            'DELETE FROM fleet_vehicles WHERE user_id = ? AND history_id = ?'
+          ).bind(String(userId), history_id).run();
+        } else {
+          await env.DB.prepare(
+            'DELETE FROM fleet_vehicles WHERE user_id = ? AND fleet_name = ?'
+          ).bind(String(userId), fleet_name).run();
+        }
+
+        return json({ ok: true });
+      } catch (err) {
+        return json({ erro: 'Erro interno: ' + String(err) }, 500);
+      }
     }
 
-    return json({ ok: true });
-  } catch (err) {
-    return json({ erro: 'Erro interno: ' + String(err) }, 500);
-  }
-}
+    // GET /admin/placas-cache
+    if (path === '/admin/placas-cache' && method === 'GET') {
+      try {
+        const payload = await verifyJWT(
+          (request.headers.get('Authorization') || '').replace('Bearer ', '').trim(),
+          env.JWT_SECRET
+        );
+        if (!payload) return json({ ok: false, mensagem: 'Não autenticado' }, 401);
+        if (!payload.admin) return json({ ok: false, mensagem: 'Acesso negado' }, 403);
+        if (!env.PLACAS_CACHE) return json({ ok: false, mensagem: 'KV não configurado' }, 503);
+
+        const sp      = new URL(request.url).searchParams;
+        const prefix  = sp.get('prefix') || 'ob:';
+        const limit   = Math.min(parseInt(sp.get('limit') || '100'), 500);
+        const cursor  = sp.get('cursor') || undefined;
+        const busca   = (sp.get('q') || '').toUpperCase().trim();
+
+        const listResult = await env.PLACAS_CACHE.list({ prefix, limit, cursor });
+
+        const entries = [];
+        const LOTE = 20;
+        for (let i = 0; i < listResult.keys.length; i += LOTE) {
+          const batch  = listResult.keys.slice(i, i + LOTE);
+          const values = await Promise.all(batch.map(k => env.PLACAS_CACHE.get(k.name, { type: 'json' })));
+          batch.forEach((k, idx) => {
+            const val = values[idx];
+            if (!val) return;
+            if (busca && !(k.name + JSON.stringify(val)).toUpperCase().includes(busca)) return;
+            entries.push({ key: k.name, ...val });
+          });
+        }
+
+        return json({ ok: true, entries, cursor: listResult.cursor || null, list_complete: listResult.list_complete ?? true, total_this_page: entries.length });
+      } catch (err) {
+        return json({ ok: false, mensagem: 'Erro: ' + String(err) }, 500);
+      }
+    }
+
     return json({ erro: 'Rota não encontrada' }, 404);
+    } catch (err) {
+      // Garante CORS mesmo em erro 500 inesperado 
+      return json({ erro: 'Erro interno: ' + String(err) }, 500);
+    }
   },
 };
+
+async function handleAdminPlacasCache(request, env) {
+  // ✅ USE: JWT como o resto do Worker 
+  const payload = await verifyJWT(
+    (request.headers.get('Authorization') || '').replace('Bearer ', '').trim(),
+    env.JWT_SECRET
+  );
+
+  if (!payload) return json({ ok: false, mensagem: 'Não autenticado' }, 401);
+   if (!payload.admin) return json({ ok: false, mensagem: 'Acesso negado' }, 403);
+ 
+   // ✅ GUARDA: verifica se o binding KV existe 
+   if (!env.PLACAS_CACHE) { 
+     return json({ ok: false, mensagem: 'KV binding PLACAS_CACHE não configurado no Worker' }, 503); 
+   } 
+ 
+   // Lê os parâmetros de paginação e busca 
+  const searchParams = new URL(request.url).searchParams;
+  const cursor       = searchParams.get('cursor') || undefined;
+  const prefix       = searchParams.get('prefix') || 'ob:';  // padrão: cache do OnibusBrasil 
+  const limit        = Math.min(parseInt(searchParams.get('limit') || '100'), 500);
+  const busca        = (searchParams.get('q') || '').toUpperCase().trim();
+
+  // Lista as chaves do KV com paginação via cursor 
+  const listResult = await env.PLACAS_CACHE.list({
+    prefix,
+    limit,
+    cursor: cursor || undefined,
+  });
+
+  // Busca os valores de cada chave em paralelo (lotes de 20 para não sobrecarregar) 
+  const LOTE = 20;
+  const entries = [];
+
+  for (let i = 0; i < listResult.keys.length; i += LOTE) {
+    const batch = listResult.keys.slice(i, i + LOTE);
+    const values = await Promise.all(
+      batch.map(k => env.PLACAS_CACHE.get(k.name, { type: 'json' }))
+    );
+    batch.forEach((k, idx) => {
+      const val = values[idx];
+      if (!val) return;
+      // Filtro de busca no servidor se informado 
+      if (busca && !(k.name + JSON.stringify(val)).toUpperCaQse().includes(busca)) return;
+      entries.push({ key: k.name, ...val });
+    });
+  }
+
+  return json({
+    ok: true,
+    entries,
+    cursor:      listResult.cursor     || null,
+    list_complete: listResult.list_complete ?? true,
+    total_this_page: entries.length,
+  });
+}
