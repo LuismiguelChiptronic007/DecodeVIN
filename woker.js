@@ -699,11 +699,16 @@ if (method === 'POST' && path === '/fleet/vehicles') {
     if (vehicles.length > 500)
       return json({ erro: 'Máximo de 500 veículos por requisição' }, 400);
 
-    // Deleta veículos antigos do mesmo lote (re-decodificação)
+    // Deleta registros antigos da mesma frota ou lote antes de inserir novos
     if (history_id) {
       await env.DB.prepare(
         'DELETE FROM fleet_vehicles WHERE user_id = ? AND history_id = ?'
       ).bind(String(userId), history_id).run();
+    }
+    if (fleet_name) {
+      await env.DB.prepare(
+        'DELETE FROM fleet_vehicles WHERE user_id = ? AND fleet_name = ?'
+      ).bind(String(userId), String(fleet_name)).run();
     }
 
     // Insere em batch usando múltiplos INSERTs
@@ -770,6 +775,7 @@ if (method === 'GET' && path === '/fleet/search') {
     const segmento     = url.searchParams.get('segmento')     || '';
     const placa        = url.searchParams.get('placa')        || '';
     const fleet_name   = url.searchParams.get('fleet_name')   || '';
+    const history_ids  = url.searchParams.get('history_ids')  || '';
     const limit        = Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit')  || '100')));
     const offset       = Math.max(0, parseInt(url.searchParams.get('offset') || '0'));
 
@@ -789,6 +795,14 @@ if (method === 'GET' && path === '/fleet/search') {
     if (segmento)   { whereClauses.push('segmento = ?');            bindings.push(segmento); }
     if (placa)      { whereClauses.push('placa LIKE ?');            bindings.push('%' + placa.toUpperCase() + '%'); }
     if (fleet_name) { whereClauses.push('fleet_name LIKE ?');       bindings.push('%' + fleet_name + '%'); }
+
+    if (history_ids) {
+      const ids = history_ids.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
+      if (ids.length > 0) {
+        whereClauses.push(`history_id IN (${ids.map(() => '?').join(',')})`);
+        bindings.push(...ids.map(id => Number(id)));
+      }
+    }
 
     const where = whereClauses.length > 0 ? ('WHERE ' + whereClauses.join(' AND ')) : '';
 
