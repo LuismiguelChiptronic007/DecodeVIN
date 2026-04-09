@@ -1753,12 +1753,15 @@ function exportCSV(data, name, includeFipe = true) {
 
     const potentialList = findFipeDeepCSV(api) || [];
     if (potentialList.length > 0) {
-      const valid = potentialList.filter(f => f && (f.codigo_fipe || f.fipe_codigo || f.texto_modelo || f.modelo || f.CODIGO_FIPE || f.FIPE_CODIGO || f.MODELO));
+      const valid = potentialList.filter(f => f && (f.codigo_fipe || f.fipe_codigo || f.fipe_modelo || f.texto_modelo || f.modelo || f.CODIGO_FIPE || f.FIPE_CODIGO || f.MODELO || f.MODELO_FIPE || f.FIPE_MODELO));
       bestFipe = valid.sort((a, b) => (b.score || 0) - (a.score || 0))[0];
     }
 
-    const fipeCodFinal = bestFipe ? (bestFipe.codigo_fipe || bestFipe.fipe_codigo || "—") : (api.fipe_codigo || "—");
-    const fipeModFinal = bestFipe ? (bestFipe.texto_modelo || bestFipe.modelo || "—") : (api.fipe_modelo || "—");
+    const fipeCodFinal = bestFipe ? (bestFipe.codigo_fipe || bestFipe.fipe_codigo || bestFipe.CODIGO_FIPE || bestFipe.FIPE_CODIGO || "—") : (api.fipe_codigo || "—");
+    const fipeModFinal = bestFipe ? (bestFipe.fipe_modelo || bestFipe.texto_modelo || bestFipe.modelo || bestFipe.MODELO || bestFipe.NOME || "—") : (api.fipe_modelo || api.texto_modelo || api.modelo || "—");
+
+    // Garantia para quando exportamos da pesquisa de frota
+    const finalFipeMod = (fipeModFinal === "—" || fipeModFinal === api.modelo) ? (api.fipe_modelo || fipeModFinal) : fipeModFinal;
 
     let row = [];
     if (includeFipe) {
@@ -1772,7 +1775,7 @@ function exportCSV(data, name, includeFipe = true) {
         findToken("Motor") || "—",
         ob.modelo_chassi || ob.chassi || api.modelo || findToken("Modelo") || "—",
         fipeCodFinal,
-        fipeModFinal,
+        finalFipeMod,
         api.combustivel || "—",
         api.cor || "—",
         (api.municipio && api.uf) ? (api.municipio + " / " + api.uf) : (api.cidade || "—")
