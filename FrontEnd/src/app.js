@@ -90,11 +90,9 @@ async function buscarFallbackKePlaca(placa) {
   }
 }
 
-// ============================================================ 
  // BLOCO 1 — Funções de API para fleet_vehicles 
  // Cole logo após as funções fetchWithTimeout / consultarPlacaPHP 
- // no início do main.js 
- // ============================================================ 
+
   
  const AUTH_WORKER = 'https://decodevinbus-auth.luismiguelgomesoliveira-014.workers.dev'; // mesmo que você já usa 
   
@@ -114,6 +112,29 @@ async function buscarFallbackKePlaca(placa) {
        ? (anoFab + '/' + anoMod) 
        : (anoFab || anoMod || tech.year || ''); 
   
+     let fipeCodigo = ''; 
+     let fipeModelo = ''; 
+     const findFipeDeep = (obj) => { 
+       if (!obj || typeof obj !== 'object') return null; 
+       if (obj.fipe_codigo || obj.codigo_fipe) return obj; 
+       for (const k of ['fipe', 'fipe_data', 'dados_fipe', 'results', 'data']) { 
+         if (obj[k]) { 
+           const list = Array.isArray(obj[k]) ? obj[k] : [obj[k]]; 
+           const found = list.find(f => f && (f.fipe_codigo || f.codigo_fipe)); 
+           if (found) return found; 
+         } 
+       } 
+       return null; 
+     }; 
+     const fipeObj = findFipeDeep(api); 
+     if (fipeObj) { 
+       fipeCodigo = fipeObj.fipe_codigo || fipeObj.codigo_fipe || ''; 
+       fipeModelo = fipeObj.fipe_modelo || fipeObj.texto_modelo || fipeObj.modelo || ''; 
+     } else { 
+       fipeCodigo = api.fipe_codigo || ''; 
+       fipeModelo = api.fipe_modelo || ''; 
+     } 
+  
      return { 
        vin:          String(item.vin   || '').toUpperCase(), 
        placa:        String(item.placa || '').toUpperCase(), 
@@ -124,6 +145,8 @@ async function buscarFallbackKePlaca(placa) {
        carroceria:   ob.carroceria        || ob.ob_carroceria   || '', 
        encarrocadora: ob.encarrocadeira   || ob.ob_encarrocadeira || '', 
        segmento:     tech.segment  || '', 
+       fipe_codigo:   fipeCodigo, 
+       fipe_modelo:   fipeModelo, 
      }; 
    }).filter(v => v.vin || v.placa); // ignora linhas completamente vazias 
   
@@ -3890,11 +3913,10 @@ async function main() {
       };
     }
 
-    // ============================================================ 
+ 
  // BLOCO 2 — Modal de Pesquisa de Frota 
  // Cole no final do main.js, dentro da função main(), 
- // logo antes do: renderHistory(); 
- // ============================================================ 
+ 
   
  (function iniciarPesquisaFrota() { 
   
@@ -4045,7 +4067,7 @@ async function main() {
      const thead = document.createElement('thead'); 
      thead.innerHTML = ` 
        <tr style="background:var(--bg);border-bottom:2px solid var(--border);"> 
-         ${['Frota','VIN','Placa','Montadora','Modelo','Submodelo','Ano','Carroceria','Encarroçadora','Segmento'] 
+         ${['Frota','VIN','Placa','Montadora','Modelo','Submodelo','Ano','Carroceria','Encarroçadora','Segmento','Cód. FIPE','Modelo FIPE'] 
            .map(h => `<th style="padding:10px 12px;text-align:left;color:var(--muted);font-size:11px;font-weight:600;white-space:nowrap">${h}</th>`) 
            .join('')} 
        </tr> 
@@ -4070,6 +4092,8 @@ async function main() {
          row.carroceria   || '—', 
          row.encarrocadora || '—', 
          row.segmento     || '—', 
+         row.fipe_codigo  || '—', 
+         row.fipe_modelo  || '—', 
        ]; 
   
        tr.innerHTML = cols.map(val => ` 
@@ -4107,8 +4131,8 @@ async function main() {
    document.getElementById('btnExportFleetSearch').onclick = () => { 
      if (!allResultsCache.length) return; 
   
-     const cols   = ['Frota','VIN','Placa','Montadora','Modelo','Submodelo','Ano','Carroceria','Encarroçadora','Segmento']; 
-     const keys   = ['fleet_name','vin','placa','montadora','modelo','submodelo','ano','carroceria','encarrocadora','segmento']; 
+     const cols   = ['Frota','VIN','Placa','Montadora','Modelo','Submodelo','Ano','Carroceria','Encarroçadora','Segmento','Cód. FIPE','Modelo FIPE']; 
+     const keys   = ['fleet_name','vin','placa','montadora','modelo','submodelo','ano','carroceria','encarrocadora','segmento','fipe_codigo','fipe_modelo']; 
      let csv      = '\ufeff' + cols.join(';') + '\n'; 
   
      allResultsCache.forEach(row => { 

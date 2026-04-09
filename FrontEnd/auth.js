@@ -71,12 +71,13 @@ window.dvbHistoricoUsuarioPost = async function(kind, payload) {
 
 window.dvbHistoricoUsuarioDelete = async function(id) {
   const token = getToken();
-  if (!token || id == null) return { ok: false };
+  if (!token) return { ok: false };
   try {
+    const body = id === 'all' ? { all: true } : { id };
     const res = await fetch(`${AUTH_WORKER}/user/history`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ id })
+      body: JSON.stringify(body)
     });
     if (!res.ok) return { ok: false };
     dvbHistoricoInvalidateCache();

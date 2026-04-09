@@ -329,12 +329,30 @@ export default {
       if (!userId) return json({ erro: 'user_id inválido no token' }, 400);
 
       const body = await request.json().catch(() => ({}));
-      const id   = parseInt(String(body.id || ''), 10);
-      if (!Number.isFinite(id)) return json({ erro: 'id inválido' }, 400);
-
-      await env.DB.prepare(
-        `DELETE FROM user_history WHERE id = ? AND user_id = ?`
-      ).bind(id, userId).run();
+      const id   = body.id ? parseInt(String(body.id), 10) : null;
+      
+      if (id) {
+        // Deleta um registro específico
+        await env.DB.prepare(
+          `DELETE FROM user_history WHERE id = ? AND user_id = ?`
+        ).bind(id, userId).run();
+      } else if (body.all === true) {
+        // Deleta TODO o histórico do usuário
+        await env.DB.prepare(
+          `DELETE FROM user_history WHERE user_id = ?`
+        ).bind(userId).run();
+        
+        // Também limpa os veículos de frota associados ao usuário
+        await env.DB.prepare(
+          `DELETE FROM fleet_vehicles WHERE user_id = ?`
+        ).bind(String(userId)).run();
+      } else if (body.global_reset === true && payload.admin) {
+        // RESET GLOBAL: Deleta histórico de TODOS os usuários (Apenas Admin)
+        await env.DB.prepare(`DELETE FROM user_history`).run();
+        await env.DB.prepare(`DELETE FROM fleet_vehicles`).run();
+      } else {
+        return json({ erro: 'id inválido ou permissão insuficiente' }, 400);
+      }
 
       return json({ ok: true });
     }
@@ -691,8 +709,8 @@ if (method === 'POST' && path === '/fleet/vehicles') {
     // Insere em batch usando múltiplos INSERTs
     const stmt = env.DB.prepare(
       `INSERT INTO fleet_vehicles
-         (user_id, history_id, fleet_name, vin, placa, montadora, modelo, submodelo, ano, carroceria, encarrocadora, segmento)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (user_id, history_id, fleet_name, vin, placa, montadora, modelo, submodelo, ano, carroceria, encarrocadora, segmento, fipe_codigo, fipe_modelo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
     const batch = vehicles.map(v =>
@@ -708,7 +726,9 @@ if (method === 'POST' && path === '/fleet/vehicles') {
         String(v.ano         || '').slice(0, 20),
         String(v.carroceria  || '').slice(0, 80),
         String(v.encarrocadora || '').slice(0, 80),
-        String(v.segmento    || '').slice(0, 40)
+        String(v.segmento    || '').slice(0, 40),
+        String(v.fipe_codigo || '').slice(0, 20),
+        String(v.fipe_modelo || '').slice(0, 120)
       )
     );
 
@@ -772,7 +792,7 @@ if (method === 'GET' && path === '/fleet/search') {
     // Busca paginada
     const dataSQL = `
       SELECT id, user_id, fleet_name, vin, placa, montadora, modelo, submodelo, ano,
-             carroceria, encarrocadora, segmento, created_at
+             carroceria, encarrocadora, segmento, fipe_codigo, fipe_modelo, created_at
       FROM fleet_vehicles
       ${where}
       ORDER BY created_at DESC
