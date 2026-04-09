@@ -140,17 +140,20 @@ async function buscarFallbackKePlaca(placa) {
 
      const tokens = item.result?.tokens || [];
      const findTk = (label) => {
-       const t = tokens.find(tk => 
-         String(tk.label || '').toLowerCase().includes(label.toLowerCase()) || 
-         String(tk.key   || '').toLowerCase().includes(label.toLowerCase())
-       );
+       const search = label.toLowerCase();
+       const t = tokens.find(tk => {
+         const tkLabel = String(tk.label || '').toLowerCase();
+         const tkKey   = String(tk.key   || '').toLowerCase();
+         // Busca EXATA no label, parcial no key
+         return tkLabel === search || tkKey.includes(search);
+       });
        return t ? t.value : '';
      };
 
      const wmi = findTk("WMI") || '';
-     const motor = findTk("MOTOR") || '';
-     const posicaoMotor = findTk("POSIÇÃO DO MOTOR") || findTk("Posição do Motor") || findTk("Posicao") || '';
-     const emissoes = findTk("NORMA DE EMISSÕES") || findTk("Norma de Emissões") || findTk("Emissão") || findTk("Emissoes") || '';
+     const motor = findTk("motor") || '';
+     const posicaoMotor = findTk("posição do motor") || findTk("posicao do motor") || '';
+     const emissoes = findTk("norma de emissões") || findTk("norma de emissoes") || '';
      const combustivel = api.combustivel || api.fuel || api.texto_combustivel || '';
      const cor = api.cor || api.color || '';
      const municipioUf = (api.municipio && api.uf) ? (api.municipio + " / " + api.uf) : (api.cidade || api.municipio || '');
