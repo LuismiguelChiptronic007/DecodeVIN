@@ -3048,18 +3048,9 @@ async function main() {
     
     // Botão de acesso — só aparece para admin + setor aplicação 
     const sessUser = JSON.parse(localStorage.getItem('dvb_user') || 'null'); 
-    const btnAbrirPlacasCache = el('btnAbrirPlacasCache'); 
-    if (btnAbrirPlacasCache) { 
-      const setorNorm = String(sessUser?.setor || '').toLowerCase();
-      const isAplicacao = setorNorm === 'aplicacao' || setorNorm === 'aplicação';
-      const podeVer = sessUser && sessUser.admin && isAplicacao;
-      btnAbrirPlacasCache.style.display = podeVer ? 'flex' : 'none'; 
     
-      btnAbrirPlacasCache.onclick = () => { 
-        showScreen(placasCacheScreen); 
-        carregarPlacasCache(null); // carrega a 1ª página ao abrir 
-      }; 
-    } 
+    // Removida lógica do card central btnAbrirPlacasCache conforme solicitado.
+    // O acesso permanece apenas pelo ícone 🗄️ na barra superior (auth.js).
     
     async function carregarPlacasCache(cursor) { 
       const busca  = (el('placasCacheBusca')?.value  || '').trim(); 
