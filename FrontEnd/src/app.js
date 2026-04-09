@@ -104,7 +104,7 @@ async function buscarFallbackKePlaca(placa) {
    const vehicles = (results || []).map(item => { 
      const tech = getTechnicalData(item); 
      const api  = item.apiResult || {}; 
-     const ob   = item.ob_data  || item.ob || {}; 
+     const ob   = item.ob_data  || item.ob || api.ob_data || api.ob || {}; 
   
      const anoFab = api.ano || api.ano_fabricacao || ''; 
      const anoMod = api.ano_modelo || ''; 
@@ -135,6 +135,26 @@ async function buscarFallbackKePlaca(placa) {
        fipeModelo = api.fipe_modelo || ''; 
      } 
   
+     const carroceria = ob.carroceria || ob.ob_carroceria || api.carroceria || api.ob_carroceria || '';
+     const encarrocadora = ob.encarrocadeira || ob.ob_encarrocadeira || ob.encarrocadora || ob.ob_encarrocadora || api.encarrocadeira || api.ob_encarrocadeira || '';
+
+     const tokens = item.result?.tokens || [];
+     const findTk = (label) => {
+       const t = tokens.find(tk => 
+         String(tk.label || '').toLowerCase().includes(label.toLowerCase()) || 
+         String(tk.key   || '').toLowerCase().includes(label.toLowerCase())
+       );
+       return t ? t.value : '';
+     };
+
+     const wmi = findTk("WMI") || '';
+     const motor = findTk("MOTOR") || '';
+     const posicaoMotor = findTk("POSIÇÃO DO MOTOR") || findTk("Posição do Motor") || findTk("Posicao") || '';
+     const emissoes = findTk("NORMA DE EMISSÕES") || findTk("Norma de Emissões") || findTk("Emissão") || findTk("Emissoes") || '';
+     const combustivel = api.combustivel || api.fuel || api.texto_combustivel || '';
+     const cor = api.cor || api.color || '';
+     const municipioUf = (api.municipio && api.uf) ? (api.municipio + " / " + api.uf) : (api.cidade || api.municipio || '');
+
      return { 
        vin:          String(item.vin   || '').toUpperCase(), 
        placa:        String(item.placa || '').toUpperCase(), 
@@ -142,11 +162,18 @@ async function buscarFallbackKePlaca(placa) {
        modelo:       tech.model    || '', 
        submodelo:    tech.submodel || '', 
        ano:          String(ano), 
-       carroceria:   ob.carroceria        || ob.ob_carroceria   || '', 
-       encarrocadora: ob.encarrocadeira   || ob.ob_encarrocadeira || '', 
+       carroceria:   carroceria, 
+       encarrocadora: encarrocadora, 
        segmento:     tech.segment  || '', 
        fipe_codigo:   fipeCodigo, 
        fipe_modelo:   fipeModelo, 
+       wmi:          wmi,
+       motor:        motor,
+       posicao_motor: posicaoMotor,
+       emissoes:     emissoes,
+       combustivel:  combustivel,
+       cor:          cor,
+       municipio_uf: municipioUf
      }; 
    }).filter(v => v.vin || v.placa); // ignora linhas completamente vazias 
   
@@ -2294,9 +2321,21 @@ function renderGroupResults(filteredList = null) {
     const segmentInfo = tech.segment ? ('<span class="model-val" style="color:var(--accent); font-weight:700;">' + tech.segment.toUpperCase() + '</span> • ') : "";
     const displayBrand = tech.brand || "—";
 
+    // Lê encarroçadora e carroceria do ob ou ob_data 
+    const obRef = itemData.ob_data || itemData.ob || {}; 
+    const enc = obRef.encarrocadeira || obRef.ob_encarrocadeira || obRef.encarrocadora || obRef.ob_encarrocadora || ""; 
+    const carr = obRef.carroceria || obRef.ob_carroceria || ""; 
+    
+    const encInfo = enc && enc !== "—" 
+      ? ' • <span class="model-val" style="color:var(--accent-2)">🚌 ' + enc + '</span>' 
+      : ""; 
+    const carrInfo = carr && carr !== "—" 
+      ? ' • <span class="model-val" style="color:var(--muted)">' + carr + '</span>' 
+      : ""; 
+
     const infoDiv = document.createElement("div");
     infoDiv.className = "info";
-    infoDiv.innerHTML = '<span>' + segmentInfo + displayBrand + modelInfo + yearInfo + fleetHtml + '</span>' +
+    infoDiv.innerHTML = '<span>' + segmentInfo + displayBrand + modelInfo + yearInfo + encInfo + carrInfo + fleetHtml + '</span>' +
       '<span class="status-msg">' + statusHtml + '</span>';
     item.appendChild(infoDiv);
     
@@ -2674,7 +2713,7 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
     };
 
     const d = itemData ? (itemData.ob_data || itemData.ob) : null;
-    const hasExistingData = d && (d.success === true || (d.ob_encarrocadeira && d.ob_encarrocadeira !== "—"));
+    const hasExistingData = d && (d.success === true || (d.ob_encarrocadeira && d.ob_encarrocadeira !== "—") || (d.ob_carroceria && d.ob_carroceria !== "—"));
 
     if (hasExistingData) {
       statusDiv.textContent = "✅ Dados carregados!";
@@ -2683,9 +2722,9 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
       const obDataObj = itemData.ob_data || {};
       const obObj = itemData.ob || {};
 
-      const enc = obDataObj.encarrocadeira || obDataObj.encarrocadora || obObj.ob_encarrocadeira;
-      const carr = obDataObj.carroceria || obObj.ob_carroceria;
-      const fab = normalizeBrand(obDataObj.fabricante_chassi || obDataObj.fabricante || obObj.ob_fabricante_chassi || kpFallback?.marca);
+      const enc = obDataObj.encarrocadeira || obDataObj.encarrocadora || obObj.ob_encarrocadeira || obObj.encarrocadeira || obObj.encarrocadora;
+      const carr = obDataObj.carroceria || obObj.ob_carroceria || obObj.carroceria;
+      const fab = normalizeBrand(obDataObj.fabricante_chassi || obDataObj.fabricante || obObj.ob_fabricante_chassi || obObj.ob_fabricante || kpFallback?.marca);
       const mod = obDataObj.modelo_chassi || obDataObj.chassi || obObj.ob_chassi || kpFallback?.modelo;
 
       if (enc && enc !== "—") { checkClear(); obFieldCount++; obCards.appendChild(card("Encarroçadora", enc)); }
@@ -3809,8 +3848,6 @@ async function main() {
             status: 'pending'
           };
           
-          window.currentGroupResults.push(itemData);
-
           if (plate) {
             try {
               const apiResult = await consultarPlacaPHP(plate, vin || "");
@@ -3851,13 +3888,13 @@ async function main() {
                   }
                 }
 
-                // Busca OnibusBrasil
+                // Busca OnibusBrasil ANTES do push
                 let obData = null;
                 if (window.buscarDadosOnibusBrasil) {
                   try {
                     obData = await window.buscarDadosOnibusBrasil(plate, false);
                   } catch (e) {
-                    console.warn("Falha ao buscar dados no ÔnibusBrasil (grupo):", e);
+                    console.warn("Falha ao buscar OB (grupo):", e);
                   }
                 }
 
@@ -3868,14 +3905,20 @@ async function main() {
                     ob_carroceria:        obData.carroceria        || "—",
                     ob_encarrocadeira:    obData.encarrocadeira    || obData.encarrocadora || "—",
                     ob_fabricante_chassi: obData.fabricante_chassi || obData.fabricante || apiResult.marca || "—",
-                    ob_chassi:            obData.modelo_chassi     || obData.chassi     || apiResult.modelo || "—"
+                    ob_chassi:            obData.modelo_chassi     || obData.chassi     || apiResult.modelo || "—",
+                    // Sem prefixo para exportCSV 
+                    carroceria:        obData.carroceria     || "—", 
+                    encarrocadeira:    obData.encarrocadeira || obData.encarrocadora || "—", 
+                    encarrocadora:     obData.encarrocadeira || obData.encarrocadora || "—", 
                   };
                 } else {
                   itemData.ob = {
                     ob_carroceria:        "—",
                     ob_encarrocadeira:    "—",
                     ob_fabricante_chassi: apiResult.marca  || "—",
-                    ob_chassi:            apiResult.modelo || "—"
+                    ob_chassi:            apiResult.modelo || "—",
+                    carroceria:        "—", 
+                    encarrocadeira:    "—", 
                   };
                 }
               } else {
@@ -3891,6 +3934,9 @@ async function main() {
           } else {
             itemData.status = 'orphan';
           }
+
+          // Push SOMENTE após tudo estar populado 
+          window.currentGroupResults.push(itemData); 
         })());
 
         await Promise.all(apiCalls);
@@ -4067,7 +4113,7 @@ async function main() {
      const thead = document.createElement('thead'); 
      thead.innerHTML = ` 
        <tr style="background:var(--bg);border-bottom:2px solid var(--border);"> 
-         ${['Frota','VIN','Placa','Montadora','Modelo','Submodelo','Ano','Carroceria','Encarroçadora','Segmento','Cód. FIPE','Modelo FIPE'] 
+         ${['Frota','VIN','Placa','Montadora','Modelo','Submodelo','Ano','Carroceria','Encarroçadora','Segmento','Cód. FIPE','Modelo FIPE','WMI','Motor','Pos. Motor','Emissões','Combustível','Cor','Cidade/UF'] 
            .map(h => `<th style="padding:10px 12px;text-align:left;color:var(--muted);font-size:11px;font-weight:600;white-space:nowrap">${h}</th>`) 
            .join('')} 
        </tr> 
@@ -4094,6 +4140,13 @@ async function main() {
          row.segmento     || '—', 
          row.fipe_codigo  || '—', 
          row.fipe_modelo  || '—', 
+         row.wmi          || '—',
+         row.motor        || '—',
+         row.posicao_motor || '—',
+         row.emissoes     || '—',
+         row.combustivel  || '—',
+         row.cor          || '—',
+         row.municipio_uf || '—',
        ]; 
   
        tr.innerHTML = cols.map(val => ` 
@@ -4131,8 +4184,8 @@ async function main() {
    document.getElementById('btnExportFleetSearch').onclick = () => { 
      if (!allResultsCache.length) return; 
   
-     const cols   = ['Frota','VIN','Placa','Montadora','Modelo','Submodelo','Ano','Carroceria','Encarroçadora','Segmento','Cód. FIPE','Modelo FIPE']; 
-     const keys   = ['fleet_name','vin','placa','montadora','modelo','submodelo','ano','carroceria','encarrocadora','segmento','fipe_codigo','fipe_modelo']; 
+     const cols   = ['Frota','VIN','Placa','Montadora','Modelo','Submodelo','Ano','Carroceria','Encarroçadora','Segmento','Cód. FIPE','Modelo FIPE','WMI','Motor','Posição do Motor','Emissões','Combustível','Cor','Cidade/UF']; 
+     const keys   = ['fleet_name','vin','placa','montadora','modelo','submodelo','ano','carroceria','encarrocadora','segmento','fipe_codigo','fipe_modelo','wmi','motor','posicao_motor','emissoes','combustivel','cor','municipio_uf']; 
      let csv      = '\ufeff' + cols.join(';') + '\n'; 
   
      allResultsCache.forEach(row => { 

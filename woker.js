@@ -709,8 +709,9 @@ if (method === 'POST' && path === '/fleet/vehicles') {
     // Insere em batch usando múltiplos INSERTs
     const stmt = env.DB.prepare(
       `INSERT INTO fleet_vehicles
-         (user_id, history_id, fleet_name, vin, placa, montadora, modelo, submodelo, ano, carroceria, encarrocadora, segmento, fipe_codigo, fipe_modelo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (user_id, history_id, fleet_name, vin, placa, montadora, modelo, submodelo, ano, carroceria, encarrocadora, segmento, fipe_codigo, fipe_modelo, 
+          wmi, motor, posicao_motor, emissoes, combustivel, cor, municipio_uf)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
     const batch = vehicles.map(v =>
@@ -728,7 +729,14 @@ if (method === 'POST' && path === '/fleet/vehicles') {
         String(v.encarrocadora || '').slice(0, 80),
         String(v.segmento    || '').slice(0, 40),
         String(v.fipe_codigo || '').slice(0, 20),
-        String(v.fipe_modelo || '').slice(0, 120)
+        String(v.fipe_modelo || '').slice(0, 120),
+        String(v.wmi         || '').slice(0, 10),
+        String(v.motor       || '').slice(0, 80),
+        String(v.posicao_motor || '').slice(0, 40),
+        String(v.emissoes    || '').slice(0, 60),
+        String(v.combustivel || '').slice(0, 40),
+        String(v.cor         || '').slice(0, 40),
+        String(v.municipio_uf || '').slice(0, 100)
       )
     );
 
@@ -792,7 +800,8 @@ if (method === 'GET' && path === '/fleet/search') {
     // Busca paginada
     const dataSQL = `
       SELECT id, user_id, fleet_name, vin, placa, montadora, modelo, submodelo, ano,
-             carroceria, encarrocadora, segmento, fipe_codigo, fipe_modelo, created_at
+             carroceria, encarrocadora, segmento, fipe_codigo, fipe_modelo,
+             wmi, motor, posicao_motor, emissoes, combustivel, cor, municipio_uf, created_at
       FROM fleet_vehicles
       ${where}
       ORDER BY created_at DESC
