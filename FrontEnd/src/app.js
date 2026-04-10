@@ -515,6 +515,13 @@ function renderResult(result, text) {
 
   if (cards) {
     cards.innerHTML = "";
+    cards.style.display = "grid";
+    cards.style.gridTemplateColumns = "repeat(auto-fit, minmax(220px, 280px))";
+    cards.style.justifyContent = "center";
+    cards.style.gap = "15px";
+    cards.style.width = "100%";
+    cards.style.marginBottom = "16px";
+    
     const fragment = document.createDocumentFragment();
     result.tokens.forEach(t => {
       if (t.value != null && t.value !== "—") {
@@ -522,7 +529,6 @@ function renderResult(result, text) {
       }
     });
     cards.appendChild(fragment);
-    centerGrid(cards);
   }
 
   if (errors) {
@@ -631,6 +637,17 @@ function addGroupHistoryEntry(vins, plates, results = []) {
     if (tech.submodel) submodels.add(tech.submodel);
     if (tech.year) years.add(tech.year);
     if (tech.type) types.add(tech.type);
+
+    // Garante que dados da API também sejam incluídos nos metadados
+    const api = item.apiResult || {};
+    if (api.marca) brands.add(normalizeBrand(api.marca));
+    if (api.modelo) models.add(String(api.modelo).trim().toUpperCase());
+    if (api.versao) submodels.add(String(api.versao).trim().toUpperCase());
+    const anoFab = api.ano || api.ano_fabricacao || '';
+    const anoMod = api.ano_modelo || '';
+    const ano = (anoFab && anoMod && anoFab !== anoMod)
+      ? (anoFab + '/' + anoMod) : (anoFab || anoMod || '');
+    if (ano) years.add(ano);
   });
 
   const entry = { 
@@ -1325,8 +1342,8 @@ async function renderGroupHistory() {
       }
     }
     
-    // Process up to 10 VINs (increased from 5)
-    vinsToProcess = vinsToProcess.slice(0, 10);
+    // Process up to 50 VINs (increased from 10)
+    vinsToProcess = vinsToProcess.slice(0, 50);
     
     console.log("[META] Processando VINs:", vinsToProcess);
     
@@ -1625,11 +1642,22 @@ function criarModalProgressoLote(titulo = "Preparando relatório...") {
   overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(2px);z-index:20000;display:flex;align-items:center;justify-content:center;";
 
   const box = document.createElement("div");
-  box.style.cssText = "width:min(520px,92vw);background:var(--bg-elev);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:0 20px 50px rgba(0,0,0,0.5);";
+  box.style.cssText = "width:min(520px,92vw);background:var(--bg-elev);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:0 20px 50px rgba(0,0,0,0.5);position:relative;";
+
+  const header = document.createElement("div");
+  header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;";
 
   const title = document.createElement("div");
-  title.style.cssText = "font-weight:700;color:var(--text);margin-bottom:10px;";
+  title.style.cssText = "font-weight:700;color:var(--text);";
   title.textContent = titulo;
+
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "×";
+  closeBtn.style.cssText = "background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--muted);padding:4px 8px;cursor:pointer;font-size:18px;line-height:1;width:28px;height:28px;display:flex;align-items:center;justify-content:center;";
+  closeBtn.onclick = () => overlay.remove();
+
+  header.appendChild(title);
+  header.appendChild(closeBtn);
 
   const status = document.createElement("div");
   status.style.cssText = "font-size:13px;color:var(--muted);margin-bottom:10px;";
@@ -1642,7 +1670,7 @@ function criarModalProgressoLote(titulo = "Preparando relatório...") {
   bar.style.cssText = "width:0%;height:100%;background:linear-gradient(90deg,var(--accent-2),var(--accent));transition:width .2s ease;";
   barWrap.appendChild(bar);
 
-  box.appendChild(title);
+  box.appendChild(header);
   box.appendChild(status);
   box.appendChild(barWrap);
   overlay.appendChild(box);
@@ -1744,9 +1772,11 @@ function renderGroupHistoryItems(list, sessUser) {
     
     row.onclick = () => {
       console.log("[History] Clique no item do histórico:", item.fleetName || item.ts);
+      
+      // Verifica se é apenas auditoria
       if (item.auditOnly) {
         if (typeof showToast === "function") {
-          showToast("Sem lista de chassis no servidor — só o registro da pesquisa.", "error");
+          showToast("Sem lista de chassis no servidor - só o registro da pesquisa.", "error");
         }
         return;
       }
@@ -1763,100 +1793,12 @@ function renderGroupHistoryItems(list, sessUser) {
         }
       }
 
-      const gInput = el("groupInput");
-      const gPlateInput = el("groupPlateInput");
-      const bGroup = el("btnGroupDecode");
-      const fleetEl = el("fleetName");
-      const combinedEl = el("combinedMode");
-
-      if (!gInput || !gPlateInput || !bGroup || !fleetEl) {
-        console.error("[History] Elementos do grupo não encontrados no DOM!", { gInput, gPlateInput, bGroup, fleetEl });
-        return;
+      // 2. Chama a decodificação automática
+      if (typeof window.autoDecodificarFrotaDoHistorico === "function") {
+        window.autoDecodificarFrotaDoHistorico(item);
+      } else {
+        console.error("[History] Função autoDecodificarFrotaDoHistorico não encontrada!");
       }
-
-      const fleetNameValue = item.fleetName || ("Lote_" + new Date(item.ts).getTime());
-
-      // 2. Popula os campos
-      const vListItems = (item.vins || "").split("\n").filter(Boolean);
-      const pListItems = (item.plates || "").split("\n").filter(Boolean);
-      const isCombined = vListItems.length > 0 && pListItems.length > 0 && vListItems.length === pListItems.length;
-
-      console.log("[History] Preparando lote:", { fleetName: fleetNameValue, vins: vListItems.length, plates: pListItems.length, isCombined });
-
-      if (combinedEl) {
-        combinedEl.checked = isCombined;
-      }
-
-      fleetEl.value = fleetNameValue;
-      gInput.value = item.vins || "";
-      gPlateInput.value = item.plates || "";
-      
-      // 3. Dispara eventos de input para normalização e validação
-      [fleetEl, gInput, gPlateInput].forEach(element => {
-        if (element) element.dispatchEvent(new Event("input"));
-      });
-      if (combinedEl) {
-        combinedEl.dispatchEvent(new Event("change"));
-      }
-
-      // 4. Força a validação e o clique
-      setTimeout(() => {
-        if (typeof window.validateGroupForm === "function") {
-          console.log("[History] Chamando validateGroupForm global...");
-          window.validateGroupForm();
-        } else {
-          console.warn("[History] window.validateGroupForm não está definida!");
-        }
-        
-        // Check if this fleet has already been decoded
-        const currentFleetName = fleetNameValue;
-        const isAlreadyDecoded = currentFleetName && window.decodedFleets && window.decodedFleets.has(currentFleetName);
-        
-        // Garante que o botão esteja habilitado para o clique programático
-        console.log("[History] Frota já decodificada?", isAlreadyDecoded);
-        if (!isAlreadyDecoded) {
-          console.log("[History] Habilitando bGroup e disparando clique...");
-          bGroup.disabled = false; 
-          
-          // Limpa resultados anteriores
-          const gResults = el("groupResults");
-          if (gResults) gResults.innerHTML = "";
-          
-          bGroup.click();
-        } else {
-          console.log("[History] Frota já foi decodificada, bloqueando campos...");
-          
-          // Bloqueia o campo de nome da frota
-          if (fleetEl) {
-            fleetEl.disabled = true;
-            fleetEl.style.backgroundColor = "var(--bg)";
-            fleetEl.style.cursor = "not-allowed";
-            fleetEl.title = "Esta frota já foi decodificada anteriormente";
-          }
-          
-          // Bloqueia os campos de entrada de VIN e placas
-          if (gInput) {
-            gInput.disabled = true;
-            gInput.style.backgroundColor = "var(--bg)";
-            gInput.style.cursor = "not-allowed";
-          }
-          if (gPlateInput) {
-            gPlateInput.disabled = true;
-            gPlateInput.style.backgroundColor = "var(--bg)";
-            gPlateInput.style.cursor = "not-allowed";
-          }
-          
-          // Garante que o botão esteja desabilitado
-          bGroup.disabled = true;
-          bGroup.textContent = "Frota já decodificada";
-          bGroup.title = "Esta frota já foi decodificada anteriormente";
-          
-          // Mostra mensagem informativa
-          if (typeof showToast === "function") {
-            showToast("Esta frota já foi decodificada anteriormente. Os campos foram bloqueados para evitar duplicação.", "info");
-          }
-        }
-      }, 600); 
     };
 
     const actions = document.createElement("div");
@@ -1943,6 +1885,73 @@ function renderGroupHistoryItems(list, sessUser) {
 }
 
   window.renderGroupHistory = renderGroupHistory;
+
+/**
+ * Decodifica automaticamente uma frota clicada no histórico
+ * @param {Object} item - Objeto do histórico da frota
+ * @param {string} item.fleetName - Nome da frota
+ * @param {string} item.vins - VINs separados por quebra de linha
+ * @param {string} item.plates - Placas separadas por quebra de linha
+ * @param {boolean} item.ts - Timestamp
+ */
+window.autoDecodificarFrotaDoHistorico = async function(item) {
+  if (!item) return;
+
+  console.log("[AutoDecode] Iniciando decodificação automática da frota:", item.fleetName);
+  
+  // Aguarda um ciclo de renderização para garantir que os elementos estão no DOM
+  await new Promise(resolve => setTimeout(resolve, 100));
+
+  const gInput = el("groupInput");
+  const gPlateInput = el("groupPlateInput");
+  const bGroup = el("btnGroupDecode");
+  const fleetEl = el("fleetName");
+  const combinedEl = el("combinedMode");
+
+  if (!gInput || !gPlateInput || !bGroup || !fleetEl) {
+    console.error("[AutoDecode] Elementos do DOM não encontrados!");
+    return;
+  }
+
+  // Prepara os dados
+  const vListItems = (item.vins || "").split("\n").filter(Boolean);
+  const pListItems = (item.plates || "").split("\n").filter(Boolean);
+  const isCombined = vListItems.length > 0 && pListItems.length > 0 && vListItems.length === pListItems.length;
+  const fleetNameValue = item.fleetName || ("Lote_" + new Date(item.ts).getTime());
+
+  console.log("[AutoDecode] Preparando lote:", { fleetName: fleetNameValue, vins: vListItems.length, plates: pListItems.length, isCombined });
+
+  // Popula os campos
+  fleetEl.value = fleetNameValue;
+  gInput.value = item.vins || "";
+  gPlateInput.value = item.plates || "";
+
+  if (combinedEl) {
+    combinedEl.checked = isCombined;
+  }
+
+  // Dispara eventos de input
+  [fleetEl, gInput, gPlateInput].forEach(element => {
+    if (element) element.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  if (combinedEl) {
+    combinedEl.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  // Aguarda a validação e dispara o clique
+  await new Promise(resolve => setTimeout(resolve, 300));
+
+  // Limpa resultados anteriores
+  const gResults = el("groupResults");
+  if (gResults) gResults.innerHTML = "";
+
+  // Clica no botão de decodificação
+  bGroup.disabled = false;
+  bGroup.click();
+
+  console.log("[AutoDecode] Decodificação disparada para:", fleetNameValue);
+};
 
 function exportCSV(data, name, includeFipe = true) {
   const uniqueData = [];
@@ -3287,6 +3296,13 @@ async function main() {
     if (el("closeReportModal")) {
       el("closeReportModal").onclick = () => { if (reportModal) reportModal.style.display = "none"; };
     }
+
+    // Add event listener for detail modal close button
+    const detailModal = el("detailModal");
+    if (el("closeModal")) {
+      el("closeModal").onclick = () => { if (detailModal) detailModal.style.display = "none"; };
+    }
+
     if (el("btnExportFull")) {
       el("btnExportFull").onclick = () => {
         if (exportDataBuffer) exportCSV(exportDataBuffer, exportNameBuffer, true);
@@ -4063,6 +4079,144 @@ async function main() {
     if (vinInputSingle) vinInputSingle.addEventListener('keydown', e => e.key === "Enter" && runVIN());
     if (plateInputSingle) plateInputSingle.addEventListener('keydown', e => e.key === "Enter" && runPlate());
 
+    // Add event listener for group decode button
+    if (gBtn) {
+      gBtn.addEventListener('click', async () => {
+        console.log("[Group] Botão de decodificar grupo clicado!");
+        
+        // Get form values
+        const fleetName = fleetInput?.value?.trim() || "";
+        const vins = gInput?.value?.trim() || "";
+        const plates = gPlateInput?.value?.trim() || "";
+        const isCombined = combined?.checked || false;
+        
+        console.log("[Group] Dados do formulário:", { fleetName, vins, plates, isCombined });
+        
+        if (!fleetName) {
+          showToast("Por favor, informe o nome da frota.", "error");
+          return;
+        }
+        
+        if (!vins && !plates) {
+          showToast("Por favor, informe pelo menos um VIN ou placa.", "error");
+          return;
+        }
+        
+        // Disable button during processing
+        gBtn.disabled = true;
+        gBtn.textContent = "Processando...";
+        
+        // Clear previous results
+        if (gResults) gResults.innerHTML = "";
+        
+        // Show skeleton loading
+        showSkeletons(gResults, Math.min(8, Math.max(vins.split('\n').filter(Boolean).length, plates.split('\n').filter(Boolean).length)));
+        
+        try {
+          // Process VINs and plates
+          const vLines = vins.split("\n").map(l => l.trim()).filter(Boolean);
+          const pLines = plates.split("\n").map(l => l.trim()).filter(Boolean);
+          const total = Math.max(vLines.length, pLines.length);
+          const results = [];
+
+          console.log("[Group] Processando", total, "itens");
+
+          for (let i = 0; i < total; i++) {
+            const vin = (vLines[i] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+            const plate = (pLines[i] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+            
+            let decoded = { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
+            if (vin) {
+              try {
+                const dec = window.currentDecoder;
+                decoded = dec && typeof dec.decode === "function" ? dec.decode(vin) : decoded;
+              } catch (_) {
+                decoded = { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
+              }
+            }
+
+            const itemData = {
+              tipo: vin && plate ? "COMBINADO" : (vin ? "VIN" : "PLATE"),
+              vin,
+              placa: plate,
+              fabricante: decoded.manufacturerName || "Desconhecido",
+              result: JSON.parse(JSON.stringify(decoded)),
+              ob: {},
+              ob_data: {},
+              status: "pending"
+            };
+
+            // Process plate if available
+            if (plate) {
+              try {
+                const apiResult = (typeof consultarPlacaPHP === "function")
+                  ? await consultarPlacaPHP(plate, vin || "")
+                  : { status: "erro", mensagem: "Consulta de placa indisponível." };
+                  
+                if (apiResult.status === "ok") {
+                  itemData.status = "ok";
+                  itemData.apiResult = apiResult;
+                  itemData.fabricante = apiResult.marca || apiResult.fabricante || apiResult.brand || apiResult.texto_marca || itemData.fabricante;
+
+                  if (!vin && (apiResult.chassi_completo || apiResult.chassi)) {
+                    itemData.vin = apiResult.chassi_completo || apiResult.chassi;
+                  }
+
+                  // Busca dados Ônibus Brasil
+                  if (window.buscarDadosOnibusBrasil) {
+                    try {
+                      const obData = await window.buscarDadosOnibusBrasil(plate, false);
+                      if (obData && !obData.erro) {
+                        itemData.ob_data = obData;
+                        itemData.ob = {
+                          ob_carroceria: obData.carroceria || "â",
+                          ob_encarrocadeira: obData.encarrocadeira || obData.encarrocadora || "â",
+                          ob_fabricante_chassi: obData.fabricante_chassi || obData.fabricante || apiResult.marca || "â",
+                          ob_chassi: obData.modelo_chassi || obData.chassi || apiResult.modelo || "â"
+                        };
+                      }
+                    } catch (_) {}
+                  }
+                } else {
+                  itemData.status = "error";
+                  itemData.error_detail = apiResult.mensagem;
+                  itemData.apiResult = apiResult;
+                }
+              } catch (e) {
+                itemData.status = "error";
+                itemData.error_detail = e.message || "Falha ao consultar API.";
+              }
+            } else if (vin) {
+              itemData.status = "ok";
+            } else {
+              itemData.status = "orphan";
+            }
+
+            results.push(itemData);
+          }
+
+          // Store results and render
+          window.currentGroupResults = results;
+          renderGroupResults();
+          
+          // Add to history with results
+          addGroupHistoryEntry(vins, plates, results);
+          
+          console.log("[Group] Decodificação concluída:", results.length, "itens");
+          
+        } catch (error) {
+          console.error("[Group] Erro na decodificação:", error);
+          if (gResults) {
+            gResults.innerHTML = '<div style="color: var(--error); text-align: center; padding: 20px;">Erro ao processar lote: ' + error.message + '</div>';
+          }
+        } finally {
+          // Re-enable button
+          gBtn.disabled = false;
+          gBtn.textContent = "Decodificar Grupo";
+        }
+      });
+    }
+
     el("btnClearSingleInputs")?.addEventListener("click", () => {
       clearUI(false);
     });
@@ -4121,6 +4275,51 @@ async function main() {
 
     if (btnSingle) btnSingle.disabled = true;
     if (btnPlateSingle) btnPlateSingle.disabled = true;
+
+    // Add character limits and auto line break for group fields
+    // gInput and gPlateInput are already declared above
+    
+    if (gInput) {
+      gInput.addEventListener('input', (e) => {
+        const lines = e.target.value.split('\n');
+        const processedLines = lines.map(line => {
+          // Remove caracteres inválidos e limita a 17 caracteres
+          return line.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17);
+        }).filter(line => line.length > 0);
+        
+        e.target.value = processedLines.join('\n');
+        
+        // Auto line break: se a última linha tiver 17 caracteres, adiciona nova linha
+        const currentLines = e.target.value.split('\n');
+        const lastLine = currentLines[currentLines.length - 1];
+        if (lastLine && lastLine.length === 17 && e.target.selectionStart === e.target.value.length) {
+          e.target.value += '\n';
+          // Mantém o cursor no início da nova linha
+          e.target.selectionStart = e.target.selectionEnd = e.target.value.length;
+        }
+      });
+    }
+    
+    if (gPlateInput) {
+      gPlateInput.addEventListener('input', (e) => {
+        const lines = e.target.value.split('\n');
+        const processedLines = lines.map(line => {
+          // Remove caracteres inválidos e limita a 7 caracteres
+          return line.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7);
+        }).filter(line => line.length > 0);
+        
+        e.target.value = processedLines.join('\n');
+        
+        // Auto line break: se a última linha tiver 7 caracteres, adiciona nova linha
+        const currentLines = e.target.value.split('\n');
+        const lastLine = currentLines[currentLines.length - 1];
+        if (lastLine && lastLine.length === 7 && e.target.selectionStart === e.target.value.length) {
+          e.target.value += '\n';
+          // Mantém o cursor no início da nova linha
+          e.target.selectionStart = e.target.selectionEnd = e.target.value.length;
+        }
+      });
+    }
 
     const btnExportCSVSingle = el("btnExportCSVSingle");
     if (btnExportCSVSingle) {
@@ -4241,11 +4440,18 @@ main();
      </div> 
    `; 
   
+   // Adiciona o modal ao DOM antes de atribuir event listeners
    document.body.appendChild(modal); 
   
    // Fecha ao clicar fora ou no X 
    modal.addEventListener('click', e => { if (e.target === modal) fecharModal(); }); 
-   document.getElementById('closeFleetSearchModal').onclick = fecharModal; 
+   
+   // Atribui event listener após o elemento estar no DOM
+   const closeBtn = document.getElementById('closeFleetSearchModal');
+   if (closeBtn) {
+     closeBtn.onclick = fecharModal;
+   } 
+  
    function fecharModal() { modal.style.display = 'none'; } 
   
    // ---- Estado da pesquisa ---- 
@@ -4404,6 +4610,74 @@ main();
   async function executarPesquisa(filtros, offset = 0) { 
     const container = document.getElementById('fleetSearchResults'); 
     const countEl   = document.getElementById('fleetSearchCount');
+    
+    // Verifique a permissão do usuário
+    const sessUser = JSON.parse(localStorage.getItem("dvb_user") || "null");
+    const isAdmin = sessUser && sessUser.admin;
+
+    // Se o usuário não for admin, restrinja os filtros disponíveis
+    if (!isAdmin) {
+      console.log("[executarPesquisa] Usuário não-admin, aplicando restrições de filtro");
+      
+      // Para usuários não-admin, limitar aos dados do histórico pessoal
+      const userHistoryKey = "decodevin.groupHistory";
+      const userHistory = JSON.parse(localStorage.getItem(userHistoryKey) || "[]");
+      
+      // Extrair frotas permitidas do histórico do usuário
+      const allowedFleets = new Set();
+      const allowedBrands = new Set();
+      const allowedModels = new Set();
+      const allowedSubModels = new Set();
+      const allowedYears = new Set();
+      
+      userHistory.forEach(item => {
+        if (item.fleetName) allowedFleets.add(item.fleetName);
+        if (item.meta) {
+          (item.meta.brands || []).forEach(b => allowedBrands.add(b));
+          (item.meta.models || []).forEach(m => allowedModels.add(m));
+          (item.meta.submodels || []).forEach(s => allowedSubModels.add(s));
+          (item.meta.years || []).forEach(y => allowedYears.add(y));
+        }
+      });
+      
+      // Aplicar restrições apenas se o usuário tiver filtros específicos
+      const restrictedFiltros = { ...filtros };
+      
+      // Se o usuário especificou uma frota, verificar se tem acesso
+      if (filtros.fleet_name && !allowedFleets.has(filtros.fleet_name)) {
+        console.log("[executarPesquisa] Frota não permitida para usuário não-admin:", filtros.fleet_name);
+        restrictedFiltros.fleet_name = '';
+      }
+      
+      // Se o usuário especificou uma marca, verificar se tem acesso
+      if (filtros.montadora && !allowedBrands.has(filtros.montadora)) {
+        console.log("[executarPesquisa] Marca não permitida para usuário não-admin:", filtros.montadora);
+        restrictedFiltros.montadora = '';
+      }
+      
+      // Se o usuário especificou um modelo, verificar se tem acesso
+      if (filtros.modelo && !allowedModels.has(filtros.modelo)) {
+        console.log("[executarPesquisa] Modelo não permitido para usuário não-admin:", filtros.modelo);
+        restrictedFiltros.modelo = '';
+      }
+      
+      // Se o usuário especificou um submodelo, verificar se tem acesso
+      if (filtros.submodelo && !allowedSubModels.has(filtros.submodelo)) {
+        console.log("[executarPesquisa] Submodelo não permitido para usuário não-admin:", filtros.submodelo);
+        restrictedFiltros.submodelo = '';
+      }
+      
+      // Se o usuário especificou um ano, verificar se tem acesso
+      if (filtros.ano && !allowedYears.has(filtros.ano)) {
+        console.log("[executarPesquisa] Ano não permitido para usuário não-admin:", filtros.ano);
+        restrictedFiltros.ano = '';
+      }
+      
+      // Usar filtros restritos
+      filtros = restrictedFiltros;
+    } else {
+      console.log("[executarPesquisa] Usuário admin, permitindo todos os filtros");
+    }
     
     if (countEl) countEl.innerHTML = '⏳ Buscando no servidor...';
     modal.style.display = 'flex'; 
