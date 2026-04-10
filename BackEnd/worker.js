@@ -784,7 +784,29 @@ if (method === 'GET' && path === '/fleet/search') {
     let whereClauses = [];
     let bindings     = [];
 
-    // Se houver busca global (q), ignoramos outros filtros de atributo
+    // Admin vê tudo, usuário comum vê só os seus
+    if (!isAdmin) {
+      whereClauses.push('user_id = ?');
+      bindings.push(String(userId));
+    }
+
+    if (montadora)  { whereClauses.push('montadora = ?');          bindings.push(montadora.toUpperCase()); }
+    if (modelo)     { whereClauses.push('modelo LIKE ?');           bindings.push('%' + modelo.toUpperCase() + '%'); }
+    if (submodelo)  { whereClauses.push('submodelo LIKE ?');        bindings.push('%' + submodelo.toUpperCase() + '%'); }
+    if (ano)        { whereClauses.push('ano LIKE ?');              bindings.push('%' + ano + '%'); }
+    if (segmento)   { whereClauses.push('segmento = ?');            bindings.push(segmento); }
+    if (placa)      { whereClauses.push('placa LIKE ?');            bindings.push('%' + placa.toUpperCase() + '%'); }
+    if (fleet_name) { whereClauses.push('fleet_name LIKE ?');       bindings.push('%' + fleet_name + '%'); }
+
+    if (history_ids) {
+      const ids = history_ids.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
+      if (ids.length > 0) {
+        whereClauses.push(`history_id IN (${ids.map(() => '?').join(',')})`);
+        bindings.push(...ids.map(id => Number(id)));
+      }
+    }
+
+    // Busca global (q) - combinada com os filtros acima
     if (q) {
       const qUp = '%' + q.toUpperCase().trim() + '%';
       whereClauses.push(`(
@@ -792,28 +814,6 @@ if (method === 'GET' && path === '/fleet/search') {
         fleet_name LIKE ? OR encarrocadora LIKE ? OR fipe_modelo LIKE ?
       )`);
       bindings.push(qUp, qUp, qUp, qUp, qUp, qUp, qUp);
-    } else {
-      // Admin vê tudo, usuário comum vê só os seus
-      if (!isAdmin) {
-        whereClauses.push('user_id = ?');
-        bindings.push(String(userId));
-      }
-
-      if (montadora)  { whereClauses.push('montadora = ?');          bindings.push(montadora.toUpperCase()); }
-      if (modelo)     { whereClauses.push('modelo LIKE ?');           bindings.push('%' + modelo.toUpperCase() + '%'); }
-      if (submodelo)  { whereClauses.push('submodelo LIKE ?');        bindings.push('%' + submodelo.toUpperCase() + '%'); }
-      if (ano)        { whereClauses.push('ano LIKE ?');              bindings.push('%' + ano + '%'); }
-      if (segmento)   { whereClauses.push('segmento = ?');            bindings.push(segmento); }
-      if (placa)      { whereClauses.push('placa LIKE ?');            bindings.push('%' + placa.toUpperCase() + '%'); }
-      if (fleet_name) { whereClauses.push('fleet_name LIKE ?');       bindings.push('%' + fleet_name + '%'); }
-
-      if (history_ids) {
-        const ids = history_ids.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
-        if (ids.length > 0) {
-          whereClauses.push(`history_id IN (${ids.map(() => '?').join(',')})`);
-          bindings.push(...ids.map(id => Number(id)));
-        }
-      }
     }
 
     const where = whereClauses.length > 0 ? ('WHERE ' + whereClauses.join(' AND ')) : '';

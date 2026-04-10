@@ -1180,7 +1180,33 @@ async function renderGroupHistory() {
      window.abrirPesquisaFrota(filtros); 
    } 
  }; 
+
+ const btnLimparFiltros = document.createElement('button');
+ btnLimparFiltros.id        = 'btnLimparFiltrosHistorico';
+ btnLimparFiltros.className = 'btn-page';
+ btnLimparFiltros.style.cssText = [
+   'display:flex',
+   'align-items:center',
+   'gap:6px',
+   'padding:9px 18px',
+   'background:var(--card)',
+   'color:var(--text)',
+   'font-weight:600',
+   'border:1px solid var(--border)',
+   'border-radius:10px',
+   'cursor:pointer',
+   'font-size:13px',
+   'margin-right:10px',
+   'transition:all .2s',
+ ].join(';');
+ btnLimparFiltros.innerHTML = '🧹 Limpar Filtros';
+
+ btnLimparFiltros.onclick = () => {
+   [hFilterFleet, hFilterBrand, hFilterModel, hFilterSubModel, hFilterYear].forEach(s => s.value = "");
+   renderGroupHistory(); // Recarrega a lista sem filtros
+ };
   
+ btnRowFrota.appendChild(btnLimparFiltros);
  btnRowFrota.appendChild(btnPesquisarFrota); 
  searchContainer.appendChild(btnRowFrota);   // <- já existe a variável searchContainer em renderGroupHistory 
   
@@ -1537,6 +1563,7 @@ function renderGroupHistoryItems(list, sessUser) {
     if (previewText.length > 0) v.appendChild(preview);
     
     row.onclick = () => {
+      console.log("[History] Clique no item do histórico:", item.fleetName || item.ts);
       if (item.auditOnly) {
         if (typeof showToast === "function") {
           showToast("Sem lista de chassis no servidor — só o registro da pesquisa.", "error");
@@ -1544,62 +1571,73 @@ function renderGroupHistoryItems(list, sessUser) {
         return;
       }
 
-      showScreen(groupDecoder);
+      // 1. Alterna para a tela de decodificação de grupo
+      if (typeof window.showScreen === "function" && window.groupDecoder) {
+        window.showScreen(window.groupDecoder);
+      } else {
+        const gd = el("groupDecoder");
+        if (gd && typeof window.showScreen === "function") {
+          window.showScreen(gd);
+        } else {
+          console.warn("[History] showScreen ou groupDecoder não encontrados!");
+        }
+      }
 
       const gInput = el("groupInput");
       const gPlateInput = el("groupPlateInput");
       const bGroup = el("btnGroupDecode");
       const fleetEl = el("fleetName");
-      const optGroup = el("optGroup");
       const combinedEl = el("combinedMode");
+
+      if (!gInput || !gPlateInput || !bGroup || !fleetEl) {
+        console.error("[History] Elementos do grupo não encontrados no DOM!", { gInput, gPlateInput, bGroup, fleetEl });
+        return;
+      }
 
       const fleetNameValue = item.fleetName || ("Lote_" + new Date(item.ts).getTime());
 
-      // Sempre muda para a aba de grupo ao clicar no histórico
-      if (optGroup) optGroup.click();
-
+      // 2. Popula os campos
       const vListItems = (item.vins || "").split("\n").filter(Boolean);
       const pListItems = (item.plates || "").split("\n").filter(Boolean);
       const isCombined = vListItems.length > 0 && pListItems.length > 0 && vListItems.length === pListItems.length;
+
+      console.log("[History] Preparando lote:", { fleetName: fleetNameValue, vins: vListItems.length, plates: pListItems.length, isCombined });
 
       if (combinedEl) {
         combinedEl.checked = isCombined;
       }
 
-      const currentFingerprint = JSON.stringify({
-        fleetName: fleetNameValue,
-        vins: item.vins || "",
-        plates: item.plates || ""
-      });
-
-      // Se já for o lote que está na tela, não precisa reprocessar
-      const gResults = el("groupResults");
-      const alreadyRendered = gResults && gResults.children.length > 0;
-      if (alreadyRendered && window.currentGroupResults && window.currentGroupResults.length > 0 && window.lastGroupLotFingerprint === currentFingerprint) {
-        return;
-      }
-
-      if (fleetEl) {
-        fleetEl.value = fleetNameValue;
-        fleetEl.dispatchEvent(new Event("input"));
-      }
-      if (gInput) {
-        gInput.value = item.vins || "";
-        gInput.dispatchEvent(new Event("input"));
-      }
-      if (gPlateInput) {
-        gPlateInput.value = item.plates || "";
-        gPlateInput.dispatchEvent(new Event("input"));
-      }
+      fleetEl.value = fleetNameValue;
+      gInput.value = item.vins || "";
+      gPlateInput.value = item.plates || "";
       
-      if (bGroup) { 
-        // Delay para garantir que o sistema processe as entradas
-        setTimeout(() => {
-          if (typeof window.validateGroupForm === "function") window.validateGroupForm();
-          bGroup.disabled = false; 
-          bGroup.click();
-        }, 200);
+      // 3. Dispara eventos de input para normalização e validação
+      [fleetEl, gInput, gPlateInput].forEach(element => {
+        if (element) element.dispatchEvent(new Event("input"));
+      });
+      if (combinedEl) {
+        combinedEl.dispatchEvent(new Event("change"));
       }
+
+      // 4. Força a validação e o clique
+      setTimeout(() => {
+        if (typeof window.validateGroupForm === "function") {
+          console.log("[History] Chamando validateGroupForm global...");
+          window.validateGroupForm();
+        } else {
+          console.warn("[History] window.validateGroupForm não está definida!");
+        }
+        
+        // Garante que o botão esteja habilitado para o clique programático
+        console.log("[History] Habilitando bGroup e disparando clique...");
+        bGroup.disabled = false; 
+        
+        // Limpa resultados anteriores
+        const gResults = el("groupResults");
+        if (gResults) gResults.innerHTML = "";
+        
+        bGroup.click();
+      }, 600); 
     };
 
     const actions = document.createElement("div");
@@ -2961,7 +2999,9 @@ async function main() {
     const selectionScreen = el("selectionScreen");
     const singleDecoder = el("singleDecoder");
     const groupDecoder = el("groupDecoder");
+    window.groupDecoder = groupDecoder;
     const historyScreen = el("historyScreen");
+    window.historyScreen = historyScreen;
     const placasCacheScreen = el("placasCacheScreen");
     const vinInputSingle = el("vinInputSingle");
     const plateInputSingle = el("plateInputSingle");
@@ -2989,6 +3029,7 @@ async function main() {
         screen.classList.add("screen-fade-in");
       }
     };
+    window.showScreen = showScreen;
 
     el("optSingle").onclick = () => {
       showScreen(singleDecoder);
@@ -3015,7 +3056,9 @@ async function main() {
       showScreen(selectionScreen);
     };
     el("btnGoToGroupHistory").onclick = () => {
-      showScreen(historyScreen);
+      if (typeof window.showScreen === "function" && window.historyScreen) {
+        window.showScreen(window.historyScreen);
+      }
       renderGroupHistory();
     };
 
@@ -3036,9 +3079,10 @@ async function main() {
       };
     }
 
-    // Modal de Histórico (Somente Grupos/Lotes)
     window.abrirHistorico = () => {
-      showScreen(historyScreen);
+      if (typeof window.showScreen === "function" && window.historyScreen) {
+        window.showScreen(window.historyScreen);
+      }
       renderGroupHistory();
     };
 
@@ -4234,6 +4278,7 @@ async function main() {
            <div style="font-size:12px;color:var(--muted);margin-top:2px" id="fleetSearchCount">Nenhum filtro aplicado</div> 
          </div> 
          <div style="display:flex; align-items:center; gap:12px;">
+           <button id="btnLimparQuickSearch" title="Limpar filtros e busca" style="background:var(--bg); border:1px solid var(--border); color:var(--muted); padding:8px 12px; border-radius:8px; cursor:pointer; font-size:13px; display:none;">🧹 Limpar</button>
            <input id="quickFleetSearch" type="text" placeholder="Pesquisa rápida..." style="background:var(--bg); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:8px; font-size:13px; width:200px; outline:none;">
            <button id="closeFleetSearchModal" style=" 
              background:transparent; 
@@ -4395,6 +4440,42 @@ async function main() {
          <td style="padding:10px 12px;color:var(--text);white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${val}">${val}</td> 
        `).join(''); 
   
+       tr.onclick = () => {
+         // Fecha o modal de pesquisa
+         const modal = document.getElementById('fleetSearchModal');
+         if (modal) modal.style.display = 'none';
+
+         // Alterna para a tela de decodificação individual
+         const singleDecoder = el("singleDecoder");
+         if (typeof window.showScreen === "function" && singleDecoder) {
+           window.showScreen(singleDecoder);
+         }
+
+         // Popula os campos de placa e VIN
+         const pInput = el("plateInputSingle");
+         const vInput = el("vinInputSingle");
+         const bDecode = el("btnDecodeSingle");
+         const bPlate = el("btnPlateSingle");
+
+         if (pInput) {
+           pInput.value = (row.placa || "").trim();
+           pInput.dispatchEvent(new Event("input"));
+         }
+         if (vInput) {
+           vInput.value = (row.vin || "").trim();
+           vInput.dispatchEvent(new Event("input"));
+         }
+
+         // Se tiver VIN, prioriza decodificação direta
+         if (row.vin && bDecode) {
+           console.log("[FleetSearch] Decodificando via VIN:", row.vin);
+           setTimeout(() => bDecode.click(), 300);
+         } else if (row.placa && bPlate) {
+           console.log("[FleetSearch] Decodificando via Placa:", row.placa);
+           setTimeout(() => bPlate.click(), 300);
+         }
+       };
+
        tbody.appendChild(tr); 
      }); 
   
@@ -4447,22 +4528,28 @@ async function main() {
    document.getElementById('fleetSearchNext').onclick = () => 
      executarPesquisa(lastFiltros, currentOffset + PAGE_SIZE); 
 
-   // Pesquisa rápida global (todas as páginas do banco)
-   let fleetSearchTimeout;
-   document.getElementById('quickFleetSearch').oninput = (e) => {
-     clearTimeout(fleetSearchTimeout);
-     const term = e.target.value.trim();
-     
-     fleetSearchTimeout = setTimeout(() => {
-       if (term !== '') { 
-         // Busca global — ignora filtros de lote, usa só o texto 
-         executarPesquisa({ q: term }, 0); 
-       } else { 
-         // Sem texto — volta para os filtros originais de lote/histórico 
-         executarPesquisa(filtrosOriginais, 0); 
-       } 
-     }, 450);
-   };
+   const btnLimparQS = document.getElementById('btnLimparQuickSearch');
+   const inputQS     = document.getElementById('quickFleetSearch');
+
+   if (btnLimparQS && inputQS) {
+     btnLimparQS.onclick = () => {
+       inputQS.value = "";
+       btnLimparQS.style.display = 'none';
+       executarPesquisa(filtrosOriginais, 0); // Volta para o estado original (lote filtrado)
+     };
+
+     inputQS.oninput = (e) => {
+       const term = e.target.value.trim();
+       btnLimparQS.style.display = term ? 'block' : 'none';
+
+       clearTimeout(fleetSearchTimeout);
+       fleetSearchTimeout = setTimeout(() => {
+         // Mantém os filtros originais (lote/histórico) e adiciona o termo de busca global 'q'
+         const novosFiltros = { ...filtrosOriginais, q: term, offset: 0 };
+         executarPesquisa(novosFiltros, 0);
+       }, 450);
+     };
+   }
   
    // Exportar Relatórios dos resultados (com opções de FIPE/Sem FIPE)
    document.getElementById('btnExportFleetSearch').onclick = () => { 
