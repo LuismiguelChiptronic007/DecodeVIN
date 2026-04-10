@@ -999,23 +999,44 @@ function renderSingleHistoryItems(list, sessUser) {
     pageInfo.style.color = "var(--muted)";
 
     const btnNext = document.createElement("button");
-    btnNext.textContent = "Próximo →";
-    btnNext.disabled = currentHistoryPage === totalPages;
-    btnNext.className = "btn-page";
-    btnNext.onclick = () => { currentHistoryPage++; renderSingleHistory(); };
-
     pagination.appendChild(btnPrev);
     pagination.appendChild(pageInfo);
     pagination.appendChild(btnNext);
     h.appendChild(pagination);
-  window.renderSingleHistory = renderSingleHistory;
+  }
+}
 
 async function renderGroupHistory() {
   console.log("=== INICIANDO RENDER GROUP HISTORY ===");
+  console.log("[renderGroupHistory] Chamada da função - Início");
+  
+  // Wait for decoder to be ready to prevent race condition
+  if (!window.currentDecoder) {
+    console.log("[renderGroupHistory] Decoder não está pronto, aguardando...");
+    const waitForDecoder = setInterval(() => {
+      if (window.currentDecoder) { 
+        console.log("[renderGroupHistory] Decoder pronto, continuando execução");
+        clearInterval(waitForDecoder); 
+        renderGroupHistory(); 
+      }
+    }, 200);
+    return;
+  }
+  
+  console.log("[renderGroupHistory] Decoder está pronto, continuando execução");
+  
   const key = "decodevin.groupHistory";
+  console.log("[renderGroupHistory] Buscando histórico no localStorage...");
   let list = JSON.parse(localStorage.getItem(key) || "[]");
   const sessUser = JSON.parse(localStorage.getItem("dvb_user") || "null");
   const token = localStorage.getItem("dvb_token");
+  console.log("[renderGroupHistory] Buscando histórico no localStorage...");
+  console.log("[renderGroupHistory] Dados encontrados:", {
+    listLength: list.length,
+    hasToken: !!token,
+    hasUser: !!sessUser,
+    isAdmin: sessUser?.admin || false
+  });
   groupHistoryFetchGen++;
   const gen = groupHistoryFetchGen;
 
@@ -1094,22 +1115,25 @@ async function renderGroupHistory() {
     isAdmin: sessUser?.admin || false,
     hasDvbHistoricoUsuarioGet: typeof window.dvbHistoricoUsuarioGet === "function"
   });
-
+  
   const h = el("groupHistory");
-  if (!h) return;
+  console.log("[renderGroupHistory] Verificando elemento groupHistory:", {
+    elementExists: !!h,
+    elementId: h ? h.id : 'not found',
+    elementClass: h ? h.className : 'not found'
+  });
+  
+  if (!h) {
+    console.log("[renderGroupHistory] ERRO: Elemento groupHistory não encontrado no DOM!");
+    return;
+  }
   h.innerHTML = "";
 
-  if (sessUser && sessUser.admin) {
+  if (token) {
     const note = document.createElement("div");
     note.style.cssText = "font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;";
     note.textContent =
       "Lotes de todos os usuários; linhas sem chassis/placas no servidor são só registro (não reexecutam).";
-    h.appendChild(note);
-  } else if (token) {
-    const note = document.createElement("div");
-    note.style.cssText = "font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;";
-    note.textContent =
-      "Histórico de lotes ligado à sua conta — o mesmo em qualquer aparelho após login.";
     h.appendChild(note);
   }
 
@@ -1264,6 +1288,7 @@ async function renderGroupHistory() {
   })));
 
   const getOrExtractMeta = (item) => {
+    // Check if we already have valid metadata
     if (item.meta && (item.meta.brands?.length > 0 || item.meta.models?.length > 0)) {
       console.log("[META] Usando metadata existente para frota:", item.fleetName, item.meta);
       return item.meta;
@@ -1279,13 +1304,36 @@ async function renderGroupHistory() {
     const models = new Set();
     const submodels = new Set();
     const years = new Set();
-    const vins = String(item.vins || "").split(/[\n,]/).filter(Boolean).slice(0, 5);
     
-    console.log("[META] Processando VINs:", vins);
+    // Handle different VIN formats: server items, local items, and string metadata
+    let vinsToProcess = [];
     
-    vins.forEach(v => {
+    if (item.vins) {
+      vinsToProcess = String(item.vins).split(/[\n,]/).filter(Boolean);
+    } else if (item.results && Array.isArray(item.results)) {
+      // Fallback for items with results array
+      vinsToProcess = item.results.map(r => r.vin || r.chassi || r.input).filter(Boolean);
+    } else if (typeof item.meta === 'string') {
+      // Fallback for string metadata
+      try {
+        const parsedMeta = JSON.parse(item.meta);
+        if (parsedMeta.vins) {
+          vinsToProcess = String(parsedMeta.vins).split(/[\n,]/).filter(Boolean);
+        }
+      } catch (e) {
+        console.log("[META] Erro ao parsear meta string:", e);
+      }
+    }
+    
+    // Process up to 10 VINs (increased from 5)
+    vinsToProcess = vinsToProcess.slice(0, 10);
+    
+    console.log("[META] Processando VINs:", vinsToProcess);
+    
+    vinsToProcess.forEach(v => {
       const vin = v.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-      if (vin.length >= 3 && window.currentDecoder) {
+      // Accept partial VINs (8+ chars) or full VINs (17 chars)
+      if (vin.length >= 8 && window.currentDecoder) {
         try {
           const res = window.currentDecoder.decode(vin);
           const mockItem = { result: res, fabricante: res.manufacturerName };
@@ -1296,19 +1344,19 @@ async function renderGroupHistory() {
             tech: tech
           });
           
-          if (tech.brand) {
+          if (tech.brand && tech.brand !== 'UNKNOWN') {
             brands.add(tech.brand);
             console.log("[META] Brand adicionado:", tech.brand);
           }
-          if (tech.model) {
+          if (tech.model && tech.model !== 'UNKNOWN') {
             models.add(tech.model);
             console.log("[META] Model adicionado:", tech.model);
           }
-          if (tech.submodel) {
+          if (tech.submodel && tech.submodel !== 'UNKNOWN') {
             submodels.add(tech.submodel);
             console.log("[META] Submodel adicionado:", tech.submodel);
           }
-          if (tech.year) {
+          if (tech.year && tech.year !== 'UNKNOWN') {
             years.add(tech.year);
             console.log("[META] Year adicionado:", tech.year);
           }
@@ -1316,14 +1364,41 @@ async function renderGroupHistory() {
           console.log("[META] Erro ao decodificar VIN:", vin, e);
         }
       } else {
-        console.log("[META] VIN inválido ou decoder não disponível:", vin);
+        console.log("[META] VIN inválido ou decoder não disponível:", vin, {
+          length: vin.length,
+          hasDecoder: !!window.currentDecoder
+        });
       }
     });
     
-    const extracted = { brands: Array.from(brands), models: Array.from(models), submodels: Array.from(submodels), years: Array.from(years) };
+    const extracted = { 
+      brands: Array.from(brands), 
+      models: Array.from(models), 
+      submodels: Array.from(submodels), 
+      years: Array.from(years) 
+    };
+    
     console.log("[META] Metadata extraída para frota", item.fleetName, ":", extracted);
     
-    item.meta = extracted; 
+    // Persist the result to prevent reprocessing
+    item.meta = extracted;
+    
+    // Also persist to localStorage for server items
+    if (item.fromServer) {
+      try {
+        const key = "decodevin.groupHistory";
+        let list = JSON.parse(localStorage.getItem(key) || "[]");
+        const itemIndex = list.findIndex(i => i.serverId === item.serverId);
+        if (itemIndex >= 0) {
+          list[itemIndex].meta = extracted;
+          localStorage.setItem(key, JSON.stringify(list));
+          console.log("[META] Metadata persistida no localStorage para item do servidor");
+        }
+      } catch (e) {
+        console.log("[META] Erro ao persistir metadata:", e);
+      }
+    }
+    
     return extracted;
   };
 
@@ -4015,13 +4090,13 @@ async function main() {
 
         if (val.length === 0) {
           clearUI(true);
-          const verif = el("ob_verificacao"); if (verif) verif.innerHTML = "";
+          const verif = el("ob_verificacao"); 
+          if (verif) verif.innerHTML = "";
           window.currentSingleResult = null;
           return;
         }
       });
     }
-
     if (plateInputSingle) {
       plateInputSingle.addEventListener('input', () => {
         const val = plateInputSingle.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7);
@@ -4054,387 +4129,28 @@ async function main() {
       };
     }
 
-    gInput.addEventListener('input', () => {
-      const pos = gInput.selectionStart;
-      let val = gInput.value.toUpperCase().replace(/[^A-Z0-9\n\r]/g, "");
-      const lines = val.split('\n');
-      let newVal = "";
-      let offset = 0;
-      let currentTotal = 0;
+    renderHistory();
 
-      for (let i = 0; i < lines.length; i++) {
-        let line = lines[i];
-        if (line.length > 17) {
-          newVal += line.substring(0, 17) + "\n" + line.substring(17);
-          if (pos > currentTotal + 17) offset++;
-        } else {
-          newVal += line;
-        }
-        if (i < lines.length - 1) newVal += "\n";
-        currentTotal += line.length + 1;
-      }
-
-      gInput.value = newVal;
-      gInput.setSelectionRange(pos + offset, pos + offset);
-      validateGBtn();
-    });
-
-    gPlateInput.addEventListener('input', () => {
-      const pos = gPlateInput.selectionStart;
-      let val = gPlateInput.value.toUpperCase().replace(/[^A-Z0-9\n\r]/g, "");
-      const lines = val.split('\n');
-      let newVal = "";
-      let offset = 0;
-      let currentTotal = 0;
-
-      for (let i = 0; i < lines.length; i++) {
-        let line = lines[i];
-        if (line.length > 7) {
-          newVal += line.substring(0, 7) + "\n" + line.substring(7);
-          if (pos > currentTotal + 7) offset++;
-        } else {
-          newVal += line;
-        }
-        if (i < lines.length - 1) newVal += "\n";
-        currentTotal += line.length + 1;
-      }
-
-      gPlateInput.setSelectionRange(pos + offset, pos + offset);
-      validateGBtn();
-    });
-
-    const validateGBtn = () => {
-      const fleetOk = (el("fleetName")?.value || "").trim().length > 0;
-      const v = gInput.value.trim();
-      const p = gPlateInput.value.trim();
-      const currentFleetName = (el("fleetName")?.value || "").trim();
-      
-      // Debug: verificar estado da variável global
-      console.log("[validateGBtn] Verificando frota:", {
-        currentFleetName,
-        decodedFleets: window.decodedFleets ? Array.from(window.decodedFleets) : 'não inicializado',
-        isAlreadyDecoded: currentFleetName && window.decodedFleets && window.decodedFleets.has(currentFleetName)
-      });
-      
-      // Check if this fleet has already been decoded
-      const isAlreadyDecoded = currentFleetName && window.decodedFleets && window.decodedFleets.has(currentFleetName);
-      
-      if (combined.checked) {
-        const vl = v.split("\n").map(x => x.trim()).filter(Boolean);
-        const pl = p.split("\n").map(x => x.trim()).filter(Boolean);
-        gBtn.disabled =
-          vl.length === 0 ||
-          vl.length !== pl.length ||
-          !vl.every(x => x.length === 17) ||
-          !pl.every(x => x.length >= 6) ||
-          !fleetOk ||
-          isAlreadyDecoded;
-      } else {
-        gBtn.disabled = (!v && !p) || !fleetOk || isAlreadyDecoded;
-      }
-      
-      // Update button text to show if it's blocked
-      if (isAlreadyDecoded && gBtn) {
-        gBtn.textContent = "Frota já decodificada";
-        gBtn.title = "Esta frota já foi decodificada anteriormente";
-      } else if (gBtn) {
-        gBtn.textContent = "Decodificar Grupo";
-        gBtn.title = "";
-      }
-    };
-    window.validateGroupForm = validateGBtn;
-
-    combined.addEventListener("change", validateGBtn);
-    const fleetNameEl = el("fleetName");
-    if (fleetNameEl) fleetNameEl.addEventListener("input", validateGBtn);
-    validateGBtn();
-
-    el("btnClearGroupInputs")?.addEventListener("click", () => {
-      clearUI(false);
-    });
-
-    const excelFleetModal = el("excelFleetModal");
-    const excelFleetNameInput = el("excelFleetNameInput");
-    const fecharExcelFleetModal = () => {
-      if (excelFleetModal) excelFleetModal.style.display = "none";
-    };
-    const abrirExcelFleetModal = () => {
-      if (excelFleetNameInput) {
-        excelFleetNameInput.value = (el("fleetName")?.value || "").trim();
-      }
-      if (excelFleetModal) excelFleetModal.style.display = "flex";
-      setTimeout(() => excelFleetNameInput?.focus(), 80);
-    };
-    const btnImportExcelBtn = el("btnImportExcel");
-    if (btnImportExcelBtn) {
-      btnImportExcelBtn.onclick = () => abrirExcelFleetModal();
+    if (window.populateGroupFilters && window.currentGroupResults) {
+      populateGroupFilters(window.currentGroupResults);
     }
-    el("closeExcelFleetModal")?.addEventListener("click", fecharExcelFleetModal);
-    el("excelFleetCancel")?.addEventListener("click", fecharExcelFleetModal);
-    el("excelFleetConfirm")?.addEventListener("click", () => {
-      const name = (excelFleetNameInput?.value || "").trim();
-      if (!name) {
-        if (typeof showToast === "function") showToast("Preencha o nome do lote / frota.", "error");
-        return;
-      }
-      const fnFleet = el("fleetName");
-      if (fnFleet) fnFleet.value = name;
-      validateGBtn();
-      fecharExcelFleetModal();
-      el("excelFileInput")?.click();
-    });
-    if (excelFleetNameInput) {
-      excelFleetNameInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          el("excelFleetConfirm")?.click();
-        }
-      });
-    }
-    if (excelFleetModal) {
-      excelFleetModal.addEventListener("click", (e) => {
-        if (e.target === excelFleetModal) fecharExcelFleetModal();
-      });
-    }
+  } catch (err) {
+    console.error("Erro fatal na inicialização:", err);
+    const errs = el("errors");
+    if (errs) errs.innerHTML = '<div class="error">Erro ao carregar sistema: ' + err.message + '</div>';
+  }
+}
 
-    el("filterPlate")?.addEventListener('input', applyGroupFilters);
-
-    gBtn.onclick = async () => {
-      const fleetEl = el("fleetName");
-      if (!fleetEl || !fleetEl.value.trim()) {
-        if (typeof showToast === "function") {
-          showToast("Informe o nome do lote / frota antes de decodificar.", "error");
-        }
-        return;
-      }
-      const gResults = el("groupResults");
-      if (!gResults) return;
-      gResults.innerHTML = "";
-      const vLines = gInput.value.split("\n").map(l => l.trim()).filter(Boolean);
-      const pLines = gPlateInput.value.split("\n").map(l => l.trim()).filter(Boolean);
-      
-      const totalItems = Math.max(vLines.length, pLines.length);
-      if (totalItems === 0) return;
-
-      const progressContainer = el("progressContainer");
-      const progressBar = el("progressBar");
-      const groupProgress = el("groupProgress");
-      if (progressContainer) progressContainer.style.display = "block";
-      if (groupProgress) groupProgress.style.display = "block";
-      if (progressBar) progressBar.style.width = "0%";
-
-      ["filterBrand", "filterModel", "filterSubModel", "filterYear"].forEach(id => {
-        const s = el(id);
-        if (s) s.value = "";
-      });
-      const fPlateEl = el("filterPlate");
-      if (fPlateEl) fPlateEl.value = "";
-
-      const fleetNameAtual = (el("fleetName")?.value || "").trim();
-      window.currentGroupResults = [];
-      window.lastGroupLotFingerprint = JSON.stringify({
-        fleetName: fleetNameAtual,
-        vins: gInput.value,
-        plates: gPlateInput.value
-      });
-      currentGroupPage = 1;
-      
-      const allItems = [];
-      for (let i = 0; i < totalItems; i++) {
-        allItems.push({ vin: vLines[i] || "", plate: pLines[i] || "" });
-      }
-
-      const BATCH_SIZE = 5; 
-      let currentIndex = 0;
-
-      const processBatch = async () => {
-        const batch = allItems.slice(currentIndex, currentIndex + BATCH_SIZE);
-        
-        if (batch.length === 0) {
-          if (progressContainer) progressContainer.style.display = "none";
-          if (groupProgress) groupProgress.style.display = "none";
-          gResults.innerHTML = ""; 
-          showReports("group", true);
-          populateGroupFilters(window.currentGroupResults);
-          renderGroupResults();
-
-          // Salva no histórico somente após concluir, para ter todos os metadados
-          addGroupHistoryEntry(gInput.value, gPlateInput.value, window.currentGroupResults);
-
-          // Adiciona a frota ao conjunto de frotas decodificadas
-          const fleetNameDecoded = (el('fleetName')?.value || '').trim();
-          if (fleetNameDecoded) {
-            window.decodedFleets.add(fleetNameDecoded);
-          }
-
-          const fleetNameParaBanco = (el('fleetName')?.value || '').trim(); 
-          // Tenta pegar o history_id que foi salvo ao chamar addGroupHistoryEntry 
-          // (como addGroupHistoryEntry é async via dvbHistoricoUsuarioPost, usamos um pequeno delay) 
-          setTimeout(async () => { 
-            let hId = null; 
-            // Tenta recuperar o id do último registro do servidor 
-            try { 
-              const token = localStorage.getItem('dvb_token'); 
-              if (token && typeof window.dvbHistoricoUsuarioGet === 'function') { 
-                const hist = await window.dvbHistoricoUsuarioGet(); 
-                if (hist && hist.ok && Array.isArray(hist.group) && hist.group.length > 0) { 
-                  hId = hist.group[0].id || null; 
-                } 
-              } 
-            } catch (_) {} 
-           
-            await salvarFrotaNoBanco(fleetNameParaBanco, hId, window.currentGroupResults || []); 
-          }, 1500); // aguarda o histórico ser salvo primeiro
-
-          if (window.dvbRegistrarPesquisa) {
-            const fn = el("fleetName");
-            const fleetName = fn ? fn.value.trim() : "";
-            window.dvbRegistrarPesquisa({
-              tipo: "grupo",
-              detalhe: "Lote: " + totalItems + " veículo(s)",
-              fleetName: fleetName || undefined
-            });
-          }
-          return;
-        }
-
-        const progressPercent = (currentIndex / totalItems) * 100;
-        if (progressBar) progressBar.style.width = progressPercent + "%";
-        if (groupProgress) groupProgress.textContent = "Processando " + currentIndex + " de " + totalItems + " itens...";
-
-        const apiCalls = batch.map(pair => (async () => {
-          const { vin, plate } = pair;
-          const res = vin ? decoder.decode(vin) : { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
-          
-          const itemData = { 
-            tipo: vin && plate ? 'COMBINADO' : (vin ? 'VIN' : 'PLATE'), 
-            vin, 
-            placa: plate, 
-            fleetName: fleetNameAtual,
-            fabricante: res.manufacturerName || "Desconhecido", 
-            result: JSON.parse(JSON.stringify(res)), 
-            ob: {},
-            ob_data: {},
-            status: 'pending'
-          };
-          
-          if (plate) {
-            try {
-              const apiResult = await consultarPlacaPHP(plate, vin || "");
-
-              const norm = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-              const chassiDigitadoNorm = norm(vin);
-
-              const chassiRetornadoNorm = norm(
-                apiResult.chassi_completo || 
-                apiResult.chassi || 
-                apiResult.chassi_raw_api || 
-                ""
-              );
-
-              const compativelPorFinal5 = 
-                chassiDigitadoNorm.length >= 5 &&
-                chassiRetornadoNorm.length >= 5 &&
-                chassiDigitadoNorm.slice(-5) === chassiRetornadoNorm.slice(-5);
-
-              const confirmouPorFinalParcial = compativelPorFinal5 && apiResult.status !== "ok";
-
-              if (apiResult.status === "ok" || compativelPorFinal5) {
-                itemData.status = 'ok';
-                itemData.apiResult = apiResult;
-
-                if (confirmouPorFinalParcial) {
-                  itemData.apiResult.status = "ok";
-                  itemData.apiResult.mensagem = "✔ Compatível por validação dos 5 últimos dígitos";
-                }
-
-                itemData.fabricante = apiResult.marca || apiResult.fabricante || itemData.fabricante;
-
-                if (!confirmouPorFinalParcial && (apiResult.chassi_completo || apiResult.chassi)) {
-                  const apiChassi = apiResult.chassi_completo || apiResult.chassi;
-                  itemData.vin = apiChassi;
-                  if (window.currentDecoder) {
-                    itemData.result = window.currentDecoder.decode(apiChassi);
-                  }
-                }
-
-                // Busca OnibusBrasil ANTES do push
-                let obData = null;
-                if (window.buscarDadosOnibusBrasil) {
-                  try {
-                    obData = await window.buscarDadosOnibusBrasil(plate, false);
-                  } catch (e) {
-                    console.warn("Falha ao buscar OB (grupo):", e);
-                  }
-                }
-
-                if (obData && !obData.erro) {
-                  itemData.ob_data = obData;
-                  itemData.apiResult.ob_data = obData;
-                  itemData.ob = {
-                    ob_carroceria:        obData.carroceria        || "—",
-                    ob_encarrocadeira:    obData.encarrocadeira    || obData.encarrocadora || "—",
-                    ob_fabricante_chassi: obData.fabricante_chassi || obData.fabricante || apiResult.marca || "—",
-                    ob_chassi:            obData.modelo_chassi     || obData.chassi     || apiResult.modelo || "—",
-                    // Sem prefixo para exportCSV 
-                    carroceria:        obData.carroceria     || "—", 
-                    encarrocadeira:    obData.encarrocadeira || obData.encarrocadora || "—", 
-                    encarrocadora:     obData.encarrocadeira || obData.encarrocadora || "—", 
-                  };
-                } else {
-                  itemData.ob = {
-                    ob_carroceria:        "—",
-                    ob_encarrocadeira:    "—",
-                    ob_fabricante_chassi: apiResult.marca  || "—",
-                    ob_chassi:            apiResult.modelo || "—",
-                    carroceria:        "—", 
-                    encarrocadeira:    "—", 
-                  };
-                }
-              } else {
-                itemData.status = 'error';
-                itemData.error_detail = apiResult.mensagem;
-              }
-            } catch (e) { 
-              itemData.status = 'error';
-              console.error("Erro no par do grupo:", e); 
-            }
-          } else if (vin) {
-            itemData.status = 'ok';
-          } else {
-            itemData.status = 'orphan';
-          }
-
-          // Push SOMENTE após tudo estar populado 
-          window.currentGroupResults.push(itemData); 
-        })());
-
-        await Promise.all(apiCalls);
-        
-        currentIndex += BATCH_SIZE;
-        
-        await new Promise(resolve => setTimeout(resolve, 50)); 
-        processBatch(); 
-      };
-
-      processBatch(); 
-    };
-
-    el("closeModal").onclick = () => el("detailModal").style.display = "none";
-
-    const btnExportCSV = el("btnExportCSV");
-    if (btnExportCSV) {
-      btnExportCSV.onclick = () => {
-        if (window.currentGroupResults) openReportOptions(window.currentGroupResults, "Relatorio_Frota");
-      };
-    }
+main();
 
  
  // BLOCO 2 — Modal de Pesquisa de Frota 
  // Cole no final do main.js, dentro da função main(), 
  
   
- (function iniciarPesquisaFrota() { 
+ let fleetSearchTimeout;
+
+  (function iniciarPesquisaFrota() { 
   
    // ---- Cria o modal de resultados ---- 
    const modal = document.createElement('div'); 
@@ -4676,154 +4392,139 @@ async function main() {
          }
        };
 
-       tbody.appendChild(tr); 
-     }); 
+      tbody.appendChild(tr); 
+    }); 
   
-     table.appendChild(tbody); 
-     wrapper.appendChild(table); 
-     container.appendChild(wrapper); 
-   } 
+    table.appendChild(tbody); 
+    wrapper.appendChild(table); 
+    container.appendChild(wrapper); 
+  } 
   
-   // ---- Executa a pesquisa ---- 
-   async function executarPesquisa(filtros, offset = 0) { 
-     const container = document.getElementById('fleetSearchResults'); 
-     const countEl   = document.getElementById('fleetSearchCount');
-     
-     if (countEl) countEl.innerHTML = '⏳ Buscando no servidor...';
-     modal.style.display = 'flex'; 
-  
-     lastFiltros    = filtros; 
-     currentOffset  = offset; 
-  
-     try {
-       const data = await buscarFrotaNoBanco({ ...filtros, limit: PAGE_SIZE, offset }); 
-       
-       if (!data || !data.ok) {
-         renderResultados({ ok: false, mensagem: data?.erro || "Falha na conexão" });
-         return;
-       }
-
-       // Filtro adicional no cliente para garantir correspondência exata de modelo se solicitado 
-       if (filtros.modelo && data.ok && Array.isArray(data.results)) { 
-         const fModelNorm = filtros.modelo.trim().toUpperCase(); 
-         data.results = data.results.filter(row => { 
-           const m = String(row.modelo || "").trim().toUpperCase(); 
-           return m === fModelNorm || 
-                  m.startsWith(fModelNorm + " ") || 
-                  m.startsWith(fModelNorm + "-") ||
-                  (fModelNorm.length === 1 && m.startsWith(fModelNorm) && /^\d/.test(m.slice(1)));
-         }); 
-       } 
+  // ---- Executa a pesquisa ---- 
+  async function executarPesquisa(filtros, offset = 0) { 
+    const container = document.getElementById('fleetSearchResults'); 
+    const countEl   = document.getElementById('fleetSearchCount');
     
-       renderResultados(data); 
-     } catch (e) {
-       console.error("[Fleet] Erro ao pesquisar:", e);
-       renderResultados({ ok: false, mensagem: "Erro inesperado ao buscar dados." });
-     }
-   } 
+    if (countEl) countEl.innerHTML = '⏳ Buscando no servidor...';
+    modal.style.display = 'flex'; 
   
-   // Paginação 
-   document.getElementById('fleetSearchPrev').onclick = () => 
-     executarPesquisa(lastFiltros, Math.max(0, currentOffset - PAGE_SIZE)); 
-   document.getElementById('fleetSearchNext').onclick = () => 
-     executarPesquisa(lastFiltros, currentOffset + PAGE_SIZE); 
-
-   const btnLimparQS = document.getElementById('btnLimparQuickSearch');
-   const inputQS     = document.getElementById('quickFleetSearch');
-
-   if (btnLimparQS && inputQS) {
-     btnLimparQS.onclick = () => {
-       inputQS.value = "";
-       btnLimparQS.style.display = 'none';
-       executarPesquisa(filtrosOriginais, 0); // Volta para o estado original (lote filtrado)
-     };
-
-     inputQS.oninput = (e) => {
-       const term = e.target.value.trim();
-       btnLimparQS.style.display = term ? 'block' : 'none';
-
-       clearTimeout(fleetSearchTimeout);
-       fleetSearchTimeout = setTimeout(() => {
-         // Mantém os filtros originais (lote/histórico) e adiciona o termo de busca global 'q'
-         const novosFiltros = { ...filtrosOriginais, q: term, offset: 0 };
-         executarPesquisa(novosFiltros, 0);
-       }, 450);
-     };
-   }
+    lastFiltros    = filtros; 
+    currentOffset  = offset; 
   
-   // Exportar Relatórios dos resultados (com opções de FIPE/Sem FIPE)
-   document.getElementById('btnExportFleetSearch').onclick = () => { 
-     if (!allResultsCache.length) return; 
-  
-     // Transforma os resultados planos do banco no formato esperado pela função exportCSV
-     const reportData = allResultsCache.map(row => {
-       const [municipio, uf] = (row.municipio_uf || '').split(' / ');
-       return {
-         placa: row.placa,
-         vin:   row.vin,
-         fabricante: row.montadora,
-         modelo:     row.modelo, // Adicionado ao top level
-         fipe_modelo: row.fipe_modelo, // Adicionado ao top level
-         apiResult: {
-           marca:       row.montadora,
-           modelo:      row.modelo,
-           texto_modelo: row.fipe_modelo, // Fallback importante para exportCSV
-           versao:      row.submodelo,
-           ano:         row.ano,
-           fipe_codigo: row.fipe_codigo,
-           fipe_modelo: row.fipe_modelo,
-           combustivel: row.combustivel,
-           cor:         row.cor,
-           municipio:   municipio || '',
-           uf:          uf || '',
-           status:      'ok'
-         },
-         ob_data: {
-           carroceria:     row.carroceria,
-           encarrocadeira: row.encarrocadora,
-           fabricante_chassi: row.montadora,
-           modelo_chassi:     row.modelo
-         },
-         result: {
-           tokens: [
-             { label: 'WMI', value: row.wmi },
-             { label: 'MOTOR', value: row.motor },
-             { label: 'POSIÇÃO DO MOTOR', value: row.posicao_motor },
-             { label: 'NORMA DE EMISSÕES', value: row.emissoes },
-           ]
-         }
-       };
-     });
+    try {
+      const data = await buscarFrotaNoBanco({ ...filtros, limit: PAGE_SIZE, offset }); 
+      
+      if (!data || !data.ok) {
+        renderResultados({ ok: false, mensagem: data?.erro || "Falha na conexão" });
+        return;
+      }
 
-     if (typeof openReportOptions === 'function') {
-       openReportOptions(reportData, "Pesquisa_Frota_" + Date.now());
-     } else {
-       // Fallback caso a função não exista por algum motivo
-       showToast("Função de relatório não encontrada.", "error");
-     }
-   }; 
-  
-   // ---- Expõe globalmente para ser chamado pelo botão no histórico ---- 
-   window.abrirPesquisaFrota = function(filtros) { 
-     filtrosOriginais = filtros || {}; // Salva o estado original (lote/histórico)
-     const qInput = document.getElementById('quickFleetSearch');
-     if (qInput) qInput.value = ""; // Limpa campo de busca ao abrir nova frota
-     executarPesquisa(filtrosOriginais, 0); 
-   }; 
-  
- })(); 
-
-    renderHistory();
-
-    if (window.populateGroupFilters && window.currentGroupResults) {
-      populateGroupFilters(window.currentGroupResults);
+      // Filtro adicional no cliente para garantir correspondência exata de modelo se solicitado 
+      if (filtros.modelo && data.ok && Array.isArray(data.results)) { 
+        const fModelNorm = filtros.modelo.trim().toUpperCase(); 
+        data.results = data.results.filter(row => { 
+          const m = String(row.modelo || "").trim().toUpperCase(); 
+          return m === fModelNorm || 
+                 m.startsWith(fModelNorm + " ") || 
+                 m.startsWith(fModelNorm + "-") ||
+                 (fModelNorm.length === 1 && m.startsWith(fModelNorm) && /^\d/.test(m.slice(1)));
+        }); 
+      } 
+    
+      renderResultados(data); 
+    } catch (e) {
+      console.error("[Fleet] Erro ao pesquisar:", e);
+      renderResultados({ ok: false, mensagem: "Erro inesperado ao buscar dados." });
     }
+  } 
+  
+  // Paginação 
+  document.getElementById('fleetSearchPrev').onclick = () => 
+    executarPesquisa(lastFiltros, Math.max(0, currentOffset - PAGE_SIZE)); 
+  document.getElementById('fleetSearchNext').onclick = () => 
+    executarPesquisa(lastFiltros, currentOffset + PAGE_SIZE);
 
-  } catch (err) {
-    console.error("Erro fatal na inicialização:", err);
-    const errs = el("errors");
-    if (errs) errs.innerHTML = '<div class="error">Erro ao carregar sistema: ' + err.message + '</div>';
+  const btnLimparQS = document.getElementById('btnLimparQuickSearch');
+  const inputQS     = document.getElementById('quickFleetSearch');
+
+  if (btnLimparQS && inputQS) {
+    btnLimparQS.onclick = () => {
+      inputQS.value = "";
+      btnLimparQS.style.display = 'none';
+      executarPesquisa(filtrosOriginais, 0); // Volta para o estado original (lote filtrado)
+    };
+
+    inputQS.oninput = (e) => {
+      const term = e.target.value.trim();
+      btnLimparQS.style.display = term ? 'block' : 'none';
+
+      clearTimeout(fleetSearchTimeout);
+      fleetSearchTimeout = setTimeout(() => {
+        // Mantém os filtros originais (lote/histórico) e adiciona o termo de busca global 'q'
+        const novosFiltros = { ...filtrosOriginais, q: term, offset: 0 };
+        executarPesquisa(novosFiltros, 0);
+      }, 450);
+    };
   }
-}
+  
+  // Exportar Relatórios dos resultados (com opções de FIPE/Sem FIPE)
+  document.getElementById('btnExportFleetSearch').onclick = () => { 
+    if (!allResultsCache.length) return; 
+  
+    // Transforma os resultados planos do banco no formato esperado pela função exportCSV
+    const reportData = allResultsCache.map(row => {
+      const [municipio, uf] = (row.municipio_uf || '').split(' / ');
+      return {
+        placa: row.placa,
+        vin:   row.vin,
+        fabricante: row.montadora,
+        modelo:     row.modelo, 
+        fipe_modelo: row.fipe_modelo, 
+        apiResult: {
+          marca:       row.montadora,
+          modelo:      row.modelo,
+          texto_modelo: row.fipe_modelo, 
+          versao:      row.submodelo,
+          ano:         row.ano,
+          fipe_codigo: row.fipe_codigo,
+          fipe_modelo: row.fipe_modelo,
+          combustivel: row.combustivel,
+          cor:         row.cor,
+          municipio:   municipio || '',
+          uf:          uf || '',
+          status:      'ok'
+        },
+        ob_data: {
+          carroceria:     row.carroceria,
+          encarrocadeira: row.encarrocadora,
+          fabricante_chassi: row.montadora,
+          modelo_chassi:     row.modelo
+        },
+        result: {
+          tokens: [
+            { label: 'WMI', value: row.wmi },
+            { label: 'MOTOR', value: row.motor },
+            { label: 'POSIÇÃO DO MOTOR', value: row.posicao_motor },
+            { label: 'NORMA DE EMISSÕES', value: row.emissoes },
+          ]
+        }
+      };
+    });
 
-main().catch(console.error);
+    if (typeof openReportOptions === 'function') {
+      openReportOptions(reportData, "Pesquisa_Frota_" + Date.now());
+    } else {
+      // Fallback caso a função não exista por algum motivo
+      showToast("Função de relatório não encontrada.", "error");
+    }
+  }; 
+  
+  // ---- Expõe globalmente para ser chamado pelo botão no histórico ---- 
+  window.abrirPesquisaFrota = function(filtros) { 
+    filtrosOriginais = filtros || {}; 
+    const qInput = document.getElementById('quickFleetSearch');
+    if (qInput) qInput.value = ""; 
+    executarPesquisa(filtrosOriginais, 0); 
+  }; 
+  
+})();
