@@ -4221,6 +4221,30 @@ async function main() {
       clearUI(false);
     });
 
+    el("btnClearGroupInputs")?.addEventListener("click", () => {
+      if (gInput) {
+        gInput.value = "";
+        gInput.dispatchEvent(new Event("input"));
+      }
+      if (gPlateInput) {
+        gPlateInput.value = "";
+        gPlateInput.dispatchEvent(new Event("input"));
+      }
+
+      clearUI(false);
+
+      const gResults = el("groupResults");
+      if (gResults) gResults.innerHTML = "";
+      window.currentGroupResults = null;
+      showReports("group", false);
+      const progressText = el("groupProgress");
+      if (progressText) progressText.style.display = "none";
+      const progressContainer = el("progressContainer");
+      if (progressContainer) progressContainer.style.display = "none";
+      const reportButtons = el("reportButtons");
+      if (reportButtons) reportButtons.style.display = "none";
+    });
+
     if (vinInputSingle) {
       vinInputSingle.addEventListener('input', () => {
         const val = vinInputSingle.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17);
@@ -4326,6 +4350,66 @@ async function main() {
       btnExportCSVSingle.onclick = () => {
         if (window.currentSingleResult) openReportOptions([window.currentSingleResult], "Relatorio_Veiculo_" + window.currentSingleResult.vin);
       };
+    }
+
+    // Listener para o botão de importar Excel
+    const btnImportExcel = el("btnImportExcel");
+    const excelFleetModal = el("excelFleetModal");
+    const excelFleetNameInput = el("excelFleetNameInput");
+    const excelFleetConfirm = el("excelFleetConfirm");
+    const excelFleetCancel = el("excelFleetCancel");
+    const closeExcelFleetModal = el("closeExcelFleetModal");
+    const excelFileInput = el("excelFileInput");
+
+    if (btnImportExcel) {
+      btnImportExcel.addEventListener('click', () => {
+        // Copiar o valor atual de fleetName para o modal
+        const currentFleetName = fleetInput?.value?.trim() || "";
+        if (excelFleetNameInput) excelFleetNameInput.value = currentFleetName;
+        
+        // Abrir modal
+        if (excelFleetModal) excelFleetModal.style.display = "flex";
+        
+        // Focar no input
+        if (excelFleetNameInput) excelFleetNameInput.focus();
+      });
+    }
+
+    if (excelFleetConfirm) {
+      excelFleetConfirm.addEventListener('click', () => {
+        const fleetNameValue = excelFleetNameInput?.value?.trim() || "";
+        if (!fleetNameValue) {
+          showToast("Por favor, informe o nome da frota.", "error");
+          return;
+        }
+        // Copiar para o input de frota no modo grupo
+        if (fleetInput) fleetInput.value = fleetNameValue;
+        
+        // Fechar modal
+        if (excelFleetModal) excelFleetModal.style.display = "none";
+        
+        // Abrir file input
+        if (excelFileInput) excelFileInput.click();
+      });
+    }
+
+    // Fechar modal ao clicar no X ou em Cancelar
+    const closeModalHandler = () => {
+      if (excelFleetModal) excelFleetModal.style.display = "none";
+    };
+    if (closeExcelFleetModal) closeExcelFleetModal.addEventListener('click', closeModalHandler);
+    if (excelFleetCancel) excelFleetCancel.addEventListener('click', closeModalHandler);
+    if (excelFleetModal) {
+      excelFleetModal.addEventListener('click', (e) => {
+        if (e.target === excelFleetModal) closeModalHandler();
+      });
+    }
+
+    // Permitir Enter no input para confirmar
+    if (excelFleetNameInput) {
+      excelFleetNameInput.addEventListener('keydown', (e) => {
+        if (e.key === "Enter") excelFleetConfirm?.click();
+      });
     }
 
     renderHistory();

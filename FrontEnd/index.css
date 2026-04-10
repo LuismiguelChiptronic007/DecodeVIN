@@ -143,11 +143,12 @@ button:disabled{opacity:.6;cursor:not-allowed;filter:none;box-shadow:none}
 
 /* Group Mode */
 .group-list{
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-  margin-bottom:24px;
-  width:100%;
+  display:flex !important;
+  flex-direction:column !important;
+  gap:12px !important;
+  margin-bottom:24px !important;
+  width:100% !important;
+  grid-template-columns:none !important;
 }
 .group-item{
   display:flex;

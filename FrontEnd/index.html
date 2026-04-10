@@ -175,16 +175,8 @@
       </div>
     </div>
 
-      <div id="groupResults" class="group-list"></div>
-
     <div class="bar">
         <button id="btnGroupDecode" style="width:100%" disabled>Decodificar Grupo</button>
-      </div>
-
-      <!-- Progresso de Processamento -->
-      <div id="groupProgress" class="progress-text">Processando 0 de 0 itens...</div>
-      <div class="progress-container" id="progressContainer">
-        <div class="progress-bar" id="progressBar"></div>
       </div>
 
     <!-- Importar Excel -->
@@ -194,7 +186,9 @@
         📂 Importar Excel
       </button>
     </div>
-    
+
+    <div id="groupResults" class="group-list" style="display:flex !important; flex-direction:column !important; gap:12px; width:100%; margin-bottom:24px;"></div>
+
     <div id="reportButtons" style="display: none; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
       <div id="groupFilters" style="display: flex; gap: 8px; flex: 1; flex-wrap: wrap; align-items: center;">
         <select id="filterSegment" style="flex: 0.8; min-width: 110px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text); font-size: 13px; outline: none; cursor: pointer;">
@@ -221,6 +215,12 @@
         </select>
       </div>
       <button id="btnExportCSV" style="background: var(--accent); color: black; min-width: 180px;">📄 Exportar Planilha (CSV)</button>
+    </div>
+
+    <!-- Progresso de Processamento -->
+    <div id="groupProgress" class="progress-text">Processando 0 de 0 itens...</div>
+    <div class="progress-container" id="progressContainer">
+      <div class="progress-bar" id="progressBar"></div>
     </div>
   </div>
 
