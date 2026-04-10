@@ -1008,12 +1008,10 @@ function renderSingleHistoryItems(list, sessUser) {
     pagination.appendChild(pageInfo);
     pagination.appendChild(btnNext);
     h.appendChild(pagination);
-  }
-}
-
   window.renderSingleHistory = renderSingleHistory;
 
 async function renderGroupHistory() {
+  console.log("=== INICIANDO RENDER GROUP HISTORY ===");
   const key = "decodevin.groupHistory";
   let list = JSON.parse(localStorage.getItem(key) || "[]");
   const sessUser = JSON.parse(localStorage.getItem("dvb_user") || "null");
@@ -1074,7 +1072,28 @@ async function renderGroupHistory() {
     }
   }
 
+  // Debug: verificar lista antes de deduplicar
+  console.log("[renderGroupHistory] Debug - Lista ANTES de dedupe:", {
+    totalItems: list.length,
+    fleets: list.map(item => item.fleetName).filter(Boolean)
+  });
+
   list = dedupeGroupHistoryList(list);
+
+  // Debug: verificar lista depois de deduplicar
+  console.log("[renderGroupHistory] Debug - Lista DEPOIS de dedupe:", {
+    totalItems: list.length,
+    fleets: list.map(item => item.fleetName).filter(Boolean)
+  });
+
+  // Debug: verificar estado para usuários não-admin
+  console.log("[renderGroupHistory] Debug - Estado atual:", {
+    sessUser,
+    token: !!token,
+    listLength: list.length,
+    isAdmin: sessUser?.admin || false,
+    hasDvbHistoricoUsuarioGet: typeof window.dvbHistoricoUsuarioGet === "function"
+  });
 
   const h = el("groupHistory");
   if (!h) return;
@@ -1212,6 +1231,20 @@ async function renderGroupHistory() {
 
   h.appendChild(searchContainer);
 
+  // Debug: verificar se os filtros estão visíveis no DOM
+  setTimeout(() => {
+    console.log("[renderGroupHistory] Debug - Verificando visibilidade dos filtros:");
+    ['historyFilterFleet', 'historyFilterBrand', 'historyFilterModel', 'historyFilterSubModel', 'historyFilterYear'].forEach(id => {
+      const element = document.getElementById(id);
+      console.log(`[renderGroupHistory] Debug - Filtro ${id}:`, {
+        exists: !!element,
+        visible: element ? element.offsetParent !== null : false,
+        optionsCount: element ? element.options.length : 0,
+        hasOnChange: element ? element.onchange !== null : false
+      });
+    });
+  }, 100);
+
   // Popular filtros do histórico
   const hFleets = new Set();
   const hBrands = new Set();
@@ -1219,13 +1252,37 @@ async function renderGroupHistory() {
   const hSubModels = new Set();
   const hYears = new Set();
 
+  console.log("[renderGroupHistory] Debug - Iniciando população de filtros com", list.length, "itens");
+
+  // Debug: mostrar todas as frotas encontradas
+  console.log("[renderGroupHistory] Debug - Todas as frotas no histórico:", list.map(item => ({
+    fleetName: item.fleetName,
+    hasVins: !!(item.vins && item.vins.trim()),
+    hasPlates: !!(item.plates && item.plates.trim()),
+    fromServer: !!item.fromServer,
+    serverId: item.serverId
+  })));
+
   const getOrExtractMeta = (item) => {
-    if (item.meta && (item.meta.brands?.length > 0 || item.meta.models?.length > 0)) return item.meta;
+    if (item.meta && (item.meta.brands?.length > 0 || item.meta.models?.length > 0)) {
+      console.log("[META] Usando metadata existente para frota:", item.fleetName, item.meta);
+      return item.meta;
+    }
+    
+    console.log("[META] Extraindo metadata para frota:", item.fleetName, {
+      hasServerMeta: !!item.meta,
+      serverMeta: item.meta,
+      vinsCount: (item.vins || "").split(/[\n,]/).filter(Boolean).length
+    });
+    
     const brands = new Set();
     const models = new Set();
     const submodels = new Set();
     const years = new Set();
     const vins = String(item.vins || "").split(/[\n,]/).filter(Boolean).slice(0, 5);
+    
+    console.log("[META] Processando VINs:", vins);
+    
     vins.forEach(v => {
       const vin = v.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
       if (vin.length >= 3 && window.currentDecoder) {
@@ -1233,20 +1290,50 @@ async function renderGroupHistory() {
           const res = window.currentDecoder.decode(vin);
           const mockItem = { result: res, fabricante: res.manufacturerName };
           const tech = getTechnicalData(mockItem);
-          if (tech.brand) brands.add(tech.brand);
-          if (tech.model) models.add(tech.model);
-          if (tech.submodel) submodels.add(tech.submodel);
-          if (tech.year) years.add(tech.year);
-        } catch (e) {}
+          
+          console.log("[META] VIN decodificado:", vin, {
+            manufacturer: res.manufacturerName,
+            tech: tech
+          });
+          
+          if (tech.brand) {
+            brands.add(tech.brand);
+            console.log("[META] Brand adicionado:", tech.brand);
+          }
+          if (tech.model) {
+            models.add(tech.model);
+            console.log("[META] Model adicionado:", tech.model);
+          }
+          if (tech.submodel) {
+            submodels.add(tech.submodel);
+            console.log("[META] Submodel adicionado:", tech.submodel);
+          }
+          if (tech.year) {
+            years.add(tech.year);
+            console.log("[META] Year adicionado:", tech.year);
+          }
+        } catch (e) {
+          console.log("[META] Erro ao decodificar VIN:", vin, e);
+        }
+      } else {
+        console.log("[META] VIN inválido ou decoder não disponível:", vin);
       }
     });
+    
     const extracted = { brands: Array.from(brands), models: Array.from(models), submodels: Array.from(submodels), years: Array.from(years) };
+    console.log("[META] Metadata extraída para frota", item.fleetName, ":", extracted);
+    
     item.meta = extracted; 
     return extracted;
   };
 
   list.forEach(item => {
-    if (item.fleetName) hFleets.add(item.fleetName);
+    if (item.fleetName) {
+      console.log("[FROTA] Encontrada:", item.fleetName);
+      hFleets.add(item.fleetName);
+    } else {
+      console.log("[FROTA] Item sem nome de frota");
+    }
     const meta = getOrExtractMeta(item);
     (meta.brands || []).forEach(b => hBrands.add(normalizeBrand(b)));
     (meta.models || []).forEach(m => { if (m) hModels.add(String(m).trim().toUpperCase()); });
@@ -1254,8 +1341,19 @@ async function renderGroupHistory() {
     (meta.years || []).forEach(y => hYears.add(y));
   });
 
+  console.log("[renderGroupHistory] Debug - Filtros populados:", {
+    hFleets: Array.from(hFleets),
+    hBrands: Array.from(hBrands),
+    hModels: Array.from(hModels),
+    hSubModels: Array.from(hSubModels),
+    hYears: Array.from(hYears)
+  });
+
   const updateHistorySelect = (sel, values, currentVal = "") => {
-    if (!sel) return;
+    if (!sel) {
+      console.log("[updateHistorySelect] Debug - Elemento select não encontrado");
+      return;
+    }
     const defaultLabel = (sel.id === "historyFilterYear" ? "Ano (Todos)" : (sel.id === "historyFilterModel" ? "Modelo (Todos)" : (sel.id === "historyFilterSubModel" ? "Submodelo (Todos)" : (sel.id === "historyFilterFleet" ? "Frota (Todas)" : "Montadora (Todas)"))));
     sel.innerHTML = '<option value="">' + defaultLabel + '</option>';
     const isYearField = (sel.id && sel.id.includes("Year"));
@@ -1275,10 +1373,19 @@ async function renderGroupHistory() {
       }
       return String(a).localeCompare(String(b));
     });
+    
+    console.log("[updateHistorySelect] Debug - Atualizando filtro:", {
+      filterId: sel.id,
+      valuesCount: sortedValues.length,
+      values: sortedValues
+    });
+    
     sortedValues.forEach(v => {
       const opt = document.createElement("option"); opt.value = v; opt.textContent = v; sel.appendChild(opt);
     });
     if (currentVal && Array.from(labels).some(l => l === currentVal.toUpperCase())) sel.value = currentVal.toUpperCase();
+    
+    console.log("[updateHistorySelect] Debug - Filtro atualizado, options count:", sel.options.length);
   };
 
   const applyHistoryFilters = (rebuildSelects = false) => {
