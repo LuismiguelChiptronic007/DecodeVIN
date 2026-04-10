@@ -1094,7 +1094,7 @@ async function renderGroupHistory() {
       const res = await window.dvbHistoricoUsuarioGet();
       if (gen !== groupHistoryFetchGen) return;
       if (res && res.ok && Array.isArray(res.group) && res.group.length > 0) {
-        list = res.group.map(g => ({
+        const serverHistory = res.group.map(g => ({
           vins: String(g.vins || ""),
           plates: String(g.plates || ""),
           fleetName: String(g.fleetName || ""),
@@ -1104,6 +1104,9 @@ async function renderGroupHistory() {
           auditOnly: false,
           meta: g.meta || null
         }));
+
+        // Preserve any local history items while favoring server results
+        list = [...list, ...serverHistory];
       }
     } catch (_) {
       if (gen !== groupHistoryFetchGen) return;
@@ -1310,13 +1313,47 @@ async function renderGroupHistory() {
       console.log("[META] Usando metadata existente para frota:", item.fleetName, item.meta);
       return item.meta;
     }
-    
-    console.log("[META] Extraindo metadata para frota:", item.fleetName, {
-      hasServerMeta: !!item.meta,
-      serverMeta: item.meta,
-      vinsCount: (item.vins || "").split(/[\n,]/).filter(Boolean).length
-    });
-    
+
+    const normalizeMetaObject = (metaObj) => {
+      const brands = Array.isArray(metaObj.brands) ? metaObj.brands : (metaObj.brand ? [metaObj.brand] : []);
+      const models = Array.isArray(metaObj.models) ? metaObj.models : (metaObj.model ? [metaObj.model] : []);
+      const submodels = Array.isArray(metaObj.submodels) ? metaObj.submodels : (metaObj.submodel ? [metaObj.submodel] : []);
+      const years = Array.isArray(metaObj.years) ? metaObj.years : (metaObj.year ? [metaObj.year] : []);
+      return {
+        brands: brands.map(b => normalizeBrand(b)).filter(Boolean),
+        models: models.map(m => String(m).trim().toUpperCase()).filter(Boolean),
+        submodels: submodels.map(s => String(s).trim().toUpperCase()).filter(Boolean),
+        years: years.map(y => String(y).trim()).filter(Boolean)
+      };
+    };
+
+    if (item.meta) {
+      if (typeof item.meta === 'string') {
+        try {
+          const parsedMeta = JSON.parse(item.meta);
+          if (parsedMeta && typeof parsedMeta === 'object') {
+            const extractedMeta = normalizeMetaObject(parsedMeta);
+            if (extractedMeta.brands.length || extractedMeta.models.length || extractedMeta.submodels.length || extractedMeta.years.length) {
+              item.meta = extractedMeta;
+              console.log("[META] Parsed string meta para frota:", item.fleetName, extractedMeta);
+              return extractedMeta;
+            }
+          }
+        } catch (e) {
+          console.log("[META] Erro ao parsear meta string:", e);
+        }
+      }
+
+      if (typeof item.meta === 'object' && !Array.isArray(item.meta)) {
+        const extractedMeta = normalizeMetaObject(item.meta);
+        if (extractedMeta.brands.length || extractedMeta.models.length || extractedMeta.submodels.length || extractedMeta.years.length) {
+          item.meta = extractedMeta;
+          console.log("[META] Normalizando metadata existente para frota:", item.fleetName, extractedMeta);
+          return extractedMeta;
+        }
+      }
+    }
+
     const brands = new Set();
     const models = new Set();
     const submodels = new Set();
@@ -1342,8 +1379,8 @@ async function renderGroupHistory() {
       }
     }
     
-    // Process up to 50 VINs (increased from 10)
-    vinsToProcess = vinsToProcess.slice(0, 50);
+    // Process up to a larger batch of VINs, mas não tudo de uma vez para evitar lentidão.
+    vinsToProcess = vinsToProcess.slice(0, 150);
     
     console.log("[META] Processando VINs:", vinsToProcess);
     
