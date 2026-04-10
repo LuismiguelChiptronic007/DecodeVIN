@@ -1072,8 +1072,6 @@ async function renderGroupHistory() {
     } catch (_) {
       if (gen !== groupHistoryFetchGen) return;
     }
-  } else if (gen !== groupHistoryFetchGen) {
-    return;
   }
 
   list = dedupeGroupHistoryList(list);
