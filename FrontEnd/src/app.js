@@ -1628,15 +1628,54 @@ function renderGroupHistoryItems(list, sessUser) {
           console.warn("[History] window.validateGroupForm não está definida!");
         }
         
+        // Check if this fleet has already been decoded
+        const currentFleetName = fleetNameValue;
+        const isAlreadyDecoded = currentFleetName && window.decodedFleets && window.decodedFleets.has(currentFleetName);
+        
         // Garante que o botão esteja habilitado para o clique programático
-        console.log("[History] Habilitando bGroup e disparando clique...");
-        bGroup.disabled = false; 
-        
-        // Limpa resultados anteriores
-        const gResults = el("groupResults");
-        if (gResults) gResults.innerHTML = "";
-        
-        bGroup.click();
+        console.log("[History] Frota já decodificada?", isAlreadyDecoded);
+        if (!isAlreadyDecoded) {
+          console.log("[History] Habilitando bGroup e disparando clique...");
+          bGroup.disabled = false; 
+          
+          // Limpa resultados anteriores
+          const gResults = el("groupResults");
+          if (gResults) gResults.innerHTML = "";
+          
+          bGroup.click();
+        } else {
+          console.log("[History] Frota já foi decodificada, bloqueando campos...");
+          
+          // Bloqueia o campo de nome da frota
+          if (fleetEl) {
+            fleetEl.disabled = true;
+            fleetEl.style.backgroundColor = "var(--bg)";
+            fleetEl.style.cursor = "not-allowed";
+            fleetEl.title = "Esta frota já foi decodificada anteriormente";
+          }
+          
+          // Bloqueia os campos de entrada de VIN e placas
+          if (gInput) {
+            gInput.disabled = true;
+            gInput.style.backgroundColor = "var(--bg)";
+            gInput.style.cursor = "not-allowed";
+          }
+          if (gPlateInput) {
+            gPlateInput.disabled = true;
+            gPlateInput.style.backgroundColor = "var(--bg)";
+            gPlateInput.style.cursor = "not-allowed";
+          }
+          
+          // Garante que o botão esteja desabilitado
+          bGroup.disabled = true;
+          bGroup.textContent = "Frota já decodificada";
+          bGroup.title = "Esta frota já foi decodificada anteriormente";
+          
+          // Mostra mensagem informativa
+          if (typeof showToast === "function") {
+            showToast("Esta frota já foi decodificada anteriormente. Os campos foram bloqueados para evitar duplicação.", "info");
+          }
+        }
       }, 600); 
     };
 
@@ -2980,6 +3019,8 @@ window.renderGroupResults = renderGroupResults;
 window.openModal = openModal;
 
 async function main() {
+  // Global variable to track decoded fleets to prevent re-decoding
+  window.decodedFleets = new Set();
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -3303,12 +3344,39 @@ async function main() {
 
       if (!keepInputs) {
         const fInput = el("fleetName");
-        if (fInput) fInput.value = "";
-        [vinInputSingle, plateInputSingle, gInput, gPlateInput].forEach(e => { if (e) e.value = ""; });
+        if (fInput) {
+          fInput.value = "";
+          fInput.disabled = false;
+          fInput.style.backgroundColor = "";
+          fInput.style.cursor = "";
+          fInput.title = "";
+        }
+        [vinInputSingle, plateInputSingle, gInput, gPlateInput].forEach(e => { 
+          if (e) {
+            e.value = "";
+            if (e === gInput || e === gPlateInput) {
+              e.disabled = false;
+              e.style.backgroundColor = "";
+              e.style.cursor = "";
+            }
+          }
+        });
         window.currentGroupResults = null;
         window.currentSingleResult = null;
         window.lastGroupLotFingerprint = null;
         window.lastSingleFingerprint = null;
+        
+        // Reset decode button text when clearing inputs
+        const gBtn = el("btnGroupDecode");
+        if (gBtn) {
+          gBtn.textContent = "Decodificar Grupo";
+          gBtn.title = "";
+        }
+        const btnDecodeSingle = el("btnDecodeSingle");
+        if (btnDecodeSingle) {
+          btnDecodeSingle.textContent = "Decodificar";
+          btnDecodeSingle.disabled = true;
+        }
       }
       if (typeof window.validateGroupForm === "function") window.validateGroupForm();
     };
@@ -3926,7 +3994,6 @@ async function main() {
         currentTotal += line.length + 1;
       }
 
-      gPlateInput.value = newVal;
       gPlateInput.setSelectionRange(pos + offset, pos + offset);
       validateGBtn();
     });
@@ -3935,6 +4002,18 @@ async function main() {
       const fleetOk = (el("fleetName")?.value || "").trim().length > 0;
       const v = gInput.value.trim();
       const p = gPlateInput.value.trim();
+      const currentFleetName = (el("fleetName")?.value || "").trim();
+      
+      // Debug: verificar estado da variável global
+      console.log("[validateGBtn] Verificando frota:", {
+        currentFleetName,
+        decodedFleets: window.decodedFleets ? Array.from(window.decodedFleets) : 'não inicializado',
+        isAlreadyDecoded: currentFleetName && window.decodedFleets && window.decodedFleets.has(currentFleetName)
+      });
+      
+      // Check if this fleet has already been decoded
+      const isAlreadyDecoded = currentFleetName && window.decodedFleets && window.decodedFleets.has(currentFleetName);
+      
       if (combined.checked) {
         const vl = v.split("\n").map(x => x.trim()).filter(Boolean);
         const pl = p.split("\n").map(x => x.trim()).filter(Boolean);
@@ -3943,9 +4022,19 @@ async function main() {
           vl.length !== pl.length ||
           !vl.every(x => x.length === 17) ||
           !pl.every(x => x.length >= 6) ||
-          !fleetOk;
+          !fleetOk ||
+          isAlreadyDecoded;
       } else {
-        gBtn.disabled = (!v && !p) || !fleetOk;
+        gBtn.disabled = (!v && !p) || !fleetOk || isAlreadyDecoded;
+      }
+      
+      // Update button text to show if it's blocked
+      if (isAlreadyDecoded && gBtn) {
+        gBtn.textContent = "Frota já decodificada";
+        gBtn.title = "Esta frota já foi decodificada anteriormente";
+      } else if (gBtn) {
+        gBtn.textContent = "Decodificar Grupo";
+        gBtn.title = "";
       }
     };
     window.validateGroupForm = validateGBtn;
@@ -4066,6 +4155,12 @@ async function main() {
 
           // Salva no histórico somente após concluir, para ter todos os metadados
           addGroupHistoryEntry(gInput.value, gPlateInput.value, window.currentGroupResults);
+
+          // Adiciona a frota ao conjunto de frotas decodificadas
+          const fleetNameDecoded = (el('fleetName')?.value || '').trim();
+          if (fleetNameDecoded) {
+            window.decodedFleets.add(fleetNameDecoded);
+          }
 
           const fleetNameParaBanco = (el('fleetName')?.value || '').trim(); 
           // Tenta pegar o history_id que foi salvo ao chamar addGroupHistoryEntry 
