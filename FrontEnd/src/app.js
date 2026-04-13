@@ -586,6 +586,8 @@ const HISTORY_PAGE_SIZE = 10;
 let singleHistoryFetchGen = 0;
 let groupHistoryFetchGen = 0;
 
+const _historyDisplayCache = new Map();
+
 function addHistoryEntry(input, plateOverride = "") {
   const key = "decodevin.history";
   const pInput = el("plateInputSingle");
@@ -641,8 +643,26 @@ function addGroupHistoryEntry(vins, plates, results = []) {
     // Garante que dados da API também sejam incluídos nos metadados
     const api = item.apiResult || {};
     if (api.marca) brands.add(normalizeBrand(api.marca));
-    if (api.modelo) models.add(String(api.modelo).trim().toUpperCase());
-    if (api.versao) submodels.add(String(api.versao).trim().toUpperCase());
+    // Corrigido: split correto antes de adicionar ao meta
+    if (api.modelo || api.versao) {
+      const rawMod = String(api.modelo || "").trim().toUpperCase();
+      const rawVer = String(api.versao || "").trim().toUpperCase();
+      if (rawVer) {
+        // Tem versão separada — modelo é a base sem a versão
+        let base = rawMod;
+        if (base.endsWith(rawVer)) base = base.slice(0, base.length - rawVer.length).trim();
+        const parts = base.split(/\s+/).filter(Boolean);
+        const m = parts.shift() || "";
+        const suffix = parts.join(" ");
+        if (m) models.add(m);
+        const sub = [suffix, rawVer].filter(Boolean).join(" ").trim();
+        if (sub) submodels.add(sub);
+      } else if (rawMod) {
+        const split = splitModelSubmodel(rawMod, "", normalizeBrand(api.marca || ""));
+        if (split.model) models.add(split.model);
+        if (split.submodel) submodels.add(split.submodel);
+      }
+    }
     const anoFab = api.ano || api.ano_fabricacao || '';
     const anoMod = api.ano_modelo || '';
     const ano = (anoFab && anoMod && anoFab !== anoMod)
@@ -692,6 +712,7 @@ function addGroupHistoryEntry(vins, plates, results = []) {
   }
   pushLocalOnly();
   if (fInput) fInput.value = "";
+  _historyDisplayCache.clear();
 }
 
 function renderHistory() {
@@ -1023,6 +1044,55 @@ function renderSingleHistoryItems(list, sessUser) {
   }
 }
 
+function normalizeMetaObject(metaObj) {
+  if (!metaObj || typeof metaObj !== 'object') return { brands: [], models: [], submodels: [], years: [] };
+  const brands = Array.isArray(metaObj.brands) ? metaObj.brands : (metaObj.brand ? [metaObj.brand] : []);
+  const rawModels = Array.isArray(metaObj.models) ? metaObj.models : (metaObj.model ? [metaObj.model] : []);
+  const rawSubmodels = Array.isArray(metaObj.submodels) ? metaObj.submodels : (metaObj.submodel ? [metaObj.submodel] : []);
+  const years = Array.isArray(metaObj.years) ? metaObj.years : (metaObj.year ? [metaObj.year] : []);
+
+  const models = new Set();
+  const submodels = new Set();
+
+  rawModels.forEach(m => {
+    const mStr = String(m || "").trim().toUpperCase();
+    if (!mStr) return;
+    const split = splitModelSubmodel(mStr, "", "");
+    if (split.model) models.add(split.model);
+    if (split.submodel) submodels.add(split.submodel);
+  });
+
+  rawSubmodels.forEach(s => {
+    const sStr = String(s || "").trim().toUpperCase();
+    if (sStr) submodels.add(sStr);
+  });
+
+  return {
+    brands: brands.map(b => normalizeBrand(b)).filter(Boolean),
+    models: Array.from(models).filter(Boolean),
+    submodels: Array.from(submodels).filter(Boolean),
+    years: years.map(y => String(y).trim()).filter(Boolean)
+  };
+}
+
+function normalizeHistoryMeta(item) {
+  if (!item || item.meta == null) return null;
+  if (typeof item.meta === 'string') {
+    try {
+      const parsed = JSON.parse(item.meta);
+      item.meta = normalizeMetaObject(parsed);
+      return item.meta;
+    } catch (_) {
+      return null;
+    }
+  }
+  if (typeof item.meta === 'object' && !Array.isArray(item.meta)) {
+    item.meta = normalizeMetaObject(item.meta);
+    return item.meta;
+  }
+  return null;
+}
+
 async function renderGroupHistory() {
   console.log("=== INICIANDO RENDER GROUP HISTORY ===");
   console.log("[renderGroupHistory] Chamada da função - Início");
@@ -1158,427 +1228,272 @@ async function renderGroupHistory() {
   }
 
   const searchContainer = document.createElement("div");
-  searchContainer.style.cssText = "display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px;";
+  searchContainer.style.cssText = "display:flex;flex-direction:column;gap:8px;margin-bottom:15px;";
 
+  // ── Linha de selects ──────────────────────────────────────────
   const filterRow = document.createElement("div");
-  filterRow.style.cssText = "display: flex; gap: 8px; flex-wrap: wrap;";
+  filterRow.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;";
 
   const createHistorySelect = (id, defaultLabel) => {
     const s = document.createElement("select");
     s.id = id;
-    s.style.cssText = "flex: 1; min-width: 120px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px; color: var(--text); font-size: 12px; outline: none; cursor: pointer;";
+    s.style.cssText = "flex:1;min-width:120px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:12px;outline:none;cursor:pointer;";
     s.innerHTML = '<option value="">' + defaultLabel + '</option>';
     return s;
   };
 
-  const hFilterFleet = createHistorySelect("historyFilterFleet", "Frota (Todas)");
-  const hFilterBrand = createHistorySelect("historyFilterBrand", "Montadora (Todas)");
-  const hFilterModel = createHistorySelect("historyFilterModel", "Modelo (Todos)");
+  const hFilterFleet    = createHistorySelect("historyFilterFleet",    "Frota (Todas)");
+  const hFilterBrand    = createHistorySelect("historyFilterBrand",    "Montadora (Todas)");
+  const hFilterModel    = createHistorySelect("historyFilterModel",    "Modelo (Todos)");
   const hFilterSubModel = createHistorySelect("historyFilterSubModel", "Submodelo (Todos)");
-  const hFilterYear = createHistorySelect("historyFilterYear", "Ano (Todos)");
+  const hFilterYear     = createHistorySelect("historyFilterYear",     "Ano (Todos)");
 
   filterRow.appendChild(hFilterFleet);
   filterRow.appendChild(hFilterBrand);
   filterRow.appendChild(hFilterModel);
   filterRow.appendChild(hFilterSubModel);
   filterRow.appendChild(hFilterYear);
-
   searchContainer.appendChild(filterRow);
 
-  // ============================================================ 
- // BLOCO 3 — Botão "Pesquisar Frota" na seção do histórico 
- // Cole dentro da função renderGroupHistory(), 
- // logo APÓS a linha: searchContainer.appendChild(filterRow); 
- // (antes de: h.appendChild(searchContainer);) 
- // ============================================================ 
-  
- // ----- INÍCIO DO TRECHO A INSERIR EM renderGroupHistory() ----- 
-  
- const btnRowFrota = document.createElement('div'); 
- btnRowFrota.style.cssText = 'display:flex;justify-content:flex-end;margin-top:6px;'; 
-  
- const btnPesquisarFrota = document.createElement('button'); 
- btnPesquisarFrota.id        = 'btnPesquisarFrota'; 
- btnPesquisarFrota.className = 'btn-page'; 
- btnPesquisarFrota.style.cssText = [ 
-   'display:flex', 
-   'align-items:center', 
-   'gap:6px', 
-   'padding:9px 18px', 
-   'background:linear-gradient(135deg, var(--accent-2), var(--accent))', 
-   'color:#000', 
-   'font-weight:700', 
-   'border:none', 
-   'border-radius:10px', 
-   'cursor:pointer', 
-   'font-size:13px', 
-   'transition:opacity .2s', 
- ].join(';'); 
- btnPesquisarFrota.innerHTML = '🔍 Pesquisar Frota'; 
-  
- btnPesquisarFrota.onmouseenter = () => btnPesquisarFrota.style.opacity = '.85'; 
- btnPesquisarFrota.onmouseleave = () => btnPesquisarFrota.style.opacity = '1'; 
-  
- btnPesquisarFrota.onclick = () => { 
-   const filtros = { 
-     montadora:  (document.getElementById('historyFilterBrand')    || {}).value || '', 
-     modelo:     (document.getElementById('historyFilterModel')    || {}).value || '', 
-     submodelo:  (document.getElementById('historyFilterSubModel') || {}).value || '', 
-     ano:        (document.getElementById('historyFilterYear')     || {}).value || '', 
-     fleet_name: (document.getElementById('historyFilterFleet')    || {}).value || '', 
-   }; 
+  // ── Linha de botões ───────────────────────────────────────────
+  const btnRowFrota = document.createElement("div");
+  btnRowFrota.style.cssText = "display:flex;justify-content:flex-end;gap:10px;margin-top:6px;";
 
-   // Pega os IDs dos lotes que estão visíveis após o filtro do histórico
-   const visibleHistoryItems = Array.from(document.querySelectorAll('#groupHistoryList .history-row'))
-     .map(row => row.getAttribute('data-id'))
-     .filter(Boolean);
-   
-   if (visibleHistoryItems.length > 0) {
-     filtros.history_ids = visibleHistoryItems.join(',');
-   }
-  
-   if (typeof window.abrirPesquisaFrota === 'function') { 
-     window.abrirPesquisaFrota(filtros); 
-   } 
- }; 
+  const btnLimparFiltros = document.createElement("button");
+  btnLimparFiltros.className = "btn-page";
+  btnLimparFiltros.innerHTML = "🧹 Limpar Filtros";
+  btnLimparFiltros.style.cssText = "padding:9px 18px;background:var(--card);color:var(--text);font-weight:600;border:1px solid var(--border);border-radius:10px;cursor:pointer;font-size:13px;transition:all .2s;";
 
- const btnLimparFiltros = document.createElement('button');
- btnLimparFiltros.id        = 'btnLimparFiltrosHistorico';
- btnLimparFiltros.className = 'btn-page';
- btnLimparFiltros.style.cssText = [
-   'display:flex',
-   'align-items:center',
-   'gap:6px',
-   'padding:9px 18px',
-   'background:var(--card)',
-   'color:var(--text)',
-   'font-weight:600',
-   'border:1px solid var(--border)',
-   'border-radius:10px',
-   'cursor:pointer',
-   'font-size:13px',
-   'margin-right:10px',
-   'transition:all .2s',
- ].join(';');
- btnLimparFiltros.innerHTML = '🧹 Limpar Filtros';
-
- btnLimparFiltros.onclick = () => {
-   [hFilterFleet, hFilterBrand, hFilterModel, hFilterSubModel, hFilterYear].forEach(s => s.value = "");
-   renderGroupHistory(); // Recarrega a lista sem filtros
- };
-  
- btnRowFrota.appendChild(btnLimparFiltros);
- btnRowFrota.appendChild(btnPesquisarFrota); 
- searchContainer.appendChild(btnRowFrota);   // <- já existe a variável searchContainer em renderGroupHistory 
-  
- // ----- FIM DO TRECHO A INSERIR EM renderGroupHistory() ----- 
-
-  h.appendChild(searchContainer);
-
-  // Debug: verificar se os filtros estão visíveis no DOM
-  setTimeout(() => {
-    console.log("[renderGroupHistory] Debug - Verificando visibilidade dos filtros:");
-    ['historyFilterFleet', 'historyFilterBrand', 'historyFilterModel', 'historyFilterSubModel', 'historyFilterYear'].forEach(id => {
-      const element = document.getElementById(id);
-      console.log(`[renderGroupHistory] Debug - Filtro ${id}:`, {
-        exists: !!element,
-        visible: element ? element.offsetParent !== null : false,
-        optionsCount: element ? element.options.length : 0,
-        hasOnChange: element ? element.onchange !== null : false
-      });
-    });
-  }, 100);
-
-  // Popular filtros do histórico
-  const hFleets = new Set();
-  const hBrands = new Set();
-  const hModels = new Set();
-  const hSubModels = new Set();
-  const hYears = new Set();
-
-  console.log("[renderGroupHistory] Debug - Iniciando população de filtros com", list.length, "itens");
-
-  // Debug: mostrar todas as frotas encontradas
-  console.log("[renderGroupHistory] Debug - Todas as frotas no histórico:", list.map(item => ({
-    fleetName: item.fleetName,
-    hasVins: !!(item.vins && item.vins.trim()),
-    hasPlates: !!(item.plates && item.plates.trim()),
-    fromServer: !!item.fromServer,
-    serverId: item.serverId
-  })));
-
-  const getOrExtractMeta = (item) => {
-    // Check if we already have valid metadata
-    if (item.meta && (item.meta.brands?.length > 0 || item.meta.models?.length > 0)) {
-      console.log("[META] Usando metadata existente para frota:", item.fleetName, item.meta);
-      return item.meta;
-    }
-
-    const normalizeMetaObject = (metaObj) => {
-      const brands = Array.isArray(metaObj.brands) ? metaObj.brands : (metaObj.brand ? [metaObj.brand] : []);
-      const models = Array.isArray(metaObj.models) ? metaObj.models : (metaObj.model ? [metaObj.model] : []);
-      const submodels = Array.isArray(metaObj.submodels) ? metaObj.submodels : (metaObj.submodel ? [metaObj.submodel] : []);
-      const years = Array.isArray(metaObj.years) ? metaObj.years : (metaObj.year ? [metaObj.year] : []);
-      return {
-        brands: brands.map(b => normalizeBrand(b)).filter(Boolean),
-        models: models.map(m => String(m).trim().toUpperCase()).filter(Boolean),
-        submodels: submodels.map(s => String(s).trim().toUpperCase()).filter(Boolean),
-        years: years.map(y => String(y).trim()).filter(Boolean)
-      };
+  const btnPesquisarFrota = document.createElement("button");
+  btnPesquisarFrota.id = "btnPesquisarFrota";
+  btnPesquisarFrota.className = "btn-page";
+  btnPesquisarFrota.innerHTML = "🔍 Pesquisar Frota";
+  btnPesquisarFrota.style.cssText = "display:flex;align-items:center;gap:6px;padding:9px 18px;background:linear-gradient(135deg,var(--accent-2),var(--accent));color:#000;font-weight:700;border:none;border-radius:10px;cursor:pointer;font-size:13px;transition:opacity .2s;";
+  btnPesquisarFrota.onmouseenter = () => btnPesquisarFrota.style.opacity = ".85";
+  btnPesquisarFrota.onmouseleave = () => btnPesquisarFrota.style.opacity = "1";
+  btnPesquisarFrota.onclick = () => {
+    const filtros = {
+      montadora:  hFilterBrand.value    || "",
+      modelo:     hFilterModel.value    || "",
+      submodelo:  hFilterSubModel.value || "",
+      ano:        hFilterYear.value     || "",
+      fleet_name: hFilterFleet.value    || "",
     };
-
-    if (item.meta) {
-      if (typeof item.meta === 'string') {
-        try {
-          const parsedMeta = JSON.parse(item.meta);
-          if (parsedMeta && typeof parsedMeta === 'object') {
-            const extractedMeta = normalizeMetaObject(parsedMeta);
-            if (extractedMeta.brands.length || extractedMeta.models.length || extractedMeta.submodels.length || extractedMeta.years.length) {
-              item.meta = extractedMeta;
-              console.log("[META] Parsed string meta para frota:", item.fleetName, extractedMeta);
-              return extractedMeta;
-            }
-          }
-        } catch (e) {
-          console.log("[META] Erro ao parsear meta string:", e);
-        }
-      }
-
-      if (typeof item.meta === 'object' && !Array.isArray(item.meta)) {
-        const extractedMeta = normalizeMetaObject(item.meta);
-        if (extractedMeta.brands.length || extractedMeta.models.length || extractedMeta.submodels.length || extractedMeta.years.length) {
-          item.meta = extractedMeta;
-          console.log("[META] Normalizando metadata existente para frota:", item.fleetName, extractedMeta);
-          return extractedMeta;
-        }
-      }
-    }
-
-    const brands = new Set();
-    const models = new Set();
-    const submodels = new Set();
-    const years = new Set();
-    
-    // Handle different VIN formats: server items, local items, and string metadata
-    let vinsToProcess = [];
-    
-    if (item.vins) {
-      vinsToProcess = String(item.vins).split(/[\n,]/).filter(Boolean);
-    } else if (item.results && Array.isArray(item.results)) {
-      // Fallback for items with results array
-      vinsToProcess = item.results.map(r => r.vin || r.chassi || r.input).filter(Boolean);
-    } else if (typeof item.meta === 'string') {
-      // Fallback for string metadata
-      try {
-        const parsedMeta = JSON.parse(item.meta);
-        if (parsedMeta.vins) {
-          vinsToProcess = String(parsedMeta.vins).split(/[\n,]/).filter(Boolean);
-        }
-      } catch (e) {
-        console.log("[META] Erro ao parsear meta string:", e);
-      }
-    }
-    
-    // Process up to a larger batch of VINs, mas não tudo de uma vez para evitar lentidão.
-    vinsToProcess = vinsToProcess.slice(0, 150);
-    
-    console.log("[META] Processando VINs:", vinsToProcess);
-    
-    vinsToProcess.forEach(v => {
-      const vin = v.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-      // Accept partial VINs (8+ chars) or full VINs (17 chars)
-      if (vin.length >= 8 && window.currentDecoder) {
-        try {
-          const res = window.currentDecoder.decode(vin);
-          const mockItem = { result: res, fabricante: res.manufacturerName };
-          const tech = getTechnicalData(mockItem);
-          
-          console.log("[META] VIN decodificado:", vin, {
-            manufacturer: res.manufacturerName,
-            tech: tech
-          });
-          
-          if (tech.brand && tech.brand !== 'UNKNOWN') {
-            brands.add(tech.brand);
-            console.log("[META] Brand adicionado:", tech.brand);
-          }
-          if (tech.model && tech.model !== 'UNKNOWN') {
-            models.add(tech.model);
-            console.log("[META] Model adicionado:", tech.model);
-          }
-          if (tech.submodel && tech.submodel !== 'UNKNOWN') {
-            submodels.add(tech.submodel);
-            console.log("[META] Submodel adicionado:", tech.submodel);
-          }
-          if (tech.year && tech.year !== 'UNKNOWN') {
-            years.add(tech.year);
-            console.log("[META] Year adicionado:", tech.year);
-          }
-        } catch (e) {
-          console.log("[META] Erro ao decodificar VIN:", vin, e);
-        }
-      } else {
-        console.log("[META] VIN inválido ou decoder não disponível:", vin, {
-          length: vin.length,
-          hasDecoder: !!window.currentDecoder
-        });
-      }
-    });
-    
-    const extracted = { 
-      brands: Array.from(brands), 
-      models: Array.from(models), 
-      submodels: Array.from(submodels), 
-      years: Array.from(years) 
-    };
-    
-    console.log("[META] Metadata extraída para frota", item.fleetName, ":", extracted);
-    
-    // Persist the result to prevent reprocessing
-    item.meta = extracted;
-    
-    // Also persist to localStorage for server items
-    if (item.fromServer) {
-      try {
-        const key = "decodevin.groupHistory";
-        let list = JSON.parse(localStorage.getItem(key) || "[]");
-        const itemIndex = list.findIndex(i => i.serverId === item.serverId);
-        if (itemIndex >= 0) {
-          list[itemIndex].meta = extracted;
-          localStorage.setItem(key, JSON.stringify(list));
-          console.log("[META] Metadata persistida no localStorage para item do servidor");
-        }
-      } catch (e) {
-        console.log("[META] Erro ao persistir metadata:", e);
-      }
-    }
-    
-    return extracted;
+    const visibleIds = Array.from(document.querySelectorAll('#groupHistoryList .history-row'))
+      .map(r => r.getAttribute('data-id')).filter(Boolean);
+    if (visibleIds.length > 0) filtros.history_ids = visibleIds.join(',');
+    if (typeof window.abrirPesquisaFrota === 'function') window.abrirPesquisaFrota(filtros);
   };
 
-  list.forEach(item => {
-    if (item.fleetName) {
-      console.log("[FROTA] Encontrada:", item.fleetName);
-      hFleets.add(item.fleetName);
-    } else {
-      console.log("[FROTA] Item sem nome de frota");
-    }
-    const meta = getOrExtractMeta(item);
-    (meta.brands || []).forEach(b => hBrands.add(normalizeBrand(b)));
-    (meta.models || []).forEach(m => { if (m) hModels.add(String(m).trim().toUpperCase()); });
-    (meta.submodels || []).forEach(s => { if (s) hSubModels.add(String(s).trim().toUpperCase()); });
-    (meta.years || []).forEach(y => hYears.add(y));
-  });
+  btnRowFrota.appendChild(btnLimparFiltros);
+  btnRowFrota.appendChild(btnPesquisarFrota);
+  searchContainer.appendChild(btnRowFrota);
+  h.appendChild(searchContainer);
 
-  console.log("[renderGroupHistory] Debug - Filtros populados:", {
-    hFleets: Array.from(hFleets),
-    hBrands: Array.from(hBrands),
-    hModels: Array.from(hModels),
-    hSubModels: Array.from(hSubModels),
-    hYears: Array.from(hYears)
-  });
+  // ── Decodifica cada linha de VIN igual ao que aparece nos cards ──
+  const decodificarLinha = (vinLine) => {
+    const vin = String(vinLine || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (vin.length < 8 || !window.currentDecoder) return null;
+    try {
+      const res  = window.currentDecoder.decode(vin);
+      const tech = getTechnicalData({ result: res, fabricante: res.manufacturerName });
+      return {
+        brand:    tech.brand    || "",
+        model:    tech.model    || "",
+        submodel: tech.submodel || "",
+        year:     tech.year     || "",
+      };
+    } catch (_) { return null; }
+  };
 
-  const updateHistorySelect = (sel, values, currentVal = "") => {
-    if (!sel) {
-      console.log("[updateHistorySelect] Debug - Elemento select não encontrado");
-      return;
-    }
-    const defaultLabel = (sel.id === "historyFilterYear" ? "Ano (Todos)" : (sel.id === "historyFilterModel" ? "Modelo (Todos)" : (sel.id === "historyFilterSubModel" ? "Submodelo (Todos)" : (sel.id === "historyFilterFleet" ? "Frota (Todas)" : "Montadora (Todas)"))));
-    sel.innerHTML = '<option value="">' + defaultLabel + '</option>';
-    const isYearField = (sel.id && sel.id.includes("Year"));
-    const labels = new Set();
-    if (values) {
-      Array.from(values).forEach(v => {
-        if (!v) return;
-        const lbl = isYearField ? getYearLabel(v) : String(v).trim().toUpperCase();
-        if (lbl) labels.add(lbl);
+  // ── Extrai os valores que APARECEM nos cards de cada item do histórico ──
+  // Para cada item, varre linha a linha igual ao renderGroupHistoryItems faz.
+  const extrairValoresExibidos = (item) => {
+    const brands    = new Set();
+    const models    = new Set();
+    const submodels = new Set();
+    const years     = new Set();
+
+    const vinLines   = String(item.vins   || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const plateLines = String(item.plates || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const total      = Math.max(vinLines.length, plateLines.length);
+
+    for (let i = 0; i < total; i++) {
+      const vinLine   = (vinLines[i]   || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const plateLine = (plateLines[i] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+      // Mesma lógica de decodeVinDescription usada nos cards:
+      // 1. Resultados da sessão atual
+      const allResults = window.currentGroupResults || [];
+      const savedItem  = allResults.find(r => {
+        const rv = String(r.vin   || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const rp = String(r.placa || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        return (vinLine && rv === vinLine) || (plateLine && rp === plateLine);
       });
+
+      if (savedItem && savedItem.apiResult) {
+        const api    = savedItem.apiResult;
+        const tech   = getTechnicalData({ apiResult: api, fabricante: api.marca });
+        if (tech.brand)    brands.add(normalizeBrand(tech.brand));
+        if (tech.model)    models.add(tech.model.trim().toUpperCase());
+        if (tech.submodel) submodels.add(tech.submodel.trim().toUpperCase());
+        if (tech.year)     years.add(tech.year);
+        continue;
+      }
+
+      // 2. Cache do banco (fleet_vehicles)
+      const cacheKey = vinLine || plateLine;
+      if (cacheKey && window._fleetDbCache && window._fleetDbCache[cacheKey]) {
+        const c = window._fleetDbCache[cacheKey];
+        if (c.brand)    brands.add(normalizeBrand(c.brand));
+        if (c.model)    models.add(String(c.model    || "").trim().toUpperCase());
+        if (c.submodel) submodels.add(String(c.submodel || "").trim().toUpperCase());
+        if (c.year)     years.add(c.year);
+        continue;
+      }
+
+      // 3. Decoder local pelo VIN (mesmo fallback dos cards)
+      if (vinLine) {
+        const d = decodificarLinha(vinLine);
+        if (d) {
+          if (d.brand)    brands.add(normalizeBrand(d.brand));
+          if (d.model)    models.add(d.model.trim().toUpperCase());
+          if (d.submodel) submodels.add(d.submodel.trim().toUpperCase());
+          if (d.year)     years.add(d.year);
+        }
+      }
     }
-    const sortedValues = Array.from(labels).sort((a, b) => {
-      if (isYearField) {
-        const numA = parseInt(a, 10); const numB = parseInt(b, 10);
-        if (!isNaN(numA) && !isNaN(numB)) return numB - numA;
+
+    return {
+      brands:    Array.from(brands).filter(Boolean),
+      models:    Array.from(models).filter(Boolean),
+      submodels: Array.from(submodels).filter(Boolean),
+      years:     Array.from(years).filter(Boolean),
+    };
+  };
+
+  // ── Cache por item para não redecodificar a cada mudança de filtro ──
+  const getDisplayMeta = (item) => {
+    // Key robusta: usa serverId (único do servidor) ou combina ts + fleetName + início dos vins
+    const key = item.serverId
+      ? String(item.serverId)
+      : String(item.ts || "") + "|" + String(item.fleetName || "") + "|" + String(item.vins || "").slice(0, 30);
+
+    if (!_historyDisplayCache.has(key)) {
+      _historyDisplayCache.set(key, extrairValoresExibidos(item));
+    }
+    return _historyDisplayCache.get(key);
+  };
+
+  // ── Popula os Sets com os valores reais dos cards ─────────────
+  const hFleets    = new Set();
+  const hBrands    = new Set();
+  const hModels    = new Set();
+  const hSubModels = new Set();
+  const hYears     = new Set();
+
+  list.forEach(item => {
+    if (item.fleetName) hFleets.add(item.fleetName);
+    const d = getDisplayMeta(item);
+    d.brands.forEach(b    => hBrands.add(b));
+    d.models.forEach(m    => hModels.add(m));
+    d.submodels.forEach(s => hSubModels.add(s));
+    d.years.forEach(y     => hYears.add(y));
+  });
+
+  // ── Reconstrói select preservando seleção atual ───────────────
+  const rebuildSelect = (sel, values, isYear = false) => {
+    if (!sel) return;
+    const currentVal = sel.value;
+    const options = new Map();
+
+    Array.from(values).forEach(v => {
+      if (!v) return;
+      const raw = String(v).trim();
+      if (!raw) return;
+      if (isYear) {
+        const lbl = getYearLabel(raw);
+        if (lbl && !options.has(lbl)) options.set(lbl, raw);
+      } else {
+        const normalized = String(v).trim().toUpperCase();
+        if (normalized && !options.has(normalized)) options.set(normalized, normalized);
+      }
+    });
+
+    const sorted = Array.from(options.keys()).sort((a, b) => {
+      if (isYear) {
+        const nA = parseInt(a, 10), nB = parseInt(b, 10);
+        if (!isNaN(nA) && !isNaN(nB)) return nB - nA;
         return String(b).localeCompare(String(a));
       }
       return String(a).localeCompare(String(b));
     });
-    
-    console.log("[updateHistorySelect] Debug - Atualizando filtro:", {
-      filterId: sel.id,
-      valuesCount: sortedValues.length,
-      values: sortedValues
+
+    const defaultText = sel.options[0]?.textContent || "";
+    sel.innerHTML = '<option value="">' + defaultText + "</option>";
+    sorted.forEach(label => {
+      const opt = document.createElement("option");
+      opt.value = options.get(label);
+      opt.textContent = label;
+      sel.appendChild(opt);
     });
-    
-    sortedValues.forEach(v => {
-      const opt = document.createElement("option"); opt.value = v; opt.textContent = v; sel.appendChild(opt);
-    });
-    if (currentVal && Array.from(labels).some(l => l === currentVal.toUpperCase())) sel.value = currentVal.toUpperCase();
-    
-    console.log("[updateHistorySelect] Debug - Filtro atualizado, options count:", sel.options.length);
+    if (currentVal && Array.from(options.values()).includes(currentVal)) sel.value = currentVal;
   };
 
-  const applyHistoryFilters = (rebuildSelects = false) => {
-    const fFleet = hFilterFleet.value;
-    const fBrand = hFilterBrand.value;
-    const fModel = hFilterModel.value;
-    const fSubModel = hFilterSubModel.value;
-    const fYear = hFilterYear.value;
+  rebuildSelect(hFilterFleet,    hFleets,    false);
+  rebuildSelect(hFilterBrand,    hBrands,    false);
+  rebuildSelect(hFilterModel,    hModels,    false);
+  rebuildSelect(hFilterSubModel, hSubModels, false);
+  rebuildSelect(hFilterYear,     hYears,     true);
+
+  // ── Aplica filtros comparando com os mesmos valores dos cards ──
+  const applyHistoryFilters = () => {
+    const fFleet    = (hFilterFleet.value    || "").trim().toUpperCase();
+    const fBrand    = (hFilterBrand.value    || "").trim().toUpperCase();
+    const fModel    = (hFilterModel.value    || "").trim().toUpperCase();
+    const fSubModel = (hFilterSubModel.value || "").trim().toUpperCase();
+    const fYear     = (hFilterYear.value     || "").trim();
+    const fYearLabel = fYear ? getYearLabel(fYear) : "";
 
     const filtered = list.filter(item => {
-      const matchFleet = !fFleet || (item.fleetName || "").toUpperCase().includes(fFleet.toUpperCase());
-
-      if (!matchFleet) return false;
-
-      const meta = getOrExtractMeta(item);
-      if (fBrand && !(meta.brands || []).some(b => normalizeBrand(b) === fBrand)) return false;
-      // Ajuste para busca exata do modelo, evitando STRALIS aparecer quando busca por R
-      if (fModel && !(meta.models || []).some(m => String(m).trim().toUpperCase() === fModel.toUpperCase())) return false;
-      if (fSubModel && !(meta.submodels || []).some(s => String(s).trim().toUpperCase().includes(fSubModel.toUpperCase()))) return false;
-      if (fYear && !(meta.years || []).some(y => getYearLabel(y) === fYear)) return false;
-
+      if (fFleet && !(item.fleetName || "").toUpperCase().includes(fFleet)) return false;
+      const d = getDisplayMeta(item);
+      if (fBrand    && !d.brands.some(b    => normalizeBrand(b) === fBrand))                            return false;
+      if (fModel    && !d.models.some(m    => String(m).trim().toUpperCase() === fModel))               return false;
+      if (fSubModel && !d.submodels.some(s => String(s).trim().toUpperCase().includes(fSubModel)))      return false;
+      if (fYear     && !d.years.some(y     => getYearLabel(y) === fYearLabel))                          return false;
       return true;
     });
 
-    if (rebuildSelects) {
-      const newModels = new Set();
-      const newSubs = new Set();
-      const newYears = new Set();
-
-      filtered.forEach(item => {
-        const meta = item.meta || {};
-        (meta.models || []).forEach(m => { if (m) newModels.add(m); });
-        (meta.submodels || []).forEach(s => { if (s) newSubs.add(s); });
-        (meta.years || []).forEach(y => { if (y) newYears.add(y); });
-      });
-
-      updateHistorySelect(hFilterModel, newModels, fModel);
-      updateHistorySelect(hFilterSubModel, newSubs, fSubModel);
-      updateHistorySelect(hFilterYear, newYears, fYear);
-    }
-
+    currentGroupHistoryPage = 1;
     renderGroupHistoryItems(filtered, sessUser);
   };
 
-  updateHistorySelect(hFilterFleet, hFleets);
-  updateHistorySelect(hFilterBrand, hBrands);
-  updateHistorySelect(hFilterModel, hModels);
-  updateHistorySelect(hFilterSubModel, hSubModels);
-  updateHistorySelect(hFilterYear, hYears);
+  hFilterFleet.onchange    = applyHistoryFilters;
+  hFilterBrand.onchange    = applyHistoryFilters;
+  hFilterModel.onchange    = applyHistoryFilters;
+  hFilterSubModel.onchange = applyHistoryFilters;
+  hFilterYear.onchange     = applyHistoryFilters;
 
-  hFilterFleet.onchange = () => {
-    hFilterBrand.value = ""; hFilterModel.value = ""; hFilterSubModel.value = ""; hFilterYear.value = "";
-    applyHistoryFilters(true);
+  btnLimparFiltros.onclick = () => {
+    [hFilterFleet, hFilterBrand, hFilterModel, hFilterSubModel, hFilterYear].forEach(s => { s.value = ""; });
+    currentGroupHistoryPage = 1;
+    renderGroupHistoryItems(list, sessUser);
   };
-  hFilterBrand.onchange = () => {
-    hFilterModel.value = ""; hFilterSubModel.value = ""; hFilterYear.value = "";
-    applyHistoryFilters(true);
+
+  btnPesquisarFrota.onclick = () => {
+    const filtros = {
+      montadora:  hFilterBrand.value    || "",
+      modelo:     hFilterModel.value    || "",
+      submodelo:  hFilterSubModel.value || "",
+      ano:        hFilterYear.value     || "",
+      fleet_name: hFilterFleet.value    || "",
+    };
+    const visibleIds = Array.from(document.querySelectorAll("#groupHistoryList .history-row"))
+      .map(r => r.getAttribute("data-id")).filter(Boolean);
+    if (visibleIds.length > 0) filtros.history_ids = visibleIds.join(",");
+    if (typeof window.abrirPesquisaFrota === "function") window.abrirPesquisaFrota(filtros);
   };
-  hFilterModel.onchange = () => {
-    hFilterSubModel.value = ""; hFilterYear.value = "";
-    applyHistoryFilters(true);
-  };
-  hFilterSubModel.onchange = () => applyHistoryFilters(true);
-  hFilterYear.onchange = () => applyHistoryFilters(true);
 
   const listContainer = document.createElement("div");
   listContainer.id = "groupHistoryList";
@@ -1771,77 +1686,17 @@ function renderGroupHistoryItems(list, sessUser) {
       minute: '2-digit'
     });
 
+    const titleRow = document.createElement("div");
+    titleRow.style.display = "flex";
+    titleRow.style.alignItems = "center";
+    titleRow.style.justifyContent = "space-between";
+    titleRow.style.gap = "12px";
+
     const title = document.createElement("div");
     title.style.fontWeight = "600";
     title.style.color = "var(--accent)";
+    title.style.cursor = "pointer";
     title.textContent = item.fleetName ? ("📦 " + item.fleetName) : ("📦 Lote #" + (list.length - indexInFullList));
-    
-    const details = document.createElement("div");
-    details.style.fontSize = "13px";
-    details.style.color = "var(--text)";
-    details.textContent = item.auditOnly
-      ? (dataHora + " · registro global")
-      : (totalCount + " itens • " + dataHora);
-
-    const auditLine = document.createElement("div");
-    auditLine.style.fontSize = "11px";
-    auditLine.style.color = "var(--muted)";
-    if (item.auditBy) {
-      auditLine.textContent = "👤 " + item.auditBy + (item.auditEmail ? " · " + item.auditEmail : "");
-    }
-
-    const preview = document.createElement("div");
-    preview.style.fontSize = "11px";
-    preview.style.color = "var(--muted)";
-    preview.style.fontStyle = "italic";
-    const vList = (item.vins || "").split("\n").filter(Boolean);
-    const pList = (item.plates || "").split("\n").filter(Boolean);
-    const previewText = [];
-    for (let i = 0; i < Math.min(2, totalCount); i++) {
-      previewText.push((vList[i] || "") + (pList[i] ? " [" + pList[i] + "]" : ""));
-    }
-    preview.textContent = previewText.join(", ") + (totalCount > 2 ? "..." : "");
-
-    v.appendChild(title);
-    v.appendChild(details);
-    if (item.auditBy) v.appendChild(auditLine);
-    if (previewText.length > 0) v.appendChild(preview);
-    
-    row.onclick = () => {
-      console.log("[History] Clique no item do histórico:", item.fleetName || item.ts);
-      
-      // Verifica se é apenas auditoria
-      if (item.auditOnly) {
-        if (typeof showToast === "function") {
-          showToast("Sem lista de chassis no servidor - só o registro da pesquisa.", "error");
-        }
-        return;
-      }
-
-      // 1. Alterna para a tela de decodificação de grupo
-      if (typeof window.showScreen === "function" && window.groupDecoder) {
-        window.showScreen(window.groupDecoder);
-      } else {
-        const gd = el("groupDecoder");
-        if (gd && typeof window.showScreen === "function") {
-          window.showScreen(gd);
-        } else {
-          console.warn("[History] showScreen ou groupDecoder não encontrados!");
-        }
-      }
-
-      // 2. Chama a decodificação automática
-      if (typeof window.autoDecodificarFrotaDoHistorico === "function") {
-        window.autoDecodificarFrotaDoHistorico(item);
-      } else {
-        console.error("[History] Função autoDecodificarFrotaDoHistorico não encontrada!");
-      }
-    };
-
-    const actions = document.createElement("div");
-    actions.style.display = "flex";
-    actions.style.alignItems = "center";
-    actions.style.gap = "8px";
 
     const btnExportLot = document.createElement("button");
     btnExportLot.className = "btn-page";
@@ -1886,9 +1741,321 @@ function renderGroupHistoryItems(list, sessUser) {
       btnExportLot.title = "Sem dados de lote no servidor";
     }
 
-    actions.appendChild(btnExportLot);
+    titleRow.appendChild(title);
+    titleRow.appendChild(btnExportLot);
+
+    const details = document.createElement("div");
+    details.style.fontSize = "13px";
+    details.style.color = "var(--text)";
+    details.textContent = item.auditOnly
+      ? (dataHora + " · registro global")
+      : (totalCount + " itens • " + dataHora);
+
+    const auditLine = document.createElement("div");
+    auditLine.style.fontSize = "11px";
+    auditLine.style.color = "var(--muted)";
+    if (item.auditBy) {
+      auditLine.textContent = "👤 " + item.auditBy + (item.auditEmail ? " · " + item.auditEmail : "");
+    }
+
+    const linesContainer = document.createElement("div");
+    linesContainer.style.display = "grid";
+    linesContainer.style.gap = "8px";
+    linesContainer.style.marginTop = "10px";
+
+    const vinLines = String(item.vins || "").split(/\r?\n/).map(l => l.trim().toUpperCase()).filter(Boolean);
+    const plateLines = String(item.plates || "").split(/\r?\n/).map(l => l.trim().toUpperCase()).filter(Boolean);
+    const totalLines = Math.max(vinLines.length, plateLines.length);
+
+    const decodeVinDescription = (vinLine, plateLine) => {
+      const vinNorm   = (vinLine   || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const plateNorm = (plateLine || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+      // 1. Busca nos resultados já processados desta sessão
+      const allResults = window.currentGroupResults || [];
+      const savedItem = allResults.find(r => {
+        const rv = String(r.vin   || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const rp = String(r.placa || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        return (vinNorm && rv === vinNorm) || (plateNorm && rp === plateNorm);
+      });
+
+      if (savedItem && savedItem.apiResult) {
+        const api = savedItem.apiResult;
+        const mBasico = api.modelo || api.model || api.texto_modelo || "";
+        const vBasico = api.versao || api.version || "";
+        let model, submodel;
+        if (vBasico) {
+          let baseModel = mBasico.trim().toUpperCase();
+          const normalizedVersion = vBasico.trim().toUpperCase();
+          if (baseModel.endsWith(normalizedVersion)) {
+            baseModel = baseModel.slice(0, baseModel.length - normalizedVersion.length).trim();
+          }
+          const baseParts = baseModel.split(/\s+/).filter(Boolean);
+          model    = baseParts.shift() || "";
+          const baseSuffix = baseParts.join(" ");
+          submodel = [baseSuffix, normalizedVersion].filter(Boolean).join(" ").trim();
+        } else {
+          const s = splitModelSubmodel(mBasico, "", normalizeBrand(api.marca || ""));
+          model    = s.model;
+          submodel = s.submodel;
+        }
+        const brand = normalizeBrand(api.marca || savedItem.fabricante || "");
+        const anoFab = api.ano || api.ano_fabricacao || "";
+        const anoMod = api.ano_modelo || "";
+        const year = (anoFab && anoMod && anoFab !== anoMod)
+          ? (anoFab + "/" + anoMod) : (anoFab || anoMod || "");
+        return { brand, model, submodel, year };
+      }
+
+      // ✅ 2. NOVO: Busca no banco de dados da frota (fleet_vehicles)
+      // Retorna placeholder e dispara busca assíncrona para atualizar o card
+      if (vinNorm || plateNorm) {
+        const cacheKey = vinNorm || plateNorm;
+
+        if (!window._fleetDbCache) window._fleetDbCache = {};
+        if (window._fleetDbCache[cacheKey]) {
+          return window._fleetDbCache[cacheKey];
+        }
+
+        if (!window._fleetDbPending) window._fleetDbPending = new Set();
+        if (!window._fleetDbPending.has(cacheKey)) {
+          window._fleetDbPending.add(cacheKey);
+
+          const filtros = {};
+          if (plateNorm) filtros.placa = plateNorm;
+          else if (vinNorm) filtros.q = vinNorm;
+          filtros.limit = 1;
+
+          buscarFrotaNoBanco(filtros).then(data => {
+            if (data && data.ok && Array.isArray(data.results) && data.results.length > 0) {
+              const row = data.results[0];
+              // Re-processa via getTechnicalData para garantir split correto de modelo/submodelo
+              const tech = getTechnicalData({
+                fabricante: row.montadora || "",
+                apiResult: {
+                  marca:   row.montadora  || "",
+                  modelo:  row.modelo     || "",
+                  versao:  row.submodelo  || "",
+                  ano:     row.ano        || "",
+                }
+              });
+              const result = {
+                brand:    tech.brand    || row.montadora  || "",
+                model:    tech.model    || "",
+                submodel: tech.submodel || "",
+                year:     tech.year     || row.ano        || "",
+              };
+              window._fleetDbCache[cacheKey] = result;
+              renderGroupHistory();
+            }
+            window._fleetDbPending.delete(cacheKey);
+          }).catch(() => {
+            window._fleetDbPending.delete(cacheKey);
+          });
+        }
+      }
+
+      // 3. Fallback: decoder local por VIN
+      if (!vinNorm || !window.currentDecoder || typeof window.currentDecoder.decode !== "function") {
+        return { brand: "", model: "", submodel: "", year: "" };
+      }
+      try {
+        const decoded = window.currentDecoder.decode(vinNorm);
+        const tech    = getTechnicalData({ result: decoded, fabricante: decoded.manufacturerName });
+        return {
+          brand:    tech.brand    || "",
+          model:    tech.model    || "",
+          submodel: tech.submodel || "",
+          year:     tech.year     || ""
+        };
+      } catch (_) {
+        return { brand: "", model: "", submodel: "", year: "" };
+      }
+    };
+
+    const decodeHistoryLine = (vinLine, plateLine) => {
+      const vInput = el("vinInputSingle");
+      const pInput = el("plateInputSingle");
+      const bSingle = el("btnDecodeSingle");
+      const bPlate = el("btnPlateSingle");
+      const singleScreen = el("singleDecoder");
+
+      if (typeof window.showScreen === "function" && singleScreen) {
+        window.showScreen(singleScreen);
+      }
+
+      if (vInput) vInput.value = vinLine || "";
+      if (pInput) pInput.value = plateLine || "";
+
+      if (plateLine && bPlate) {
+        bPlate.disabled = false;
+        bPlate.click();
+      } else if (vinLine && bSingle) {
+        bSingle.disabled = false;
+        bSingle.click();
+      }
+    };
+
+    if (totalLines === 0) {
+      const emptyNote = document.createElement("div");
+      emptyNote.style.fontSize = "13px";
+      emptyNote.style.color = "var(--muted)";
+      emptyNote.textContent = "Nenhuma placa/chassi registrada neste lote.";
+      linesContainer.appendChild(emptyNote);
+    } else {
+      for (let i = 0; i < totalLines; i++) {
+        const vinLine = vinLines[i] || "";
+        const plateLine = plateLines[i] || "";
+
+        const lineCard = document.createElement("div");
+        lineCard.style.cssText = "display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:12px;background:var(--bg-elev);border:1px solid rgba(255,255,255,0.06);cursor:pointer;transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;";
+        lineCard.onmouseover = () => {
+          lineCard.style.transform = "translateY(-1px)";
+          lineCard.style.boxShadow = "0 10px 30px rgba(0,0,0,0.15)";
+          lineCard.style.borderColor = "rgba(56,189,248,0.35)";
+        };
+        lineCard.onmouseout = () => {
+          lineCard.style.transform = "translateY(0)";
+          lineCard.style.boxShadow = "none";
+          lineCard.style.borderColor = "rgba(255,255,255,0.06)";
+        };
+
+        const lineHeaderRow = document.createElement("div");
+        lineHeaderRow.style.display = "flex";
+        lineHeaderRow.style.alignItems = "center";
+        lineHeaderRow.style.justifyContent = "space-between";
+        lineHeaderRow.style.gap = "10px";
+
+        const lineHeader = document.createElement("div");
+        lineHeader.style.fontSize = "13px";
+        lineHeader.style.fontWeight = "600";
+        lineHeader.style.color = "var(--text)";
+        lineHeader.textContent = `#${i + 1} ${plateLine ? "Placa: " + plateLine : "Placa: —"}`;
+
+        const btnReportLine = document.createElement("button");
+        btnReportLine.className = "btn-page";
+        btnReportLine.textContent = "📄";
+        btnReportLine.title = "Relatório deste veículo";
+        btnReportLine.style.padding = "4px 10px";
+        btnReportLine.style.minWidth = "36px";
+        btnReportLine.onclick = async (e) => {
+          e.stopPropagation();
+          if (item.auditOnly) {
+            if (typeof showToast === "function") {
+              showToast("Sem dados para exportar — este lote é só registro.", "error");
+            }
+            return;
+          }
+          const oldTxt = btnReportLine.textContent;
+          btnReportLine.disabled = true;
+          btnReportLine.textContent = "⏳";
+          const progresso = criarModalProgressoLote("Gerando relatório do veículo...");
+          const t0 = Date.now();
+          try {
+            const reportData = await montarRelatorioDoHistorico({
+              vins: vinLine ? vinLine + "\n" : "",
+              plates: plateLine ? plateLine + "\n" : ""
+            }, (done, total) => {
+              progresso.update(done, total, Date.now() - t0);
+            });
+            if (!reportData || reportData.length === 0) {
+              showToast("Não foi possível montar o relatório deste veículo.", "error");
+              return;
+            }
+            const fileName = (plateLine || vinLine || "Veiculo").replace(/\s+/g, "_");
+            openReportOptions(reportData, "Relatorio_" + fileName);
+          } catch (err) {
+            showToast("Erro ao gerar relatório do veículo.", "error");
+          } finally {
+            progresso.close();
+            btnReportLine.disabled = false;
+            btnReportLine.textContent = oldTxt;
+          }
+        };
+
+        const decodedInfo = vinLine ? decodeVinDescription(vinLine, plateLine) : {
+          brand: "",
+          model: "",
+          submodel: "",
+          year: ""
+        };
+
+        const lineBody = document.createElement("div");
+        lineBody.style.display = "grid";
+        lineBody.style.gap = "4px";
+        lineBody.style.fontSize = "12px";
+        lineBody.style.color = "var(--muted)";
+
+        const makeDetail = (label, value) => {
+          const itemDiv = document.createElement("div");
+          itemDiv.style.display = "flex";
+          itemDiv.style.gap = "6px";
+          itemDiv.style.flexWrap = "wrap";
+          itemDiv.innerHTML = `<strong style=\"color:var(--text);\">${label}</strong> ${value || "—"}`;
+          return itemDiv;
+        };
+
+        lineBody.appendChild(makeDetail("Chassi:", vinLine || "—"));
+        lineBody.appendChild(makeDetail("Montadora:", decodedInfo.brand || "—"));
+        lineBody.appendChild(makeDetail("Modelo:", decodedInfo.model || "—"));
+        lineBody.appendChild(makeDetail("Submodelo:", decodedInfo.submodel || "—"));
+        lineBody.appendChild(makeDetail("Ano:", decodedInfo.year || "—"));
+
+        lineHeaderRow.appendChild(lineHeader);
+        lineHeaderRow.appendChild(btnReportLine);
+        lineCard.appendChild(lineHeaderRow);
+        lineCard.appendChild(lineBody);
+        lineCard.onclick = (e) => {
+          e.stopPropagation();
+          if (item.auditOnly) {
+            if (typeof showToast === "function") {
+              showToast("Sem lista de chassis no servidor - só o registro da pesquisa.", "error");
+            }
+            return;
+          }
+          decodeHistoryLine(vinLine, plateLine);
+        };
+        linesContainer.appendChild(lineCard);
+      }
+    }
+
+    v.appendChild(titleRow);
+    v.appendChild(details);
+    if (item.auditBy) v.appendChild(auditLine);
+    v.appendChild(linesContainer);
+    
+    row.onclick = () => {
+      console.log("[History] Clique no item do histórico:", item.fleetName || item.ts);
+      
+      // Verifica se é apenas auditoria
+      if (item.auditOnly) {
+        if (typeof showToast === "function") {
+          showToast("Sem lista de chassis no servidor - só o registro da pesquisa.", "error");
+        }
+        return;
+      }
+
+      // 1. Alterna para a tela de decodificação de grupo
+      if (typeof window.showScreen === "function" && window.groupDecoder) {
+        window.showScreen(window.groupDecoder);
+      } else {
+        const gd = el("groupDecoder");
+        if (gd && typeof window.showScreen === "function") {
+          window.showScreen(gd);
+        } else {
+          console.warn("[History] showScreen ou groupDecoder não encontrados!");
+        }
+      }
+
+      // 2. Chama a decodificação automática
+      if (typeof window.autoDecodificarFrotaDoHistorico === "function") {
+        window.autoDecodificarFrotaDoHistorico(item);
+      } else {
+        console.error("[History] Função autoDecodificarFrotaDoHistorico não encontrada!");
+      }
+    };
+
     row.appendChild(v);
-    row.appendChild(actions);
     h.appendChild(row);
   });
 
@@ -2188,6 +2355,59 @@ const normalizeBrand = (b) => {
   return brand; // Retorna sempre em caixa alta para evitar duplicidade por case
 };
 
+const splitModelSubmodel = (rawModel = "", rawSubmodel = "", brand = "") => {
+  let model = String(rawModel || "").trim().toUpperCase();
+  let submodel = String(rawSubmodel || "").trim().toUpperCase();
+  const normalizedBrand = String(brand || "").trim().toUpperCase();
+
+  if (normalizedBrand === "SCANIA") {
+    model = model.replace(/^SCANIA\s+/i, "");
+  }
+
+  const shouldSplitModel = !submodel && model;
+  if (shouldSplitModel) {
+    let text = model;
+    if (text.includes(" - ")) {
+      const parts = text.split(" - ").map(p => p.trim()).filter(Boolean);
+      model = parts.shift() || "";
+      submodel = parts.join(" - ") || "";
+    } else if (text.includes(" / ")) {
+      const parts = text.split(" / ").map(p => p.trim()).filter(Boolean);
+      model = parts.shift() || "";
+      submodel = parts.join(" / ") || "";
+    } else if (text.includes(" ")) {
+      const parts = text.split(" ").filter(Boolean);
+      model = parts.shift() || "";
+      submodel = parts.join(" ") || "";
+    } else {
+      const match = text.match(/^([A-Za-z]+)([0-9].*)$/);
+      if (match) {
+        model = match[1];
+        submodel = match[2];
+      }
+    }
+  }
+
+  if (submodel && model && model.includes(" ")) {
+    const parts = model.split(" ").filter(Boolean);
+    const rawTail = parts.slice(1).join(" ");
+    if (rawTail && !submodel.includes(rawTail)) {
+      submodel = (rawTail + " " + submodel).trim();
+      model = parts[0];
+    }
+  }
+
+  if (normalizedBrand === "SCANIA" && model && submodel && /^[PRGSLK]\d+/.test(model)) {
+    const m = model.match(/^([PRGSLK])(\d+.*)$/);
+    if (m) {
+      submodel = m[2] + (submodel ? " " + submodel : "");
+      model = m[1];
+    }
+  }
+
+  return { model, submodel };
+};
+
 const getTechnicalData = (item) => { 
    let brand = normalizeBrand(item.fabricante); 
    let modFull = ""; 
@@ -2214,16 +2434,25 @@ const getTechnicalData = (item) => {
      // ✅ FIX: usa os campos separados da API diretamente, sem split manual 
      const mBasico = api.modelo || api.model || api.texto_modelo || ""; 
      const vBasico  = api.versao || api.version || ""; 
-     
-     // model = campo "modelo" da API inteiro (ex: "APACHE U") 
-     // submodel = campo "versao" da API inteiro (ex: "400") 
-     model    = mBasico ? String(mBasico).trim().toUpperCase() : ""; 
-     submodel = vBasico ? String(vBasico).trim().toUpperCase() : ""; 
- 
-     // modFull é a junção para exibição 
-     modFull = (model && submodel && !model.includes(submodel)) 
-       ? (model + " " + submodel) 
-       : (model || submodel || ""); 
+     const rawModel = String(mBasico || "").trim().toUpperCase();
+     const rawVersion = String(vBasico || "").trim().toUpperCase();
+
+     if (rawVersion) {
+       let baseModel = rawModel;
+       if (baseModel.endsWith(rawVersion)) {
+         baseModel = baseModel.slice(0, baseModel.length - rawVersion.length).trim();
+       }
+       const baseParts = baseModel.split(/\s+/).filter(Boolean);
+       model = baseParts.shift() || "";
+       const baseSuffix = baseParts.join(" ");
+       submodel = [baseSuffix, rawVersion].filter(Boolean).join(" ").trim();
+     } else {
+       const splitResult = splitModelSubmodel(rawModel, "", brand);
+       model    = splitResult.model;
+       submodel = splitResult.submodel;
+     }
+
+     modFull = (model && submodel) ? (model + " " + submodel) : (model || submodel || "");
  
      const anoFab = api.ano || api.ano_fabricacao || api.year || api.anoFabricacao; 
      const anoMod = api.ano_modelo || api.model_year || api.anoModelo; 
@@ -2259,38 +2488,19 @@ const getTechnicalData = (item) => {
  
      // ✅ Para o decodificador (sem API), faz o split como fallback 
      if (modFull) { 
-       let sMod = String(modFull).trim(); 
-       if (brand === "SCANIA") sMod = sMod.replace(/^SCANIA\s+/i, ""); 
-       
-       if (sMod.includes("-")) { 
-         const parts = sMod.split("-"); 
-         model = parts[0].trim().toUpperCase(); 
-         submodel = parts.slice(1).join("-").trim().toUpperCase(); 
-       } else if (sMod.includes(" ")) { 
-         const parts = sMod.split(" "); 
-         model = parts[0].trim().toUpperCase(); 
-         submodel = parts.slice(1).join(" ").trim().toUpperCase(); 
-       } else { 
-         const match = sMod.match(/^([A-Za-z]+)([0-9].*)$/); 
-         if (match) { model = match[1].trim().toUpperCase(); submodel = match[2].trim().toUpperCase(); } 
-         else model = sMod.trim().toUpperCase(); 
-       } 
- 
-       if (brand === "SCANIA" && /^[PRGSLK]\d+/.test(model)) { 
-         const m = model.match(/^([PRGSLK])(\d+.*)$/); 
-         if (m) { submodel = m[2] + (submodel ? " " + submodel : ""); model = m[1]; } 
-       } 
-     } 
- 
+       const splitResult = splitModelSubmodel(modFull, submodel, brand); 
+       model = splitResult.model;
+       submodel = splitResult.submodel;
+     }
    } else if (item.ob && item.ob.ob_chassi && item.ob.ob_chassi !== "—") { 
      modFull = item.ob.ob_chassi; 
      if (!brand) brand = normalizeBrand(item.ob.ob_fabricante_chassi); 
      type = "BUS"; segment = "Ônibus"; 
      // Split para dados do OB (sem API) 
      if (modFull) { 
-       const parts = modFull.trim().split(/[\s-]/); 
-       model = parts[0] ? parts[0].toUpperCase() : ""; 
-       submodel = parts.slice(1).join(" ").toUpperCase(); 
+       const splitResult = splitModelSubmodel(modFull, "", brand); 
+       model = splitResult.model;
+       submodel = splitResult.submodel;
      } 
    } 
  
@@ -2343,33 +2553,40 @@ function populateGroupFilters(results) {
       s.innerHTML = '<option value="">' + defaultLabel + '</option>';
       
       const isYearField = id.includes("Year");
-      const labels = new Set();
+      const options = new Map();
       
       Array.from(values).forEach(v => {
         if (!v) return;
-        const lbl = isYearField ? getYearLabel(v) : String(v).trim();
-        if (lbl) labels.add(lbl);
+        const raw = String(v).trim();
+        if (!raw) return;
+        if (isYearField) {
+          const lbl = getYearLabel(raw);
+          if (lbl && !options.has(lbl)) options.set(lbl, raw);
+        } else {
+          const normalized = String(raw).trim();
+          if (normalized && !options.has(normalized)) options.set(normalized, normalized);
+        }
       });
 
-      const sortedValues = Array.from(labels).sort((a, b) => {
+      const sortedValues = Array.from(options.keys()).sort((a, b) => {
         if (isYearField) {
-          if (a.startsWith("Euro") && b.startsWith("Euro")) return b.localeCompare(a);
-          if (a.startsWith("Euro")) return -1;
-          if (b.startsWith("Euro")) return 1;
           const numA = parseInt(a, 10);
           const numB = parseInt(b, 10);
           if (!isNaN(numA) && !isNaN(numB)) return numB - numA;
+          if (a.startsWith("Euro") && b.startsWith("Euro")) return b.localeCompare(a);
+          if (a.startsWith("Euro")) return -1;
+          if (b.startsWith("Euro")) return 1;
         }
         return String(a).localeCompare(String(b));
       });
 
-      sortedValues.forEach(v => {
+      sortedValues.forEach(label => {
         const opt = document.createElement("option");
-        opt.value = v;
-        opt.textContent = v;
+        opt.value = options.get(label);
+        opt.textContent = label;
         s.appendChild(opt);
       });
-      if (sortedValues.includes(currentVal)) s.value = currentVal;
+      if (currentVal && Array.from(options.values()).includes(currentVal)) s.value = currentVal;
     };
 
     // Popula segmento e montadora (sem cascata ainda)
@@ -2464,34 +2681,21 @@ function populateGroupFilters(results) {
       });
     }
 
-    // Listener no submodelo e ano (sem cascata, apenas filtra)
-    ["filterSubModel", "filterYear"].forEach(id => {
-      const s = el(id);
-      if (s) {
-        const newS = s.cloneNode(true);
-        s.parentNode.replaceChild(newS, s);
-        newS.addEventListener("change", applyGroupFilters);
-      }
-    });
-
-    // Segmento também sem cascata
-    const segSel = el("filterSegment");
-    if (segSel) {
-      const newSegSel = segSel.cloneNode(true);
-      segSel.parentNode.replaceChild(newSegSel, segSel);
-      newSegSel.addEventListener("change", applyGroupFilters);
-    }
+    // Submodelo, ano e segmento já possuem listeners padrão em main(),
+    // então atualizamos apenas as opções sem substituir o elemento.
+    // Isso evita perder os listeners registrados via addEventListener.
   }
 
   function applyGroupFilters() {
     if (!window.currentGroupResults) return;
-    
+
     const fSegment = el("filterSegment")?.value || "";
     const fPlate = el("filterPlate")?.value.toLowerCase().trim() || "";
     const fBrand = el("filterBrand")?.value || "";
     const fModel = el("filterModel")?.value || "";
     const fSubModel = el("filterSubModel")?.value || "";
     const fYear  = el("filterYear")?.value || "";
+    const fYearLabel = fYear ? getYearLabel(fYear) : "";
 
     const filtered = window.currentGroupResults.filter(item => {
       const plateVal = (item.placa || "").toLowerCase();
@@ -2521,7 +2725,7 @@ function populateGroupFilters(results) {
         return techSub === fSubNorm || techSub.includes(fSubNorm) || techFull.includes(fSubNorm);
       })();
       
-      const matchYear = !fYear || yearLabel === fYear;
+      const matchYear = !fYear || yearLabel === fYearLabel;
 
       return matchSegment && matchPlate && matchBrand && matchModel && matchSub && matchYear;
     });
@@ -3199,18 +3403,26 @@ async function openModal(result, code, isPlate = false, linkedPlate = null, item
       const chassiReal = api.chassi_completo || api.chassi   || api.vin  || "—";
       const techData   = getTechnicalData({ apiResult: api, fabricante: mfr });
       
-      const modeloDisplay = techData.fullModel || "—";
-      const anoDisplay    = techData.year || "—";
-      const segmentReal    = techData.segment || "Veículos Leves";
-      const combustivel    = api.combustivel  || api.fuel        || api.texto_combustivel || "—";
-      const cor            = api.cor          || api.color       || "—";
-      const cidade         = (api.municipio && api.uf)
+      let modeloDisplay    = techData.model || "—";
+      let submodeloDisplay = techData.submodel || "";
+      if (!submodeloDisplay && modeloDisplay && modeloDisplay !== "—" && modeloDisplay.includes(" ")) {
+        const parts = modeloDisplay.split(" ").filter(Boolean);
+        modeloDisplay = parts.shift() || modeloDisplay;
+        submodeloDisplay = parts.join(" ");
+      }
+      if (!submodeloDisplay) submodeloDisplay = "—";
+      const anoDisplay       = techData.year || "—";
+      const segmentReal      = techData.segment || "Veículos Leves";
+      const combustivel      = api.combustivel  || api.fuel        || api.texto_combustivel || "—";
+      const cor              = api.cor          || api.color       || "—";
+      const cidade           = (api.municipio && api.uf)
         ? (api.municipio + " / " + api.uf) : (api.cidade || api.municipio || "—");
-      const situacao       = api.situacao     || "—";
+      const situacao         = api.situacao     || "—";
  
        genCards.appendChild(card("Segmento",        segmentReal));
        genCards.appendChild(card("Montadora",       mfr));
        genCards.appendChild(card("Modelo",          modeloDisplay));
+       genCards.appendChild(card("Submodelo",       submodeloDisplay));
        genCards.appendChild(card("Chassi",          chassiReal));
        genCards.appendChild(card("Código FIPE",     temFipe ? fipeCod : "Não encontrado na API"));
        genCards.appendChild(card("Modelo FIPE",     temFipe ? fipeMod : "Não encontrado na API"));
@@ -3559,7 +3771,7 @@ async function main() {
       const dynamicTitleDiv = el("dynamicFleetTitle");
       if (dynamicTitleDiv) dynamicTitleDiv.style.display = "none";
       
-      const genericCards = ["card_gen_segmento", "card_gen_montadora", "card_gen_modelo", "card_gen_chassi", "card_gen_ano", "card_gen_combustivel", "card_gen_cor", "card_gen_cidade", "card_fipe_codigo", "card_fipe_modelo"];
+      const genericCards = ["card_gen_segmento", "card_gen_montadora", "card_gen_modelo", "card_gen_submodelo", "card_gen_chassi", "card_gen_ano", "card_gen_combustivel", "card_gen_cor", "card_gen_cidade", "card_fipe_codigo", "card_fipe_modelo"];
       genericCards.forEach(id => {
         const e = el(id);
         if (e) e.style.opacity = "1";
@@ -3913,7 +4125,8 @@ async function main() {
 
             setValWithStyle("gen_segmento", "card_gen_segmento", segmentReal);
             setValWithStyle("gen_montadora", "card_gen_montadora", mfr);
-            setValWithStyle("gen_modelo", "card_gen_modelo", modeloCompleto);
+            setValWithStyle("gen_modelo", "card_gen_modelo", techData.model || modeloCompleto);
+            setValWithStyle("gen_submodelo", "card_gen_submodelo", techData.submodel || "");
             setValWithStyle("gen_placa", "card_gen_placa", p);
             setValWithStyle("gen_chassi", "card_gen_chassi", chassiReal);
             setValWithStyle("gen_ano", "card_gen_ano", anoCompleto);
@@ -4143,20 +4356,43 @@ async function main() {
         gBtn.disabled = true;
         gBtn.textContent = "Processando...";
         
+        const groupProgressText = el("groupProgress");
+        const groupProgressContainer = el("progressContainer");
+        const groupProgressBar = el("progressBar");
+        if (groupProgressText) {
+          groupProgressText.style.display = "block";
+        }
+        if (groupProgressContainer) {
+          groupProgressContainer.style.display = "block";
+        }
+        if (groupProgressBar) {
+          groupProgressBar.style.width = "0%";
+        }
+
+        const updateGroupProgress = (done, total) => {
+          if (!groupProgressText || !groupProgressBar) return;
+          const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+          groupProgressText.textContent = `Processando ${done} de ${total} itens • ${pct}%`;
+          groupProgressBar.style.width = `${pct}%`;
+        };
+
         // Clear previous results
         if (gResults) gResults.innerHTML = "";
         
         // Show skeleton loading
         showSkeletons(gResults, Math.min(8, Math.max(vins.split('\n').filter(Boolean).length, plates.split('\n').filter(Boolean).length)));
         
+        let total = 0;
+        let hadGroupError = false;
+        const results = [];
         try {
           // Process VINs and plates
           const vLines = vins.split("\n").map(l => l.trim()).filter(Boolean);
           const pLines = plates.split("\n").map(l => l.trim()).filter(Boolean);
-          const total = Math.max(vLines.length, pLines.length);
-          const results = [];
+          total = Math.max(vLines.length, pLines.length);
 
           console.log("[Group] Processando", total, "itens");
+          updateGroupProgress(0, total);
 
           for (let i = 0; i < total; i++) {
             const vin = (vLines[i] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -4230,6 +4466,7 @@ async function main() {
             }
 
             results.push(itemData);
+            updateGroupProgress(i + 1, total);
           }
 
           // Store results and render
@@ -4242,14 +4479,24 @@ async function main() {
           console.log("[Group] Decodificação concluída:", results.length, "itens");
           
         } catch (error) {
+          hadGroupError = true;
           console.error("[Group] Erro na decodificação:", error);
           if (gResults) {
-            gResults.innerHTML = '<div style="color: var(--error); text-align: center; padding: 20px;">Erro ao processar lote: ' + error.message + '</div>';
+            gResults.innerHTML = '<div style="color: var(--error); text-align: center; padding: 20px;">Erro ao processar lote: ' + (error && error.message ? error.message : 'erro inesperado') + '</div>';
+          }
+          if (groupProgressText) {
+            groupProgressText.textContent = `Erro ao processar grupo: ${error && error.message ? error.message : 'erro inesperado'}.`;
           }
         } finally {
           // Re-enable button
           gBtn.disabled = false;
           gBtn.textContent = "Decodificar Grupo";
+          if (!hadGroupError && groupProgressText) {
+            groupProgressText.textContent = `Concluído: ${total} de ${total} itens.`;
+          }
+          if (groupProgressBar) {
+            groupProgressBar.style.width = "100%";
+          }
         }
       });
     }
@@ -4752,12 +4999,13 @@ main();
       const allowedYears = new Set();
       
       userHistory.forEach(item => {
+        if (item.meta) normalizeHistoryMeta(item);
         if (item.fleetName) allowedFleets.add(item.fleetName);
         if (item.meta) {
-          (item.meta.brands || []).forEach(b => allowedBrands.add(b));
-          (item.meta.models || []).forEach(m => allowedModels.add(m));
-          (item.meta.submodels || []).forEach(s => allowedSubModels.add(s));
-          (item.meta.years || []).forEach(y => allowedYears.add(y));
+          (item.meta.brands || []).forEach(b => allowedBrands.add(normalizeBrand(b)));
+          (item.meta.models || []).forEach(m => allowedModels.add(String(m).trim().toUpperCase()));
+          (item.meta.submodels || []).forEach(s => allowedSubModels.add(String(s).trim().toUpperCase()));
+          (item.meta.years || []).forEach(y => allowedYears.add(String(y).trim()));
         }
       });
       
