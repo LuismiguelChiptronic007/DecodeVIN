@@ -97,12 +97,40 @@ export default {
 
     if (method === 'OPTIONS') return new Response(null, { headers: CORS });
 
-    try {
-      // ============================================================
-      // POST /register
-      // ============================================================
-      if (method === 'POST' && path === '/register') {
-      const { nome, email, senha, setor } = await request.json();
+    // ============================================================
+    // GET /veiculos-da-frota  — retorna dados de teste (SEM AUTENTICAÇÃO)
+    // ============================================================
+    if (method === 'GET' && path === '/veiculos-da-frota') {
+      // Dados fictícios de teste - SEM autenticação obrigatória
+      const todosOsDados = [
+        { nome_da_frota: "Frota A", Orra: "SCANIA", modelo: "P340", submodelo: "6x2", ano: 2022 },
+        { nome_da_frota: "Frota A", Orra: "SCANIA", modelo: "P440", submodelo: "8x2", ano: 2023 },
+        { nome_da_frota: "Frota B", Orra: "VOLVO", modelo: "B360", submodelo: "4x2", ano: 2021 },
+        { nome_da_frota: "Frota B", Orra: "VOLVO", modelo: "B430", submodelo: "6x2", ano: 2022 },
+        { nome_da_frota: "Frota C", Orra: "MERCEDES", modelo: "O500", submodelo: "RSD", ano: 2023 },
+        { nome_da_frota: "Frota C", Orra: "MERCEDES", modelo: "O400", submodelo: "RSE", ano: 2020 },
+        { nome_da_frota: "Frota D", Orra: "IVECO", modelo: "S-Way", submodelo: "A", ano: 2024 },
+        { nome_da_frota: "Frota D", Orra: "IVECO", modelo: "S-Way", submodelo: "B", ano: 2024 },
+        { nome_da_frota: "Frota E", Orra: "SCANIA", modelo: "P360", submodelo: "6x2", ano: 2022 },
+        { nome_da_frota: "Frota E", Orra: "VOLVO", modelo: "B370", submodelo: "4x2", ano: 2021 },
+      ];
+
+      const limit  = Math.min(parseInt(url.searchParams.get('limit')  || '200'), 1000);
+      const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0'));
+      
+      const total = todosOsDados.length;
+      const results = todosOsDados.slice(offset, offset + limit);
+
+      console.log(`[Worker] /veiculos-da-frota chamado - retornando ${results.length} de ${total} registros`);
+
+      return json({ ok: true, total, limit, offset, results });
+    }
+
+    // ============================================================
+    // POST /register
+    // ============================================================
+    if (method === 'POST' && path === '/register') {
+      const { nome, email, senha, setor } = await request.json().catch(() => ({}));
       if (!nome || !email || !senha || !setor)
         return json({ erro: 'Todos os campos são obrigatórios (nome, email, senha, setor)' }, 400);
 
@@ -757,7 +785,7 @@ if (method === 'POST' && path === '/fleet/vehicles') {
 // ============================================================
 // GET /fleet/search  — busca veículos com filtros
 // Query params: montadora, modelo, submodelo, ano, segmento,
-//               placa, fleet_name, limit, offset
+//               placa, fleet_name, user_name, limit, offset
 // ============================================================
 if (method === 'GET' && path === '/fleet/search') {
   try {
@@ -776,10 +804,11 @@ if (method === 'GET' && path === '/fleet/search') {
     const segmento     = url.searchParams.get('segmento')     || '';
     const placa        = url.searchParams.get('placa')        || '';
     const fleet_name   = url.searchParams.get('fleet_name')   || '';
+    const user_name    = url.searchParams.get('user_name')    || '';
     const history_ids  = url.searchParams.get('history_ids')  || '';
     const q = url.searchParams.get('q') || '';
-    const limit        = Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit')  || '100')));
-    const offset       = Math.max(0, parseInt(url.searchParams.get('offset') || '0'));
+    const limit        = Math.max(1, Math.min(10000, parseInt(url.searchParams.get('limit') || '10000', 10)));
+    const offset       = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10));
 
     let whereClauses = [];
     let bindings     = [];
@@ -797,6 +826,7 @@ if (method === 'GET' && path === '/fleet/search') {
     if (segmento)   { whereClauses.push('segmento = ?');            bindings.push(segmento); }
     if (placa)      { whereClauses.push('placa LIKE ?');            bindings.push('%' + placa.toUpperCase() + '%'); }
     if (fleet_name) { whereClauses.push('fleet_name LIKE ?');       bindings.push('%' + fleet_name + '%'); }
+    if (user_name)  { whereClauses.push('UPPER(COALESCE(u.nome, \'\')) LIKE ?'); bindings.push('%' + user_name.toUpperCase().trim() + '%'); }
 
     if (history_ids) {
       const ids = history_ids.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
@@ -811,15 +841,15 @@ if (method === 'GET' && path === '/fleet/search') {
       const qUp = '%' + q.toUpperCase().trim() + '%';
       whereClauses.push(`(
         placa LIKE ? OR vin LIKE ? OR montadora LIKE ? OR modelo LIKE ? OR 
-        fleet_name LIKE ? OR encarrocadora LIKE ? OR fipe_modelo LIKE ?
+        fleet_name LIKE ? OR encarrocadora LIKE ? OR fipe_modelo LIKE ? OR COALESCE(u.nome, '') LIKE ?
       )`);
-      bindings.push(qUp, qUp, qUp, qUp, qUp, qUp, qUp);
+      bindings.push(qUp, qUp, qUp, qUp, qUp, qUp, qUp, qUp);
     }
 
     const where = whereClauses.length > 0 ? ('WHERE ' + whereClauses.join(' AND ')) : '';
 
     // Total de resultados (para paginação no front)
-    const countSQL = `SELECT COUNT(*) as total FROM fleet_vehicles ${where}`;
+    const countSQL = `SELECT COUNT(*) as total FROM fleet_vehicles fv LEFT JOIN users u ON CAST(fv.user_id AS TEXT) = CAST(u.id AS TEXT) ${where}`;
     const countRow = await env.DB.prepare(countSQL).bind(...bindings).first();
     const total    = countRow ? countRow.total : 0;
 
@@ -829,7 +859,7 @@ if (method === 'GET' && path === '/fleet/search') {
              fv.carroceria, fv.encarrocadora, fv.segmento, fv.fipe_codigo, fv.fipe_modelo,
              fv.wmi, fv.motor, fv.posicao_motor, fv.emissoes, fv.combustivel, fv.cor, fv.municipio_uf, fv.created_at
       FROM fleet_vehicles fv
-      LEFT JOIN users u ON fv.user_id = u.id
+      LEFT JOIN users u ON CAST(fv.user_id AS TEXT) = CAST(u.id AS TEXT)
       ${where}
       ORDER BY fv.created_at DESC
       LIMIT ? OFFSET ?
@@ -934,12 +964,39 @@ if (method === 'GET' && path === '/fleet/options') {
       return handleAdminPlacasCache(request, env);
     }
 
-    return json({ erro: 'Rota não encontrada' }, 404);
-    } catch (err) {
-      // Garante CORS mesmo em erro 500 inesperado 
-      return json({ erro: 'Erro interno: ' + String(err) }, 500);
+    // ============================================================
+    // GET /admin/migrar-modelos  — migração única: separa modelo/submodelo
+    // Chame uma vez via: GET /admin/migrar-modelos (com token admin no header)
+    // ============================================================
+    if (method === 'GET' && path === '/admin/migrar-modelos') {
+      const payload = await requireAuth(request, env);
+      if (!payload || !payload.admin) return json({ erro: 'Acesso negado' }, 403);
+
+      const { results } = await env.DB.prepare(
+        `SELECT id, modelo FROM fleet_vehicles WHERE (submodelo = '' OR submodelo IS NULL) AND modelo LIKE '% %'`
+      ).all();
+
+      if (!results || results.length === 0)
+        return json({ ok: true, mensagem: 'Nenhum registro para migrar.', atualizados: 0 });
+
+      const stmt = env.DB.prepare(
+        `UPDATE fleet_vehicles SET modelo = ?, submodelo = ? WHERE id = ?`
+      );
+
+      const batch = results.map(row => {
+        const partes = String(row.modelo || '').trim().split(' ');
+        const novoModelo    = partes.shift() || '';
+        const novoSubmodelo = partes.join(' ');
+        return stmt.bind(novoModelo, novoSubmodelo, row.id);
+      });
+
+      await env.DB.batch(batch);
+
+      return json({ ok: true, atualizados: results.length, preview: results.slice(0, 5).map(r => r.modelo) });
     }
-  },
+
+    return json({ erro: 'Rota não encontrada' }, 404);
+  }
 };
 
 async function handleAdminPlacasCache(request, env) {

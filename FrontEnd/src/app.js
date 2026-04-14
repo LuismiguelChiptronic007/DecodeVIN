@@ -223,7 +223,7 @@ async function buscarFallbackKePlaca(placa) {
    if (filtros.fleet_name) params.set('fleet_name', filtros.fleet_name); 
    if (filtros.history_ids) params.set('history_ids', filtros.history_ids); 
    if (filtros.q)           params.set('q', filtros.q);
-   params.set('limit',  String(filtros.limit  || 200)); 
+   params.set('limit',  String(filtros.limit  || 10000)); 
    params.set('offset', String(filtros.offset || 0)); 
   
    const res  = await fetch(AUTH_WORKER + '/fleet/search?' + params.toString(), { 
@@ -242,23 +242,26 @@ async function buscarFallbackKePlaca(placa) {
    return await res.json(); 
  } 
 
-async function buscarPlacasCache(cursor = null, busca = '', prefix = 'ob:') {
+async function buscarTodosVeiculosDecodificados(busca = '', userName = '') {
   const token = localStorage.getItem('dvb_token');
   if (!token) return null;
 
   const params = new URLSearchParams();
-  params.set('limit', '100');
-  params.set('prefix', prefix);
-  if (cursor) params.set('cursor', cursor);
-  if (busca)  params.set('q', busca);
+  params.set('limit', '10000');
+  if (busca) params.set('q', busca);
+  if (userName) params.set('user_name', userName);
 
   try {
-    const res = await fetch(AUTH_WORKER + '/admin/placas-cache?' + params.toString(), {
+    const res = await fetch(AUTH_WORKER + '/fleet/search?' + params.toString(), {
       headers: { 'Authorization': 'Bearer ' + token },
     });
-    return await res.json();
+    const data = await res.json();
+    if (!data || !data.ok) {
+      return { ok: false, mensagem: data?.erro || 'Erro ao carregar veículos decodificados' };
+    }
+    return { ok: true, entries: data.results || [], total: Number(data.total || 0) };
   } catch (e) {
-    console.error('[PlacasCache] Erro:', e);
+    console.error('[VeiculosDecodificados] Erro:', e);
     return { ok: false, mensagem: 'Erro de conexão' };
   }
 }
@@ -3295,52 +3298,48 @@ async function main() {
     // Removida lógica do card central btnAbrirPlacasCache conforme solicitado.
     // O acesso permanece apenas pelo ícone 🗄️ na barra superior (auth.js).
     
-    async function carregarPlacasCache(cursor) { 
-      const busca  = (el('placasCacheBusca')?.value  || '').trim(); 
-      const prefix = (el('placasCachePrefix')?.value || 'ob:'); 
-      const cont   = el('placasCacheResults'); 
-      const pag    = el('placasCachePagination'); 
+    async function carregarPlacasCache() { 
+      const busca     = (el('placasCacheBusca')?.value  || '').trim(); 
+      const userName  = (el('placasCacheUser')?.value  || '').trim(); 
+      const cont      = el('placasCacheResults'); 
+      const pag       = el('placasCachePagination'); 
     
       if (cont) cont.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Carregando...</div>'; 
     
-      const data = await buscarPlacasCache(cursor, busca, prefix); 
+      const data = await buscarTodosVeiculosDecodificados(busca, userName); 
     
       if (!data || !data.ok) { 
         if (cont) cont.innerHTML = '<div style="color:#e74c3c;text-align:center;padding:40px">' + 
           (data?.mensagem || 'Erro ao carregar dados') + '</div>'; 
+        if (pag) pag.style.display = 'none'; 
         return; 
       } 
     
-      // Atualiza total 
       const totalEl = el('placasCacheTotal'); 
-      if (totalEl) totalEl.textContent = data.entries.length + ' registros nesta página'; 
+      if (totalEl) totalEl.textContent = data.total + ' veículo(s) decodificado(s)'; 
     
-      // Renderiza tabela 
       if (!data.entries.length) { 
         if (cont) cont.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px">Nenhum registro encontrado.</div>'; 
         if (pag) pag.style.display = 'none'; 
         return; 
       } 
     
-      // Detecta colunas dinamicamente a partir dos dados reais 
       const allKeys = new Set(); 
       data.entries.forEach(row => Object.keys(row).forEach(k => allKeys.add(k))); 
       
-      // Prioriza campos importantes na visualização
-      const CAMPOS_PRIORITARIOS = ['key', 'query', 'empresa', 'encarrocadora', 'carroceria', 
-        'fabricante', 'chassi', 'modelo_completo', 'ano', 'foto_url', 'fonte']; 
+      const CAMPOS_PRIORITARIOS = ['id', 'user_id', 'user_name', 'fleet_name', 'vin', 'placa', 'montadora', 'modelo', 'submodelo', 'ano', 'segmento', 'carroceria', 'encarrocadora']; 
       const outrosCampos = Array.from(allKeys) 
         .filter(k => !CAMPOS_PRIORITARIOS.includes(k)) 
         .sort(); 
-      const COLUNAS = [...CAMPOS_PRIORITARIOS.filter(k => allKeys.has(k) || k === 'key'), ...outrosCampos]; 
+      const COLUNAS = [...CAMPOS_PRIORITARIOS.filter(k => allKeys.has(k)), ...outrosCampos]; 
       
       const wrapper = document.createElement('div'); 
       wrapper.style.overflowX = 'auto'; 
+      wrapper.className = 'hidden-scrollbar'; 
     
       const table = document.createElement('table'); 
       table.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px;'; 
     
-      // Cabeçalho dinâmico 
       const thead = document.createElement('thead'); 
       const trH   = document.createElement('tr'); 
       trH.style.cssText = 'background:var(--bg);border-bottom:2px solid var(--border);'; 
@@ -3353,7 +3352,6 @@ async function main() {
       thead.appendChild(trH); 
       table.appendChild(thead); 
     
-      // Corpo dinâmico 
       const tbody = document.createElement('tbody'); 
       data.entries.forEach(row => { 
         const tr = document.createElement('tr'); 
@@ -3368,64 +3366,28 @@ async function main() {
           const display = (val === null || val === undefined) ? '—' : String(val); 
           td.textContent = display; 
           td.title = display; 
-          
-          // Links especiais 
-          if (col === 'foto_url' && val) { 
-            td.innerHTML = ''; 
-            const a = document.createElement('a'); 
-            a.href = val; a.target = '_blank'; 
-            a.textContent = '🖼️ Ver foto'; 
-            a.style.color = 'var(--accent-2)'; 
-            td.appendChild(a); 
-          } 
-          if (col === 'fonte' && val) { 
-            td.innerHTML = ''; 
-            const a = document.createElement('a'); 
-            a.href = val; a.target = '_blank'; 
-            a.textContent = '🔗 OB'; 
-            a.style.color = 'var(--accent-2)'; 
-            td.appendChild(a); 
-          } 
           tr.appendChild(td); 
         }); 
         tbody.appendChild(tr); 
       }); 
       table.appendChild(tbody); 
       wrapper.appendChild(table); 
-      if (cont) { cont.innerHTML = ''; cont.appendChild(wrapper); } 
-    
-      // Paginação via cursor 
-      const proxCursor = data.cursor; 
-      const isComplete = data.list_complete; 
-    
-      if (pag) { 
-        pag.style.display = 'flex'; 
-        const btnAnterior = el('btnPlacasCacheAnterior'); 
-        const btnProximo  = el('btnPlacasCacheProximo'); 
-        const pagInfo     = el('placasCachePagInfo'); 
-    
-        if (btnAnterior) btnAnterior.disabled = placasCachePage === 0; 
-        if (btnProximo)  btnProximo.disabled  = isComplete || !proxCursor; 
-        if (pagInfo)     pagInfo.textContent  = 'Página ' + (placasCachePage + 1); 
-    
-        if (btnAnterior) { 
-          btnAnterior.onclick = () => { 
-            if (placasCachePage > 0) { 
-              placasCachePage--; 
-              carregarPlacasCache(placasCacheCursors[placasCachePage] || null); 
-            } 
-          }; 
-        } 
-        if (btnProximo && proxCursor) { 
-          btnProximo.onclick = () => { 
-            placasCachePage++; 
-            if (!placasCacheCursors[placasCachePage]) { 
-              placasCacheCursors[placasCachePage] = proxCursor; 
-            } 
-            carregarPlacasCache(proxCursor); 
-          }; 
-        } 
+      if (cont) { 
+        cont.innerHTML = ''; 
+        cont.appendChild(wrapper); 
       } 
+      const scrollBar = el('placasCacheScrollBar'); 
+      const scrollTrack = el('placasCacheScrollBarTrack'); 
+      if (scrollBar && scrollTrack) { 
+        requestAnimationFrame(() => { 
+          scrollTrack.style.width = table.scrollWidth + 'px'; 
+          scrollBar.style.display = table.scrollWidth > wrapper.clientWidth ? 'block' : 'none'; 
+        }); 
+        wrapper.onscroll = () => { scrollBar.scrollLeft = wrapper.scrollLeft; }; 
+        scrollBar.onscroll = () => { wrapper.scrollLeft = scrollBar.scrollLeft; }; 
+      } 
+    
+      if (pag) pag.style.display = 'none'; 
     } 
     
     // Busca ao clicar ou pressionar Enter 
@@ -3438,9 +3400,7 @@ async function main() {
     el('placasCacheBusca')?.addEventListener('keydown', e => { 
       if (e.key === 'Enter') el('btnPlacasCacheBuscar')?.click(); 
     }); 
-    el('placasCachePrefix')?.addEventListener('change', () => { 
-      el('btnPlacasCacheBuscar')?.click(); 
-    }); 
+    // Nota: agora o filtro usa o endpoint de veículos decodificados.
 
     window.abrirPlacasCache = () => {
       showScreen(placasCacheScreen);
@@ -4321,43 +4281,39 @@ async function main() {
     
     if (gInput) {
       gInput.addEventListener('input', (e) => {
-        const lines = e.target.value.split('\n');
-        const processedLines = lines.map(line => {
-          // Remove caracteres inválidos e limita a 17 caracteres
-          return line.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17);
-        }).filter(line => line.length > 0);
-        
+        const raw = e.target.value.toUpperCase().replace(/[^A-Z0-9\n]/g, "");
+        const lines = raw.split('\n');
+        const processedLines = [];
+
+        lines.forEach(line => {
+          let remainder = line;
+          while (remainder.length > 17) {
+            processedLines.push(remainder.slice(0, 17));
+            remainder = remainder.slice(17);
+          }
+          processedLines.push(remainder);
+        });
+
         e.target.value = processedLines.join('\n');
-        
-        // Auto line break: se a última linha tiver 17 caracteres, adiciona nova linha
-        const currentLines = e.target.value.split('\n');
-        const lastLine = currentLines[currentLines.length - 1];
-        if (lastLine && lastLine.length === 17 && e.target.selectionStart === e.target.value.length) {
-          e.target.value += '\n';
-          // Mantém o cursor no início da nova linha
-          e.target.selectionStart = e.target.selectionEnd = e.target.value.length;
-        }
       });
     }
-    
+
     if (gPlateInput) {
       gPlateInput.addEventListener('input', (e) => {
-        const lines = e.target.value.split('\n');
-        const processedLines = lines.map(line => {
-          // Remove caracteres inválidos e limita a 7 caracteres
-          return line.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7);
-        }).filter(line => line.length > 0);
-        
+        const raw = e.target.value.toUpperCase().replace(/[^A-Z0-9\n]/g, "");
+        const lines = raw.split('\n');
+        const processedLines = [];
+
+        lines.forEach(line => {
+          let remainder = line;
+          while (remainder.length > 7) {
+            processedLines.push(remainder.slice(0, 7));
+            remainder = remainder.slice(7);
+          }
+          processedLines.push(remainder);
+        });
+
         e.target.value = processedLines.join('\n');
-        
-        // Auto line break: se a última linha tiver 7 caracteres, adiciona nova linha
-        const currentLines = e.target.value.split('\n');
-        const lastLine = currentLines[currentLines.length - 1];
-        if (lastLine && lastLine.length === 7 && e.target.selectionStart === e.target.value.length) {
-          e.target.value += '\n';
-          // Mantém o cursor no início da nova linha
-          e.target.selectionStart = e.target.selectionEnd = e.target.value.length;
-        }
       });
     }
 

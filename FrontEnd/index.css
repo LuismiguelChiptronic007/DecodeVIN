@@ -83,6 +83,14 @@ textarea::-webkit-scrollbar {
   display: none;
 }
 
+.hidden-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hidden-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 button{
   padding:12px 16px;border-radius:10px;border:1px solid transparent;
   background:linear-gradient(180deg, var(--accent), #16a34a);

@@ -286,6 +286,11 @@
               <option value="">Todos Anos</option>
             </select>
           </div>
+
+          <div style="grid-column: 1 / -1;">
+            <label for="searchQuery" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Pesquisar</label>
+            <input id="searchQuery" type="text" placeholder="Buscar placa, chassi (VIN), modelo, frota..." onkeydown="if(event.key === 'Enter'){ aplicarFiltro(); }" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;" />
+          </div>
         </div>
 
         <div style="display:flex;gap:10px;justify-content:flex-end;">
@@ -312,13 +317,11 @@
     <!-- Barra de busca --> 
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;"> 
       <input id="placasCacheBusca" type="text" 
-        placeholder="🔍 Buscar placa, empresa, encarroçadora..." 
+        placeholder="🔍 Buscar placa, VIN, modelo, frota..." 
         style="flex:1;min-width:200px;font-size:13px; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:10px; border-radius:8px;" /> 
-      <select id="placasCachePrefix" style="font-size:13px;min-width:140px; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:10px; border-radius:8px;"> 
-        <option value="ob:">Cache OnibusBrasil (ob:)</option> 
-        <option value="placa:">Cache Placas (placa:)</option> 
-        <option value="">Tudo</option> 
-      </select> 
+      <input id="placasCacheUser" type="text" 
+        placeholder="Usuário (nome)" 
+        style="min-width:200px;font-size:13px; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:10px; border-radius:8px;" /> 
       <button id="btnPlacasCacheBuscar" class="btn" 
         style="background:var(--accent);color:#000;font-weight:700;padding:8px 18px;"> 
         Buscar 
@@ -326,7 +329,10 @@
     </div> 
   
     <!-- Tabela de resultados --> 
-    <div id="placasCacheResults" style="overflow-x:auto; background:var(--card); border:1px solid var(--border); border-radius:12px; min-height: 200px;"> 
+    <div id="placasCacheScrollBar" style="display:none;overflow-x:auto;overflow-y:hidden;height:14px;margin-bottom:8px;border-radius:8px;background:rgba(0,0,0,.04);"> 
+      <div id="placasCacheScrollBarTrack" style="height:1px;"></div> 
+    </div> 
+    <div id="placasCacheResults" style="overflow-x:hidden; background:var(--card); border:1px solid var(--border); border-radius:12px; min-height: 200px; position:relative;"> 
       <div style="color:var(--muted);text-align:center;padding:40px 0"> 
         Clique em <strong>Buscar</strong> para carregar os dados. 
       </div> 
@@ -495,7 +501,7 @@
           }
         }
 
-        const res = await fetch(`${API_BASE_FLEET}/fleet/search?limit=200`, {
+        const res = await fetch(`${API_BASE_FLEET}/fleet/search?limit=10000`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -555,13 +561,15 @@
       const modelo = document.getElementById('modelo')?.value || '';
       const submodelo = document.getElementById('submodelo')?.value || '';
       const ano = document.getElementById('ano')?.value || '';
+      const query = document.getElementById('searchQuery')?.value || '';
 
       if (frota) params.set('fleet_name', frota);
       if (montadora) params.set('montadora', montadora);
       if (modelo) params.set('modelo', modelo);
       if (submodelo) params.set('submodelo', submodelo);
       if (ano) params.set('ano', ano);
-      params.set('limit', '200');
+      if (query) params.set('q', query);
+      params.set('limit', '10000');
 
       const contador = document.getElementById('contadorResultados');
       if (contador) contador.textContent = 'Aplicando filtros...';
@@ -593,7 +601,7 @@
     }
 
     function limparFiltros() {
-      ['frota', 'montadora', 'modelo', 'submodelo', 'ano'].forEach(id => {
+      ['frota', 'montadora', 'modelo', 'submodelo', 'ano', 'searchQuery'].forEach(id => {
         const elemento = document.getElementById(id);
         if (elemento) elemento.value = '';
       });
