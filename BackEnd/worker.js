@@ -825,12 +825,13 @@ if (method === 'GET' && path === '/fleet/search') {
 
     // Busca paginada
     const dataSQL = `
-      SELECT id, user_id, fleet_name, vin, placa, montadora, modelo, submodelo, ano,
-             carroceria, encarrocadora, segmento, fipe_codigo, fipe_modelo,
-             wmi, motor, posicao_motor, emissoes, combustivel, cor, municipio_uf, created_at
-      FROM fleet_vehicles
+      SELECT fv.id, fv.user_id, COALESCE(u.nome, '') as user_name, fv.fleet_name, fv.vin, fv.placa, fv.montadora, fv.modelo, fv.submodelo, fv.ano,
+             fv.carroceria, fv.encarrocadora, fv.segmento, fv.fipe_codigo, fv.fipe_modelo,
+             fv.wmi, fv.motor, fv.posicao_motor, fv.emissoes, fv.combustivel, fv.cor, fv.municipio_uf, fv.created_at
+      FROM fleet_vehicles fv
+      LEFT JOIN users u ON fv.user_id = u.id
       ${where}
-      ORDER BY created_at DESC
+      ORDER BY fv.created_at DESC
       LIMIT ? OFFSET ?
     `;
     const { results } = await env.DB.prepare(dataSQL)

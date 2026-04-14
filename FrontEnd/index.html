@@ -225,14 +225,81 @@
     </div>
   </div>
 
-  <div id="historyScreen" style="display:none">
-    <div class="header">
+  <div id="historyScreen" style="display:none; position:relative; width:100vw; max-width:100vw; left:50%; right:50%; margin-left:-50vw; margin-right:-50vw; padding:24px; box-sizing:border-box;">
+    <div class="header" style="max-width:1200px; margin:0 auto;">
       <button class="back-btn" id="backFromHistory">←</button>
       <h1>Histórico <small style="font-size:14px;color:var(--muted);font-weight:normal">Lotes e Frotas</small></h1>
     </div>
-    <div id="groupHistory" class="history-content-full"></div>
+
+    <!-- Filtro de Frotas dentro do Histórico -->
+    <div style="padding:24px; width:100%; max-width:100%; margin:0 auto; box-sizing:border-box;">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;margin-bottom:24px;min-height:260px;width:100%;max-width:100%;box-sizing:border-box;">
+        <h3 style="margin-top:0;margin-bottom:20px;color:var(--text);">🚐 Filtrar Frotas</h3>
+
+        <div id="fleetSummaryPanel" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:20px;">
+          <div style="padding:14px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.18);border-radius:12px;">
+            <div style="font-size:13px;color:var(--muted);margin-bottom:8px;">Veículos decodificados</div>
+            <div id="fleetTotalDecoded" style="font-size:22px;font-weight:700;color:var(--accent);">0</div>
+          </div>
+          <div style="padding:14px;background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.18);border-radius:12px;">
+            <div style="font-size:13px;color:var(--muted);margin-bottom:8px;">Frotas decodificadas</div>
+            <div id="fleetDecodedCount" style="font-size:22px;font-weight:700;color:var(--accent);">0</div>
+          </div>
+          <div style="padding:14px;background:rgba(249,115,22,0.06);border:1px solid rgba(249,115,22,0.18);border-radius:12px;">
+            <div style="font-size:13px;color:var(--muted);margin-bottom:8px;">Veículos exibidos</div>
+            <div id="fleetDisplayedCount" style="font-size:22px;font-weight:700;color:var(--accent);">0</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;">
+          <div>
+            <label for="frota" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Frota</label>
+            <select id="frota" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
+              <option value="">Todas Frotas</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="montadora" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Montadora</label>
+            <select id="montadora" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
+              <option value="">Todas Montadoras</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="modelo" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Modelo</label>
+            <select id="modelo" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
+              <option value="">Todos Modelos</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="submodelo" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Submodelo</label>
+            <select id="submodelo" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
+              <option value="">Todos Submodelos</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="ano" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Ano</label>
+            <select id="ano" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
+              <option value="">Todos Anos</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button onclick="limparFiltros()" style="padding:10px 20px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:13px;font-weight:600;">🧹 Limpar</button>
+          <button onclick="aplicarFiltro()" style="padding:10px 20px;background:var(--accent);border:none;border-radius:6px;color:#000;cursor:pointer;font-size:13px;font-weight:700;">🔍 Filtrar</button>
+        </div>
+
+        <div id="contadorResultados" style="margin-top:15px;font-size:13px;color:var(--muted);"></div>
+        <div id="resultado" style="max-height:450px;overflow-y:auto;margin-top:10px;"></div>
+      </div>
+    </div>
   </div>
 
+  <!-- TELA: Filtro de Veículos da Frota -->
   <!-- TELA: Informações do Banco (API) — admin aplicação --> 
   <div id="placasCacheScreen" style="display:none; padding: 20px;"> 
   
@@ -335,6 +402,325 @@
   <script src="src/importar-excel.js"></script>
   <script src="src/decodevin-integracao.js?v=5"></script>
   <script type="module" src="./src/app.js"></script>
+
+  <script>
+    const API_BASE_FLEET = 'https://decodevinbus-auth.luismiguelgomesoliveira-014.workers.dev';
+    let dadosOriginais = [];
+    let dadosFiltrados = [];
+    const fleetGroupCollapsedState = {};
+
+    function normalize(str) {
+      return (str || "")
+        .toString()
+        .toUpperCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
+    }
+
+    function getAuthHeaders() {
+      const token = localStorage.getItem('dvb_token');
+      return token ? { 'Authorization': 'Bearer ' + token } : {};
+    }
+
+    async function carregarDados() {
+      const contador = document.getElementById('contadorResultados');
+      const container = document.getElementById('resultado');
+      if (contador) contador.textContent = 'Carregando histórico de frotas...';
+      if (container) container.innerHTML = '';
+
+      const token = localStorage.getItem('dvb_token');
+      if (!token) {
+        if (contador) contador.textContent = 'Faça login para carregar o histórico de frotas.';
+        return;
+      }
+
+      try {
+        // Decodificar token para verificar se é admin
+        const tokenParts = token.split('.');
+        let isAdmin = false;
+        if (tokenParts.length === 3) {
+          try {
+            const payload = JSON.parse(atob(tokenParts[1]));
+            isAdmin = !!payload.admin;
+          } catch (_) {}
+        }
+
+        const optsRes = await fetch(`${API_BASE_FLEET}/fleet/options`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+          }
+        });
+
+        if (!optsRes.ok) {
+          const errorText = await optsRes.text();
+          throw new Error(errorText || `Erro ${optsRes.status}`);
+        }
+
+        const optsData = await optsRes.json();
+        preencherSelect('frota', optsData.frotas || []);
+        preencherSelect('montadora', optsData.montadoras || []);
+        preencherSelect('modelo', optsData.modelos || []);
+        preencherSelect('submodelo', optsData.submodelos || []);
+        preencherSelect('ano', optsData.anos || []);
+
+        const fleetsDecoded = Array.isArray(optsData.frotas) ? optsData.frotas.length : 0;
+        document.getElementById('fleetDecodedCount').textContent = String(fleetsDecoded);
+
+        // Adicionar indicador de escopo
+        const scopeIndicator = document.getElementById('fleetScopeBadge');
+        if (!scopeIndicator) {
+          const badge = document.createElement('div');
+          badge.id = 'fleetScopeBadge';
+          badge.style.cssText = 'padding:6px 12px;font-size:12px;border-radius:6px;margin-bottom:12px;font-weight:600;';
+          const parent = document.getElementById('fleetSummaryPanel');
+          if (parent && parent.parentNode) {
+            parent.parentNode.insertBefore(badge, parent);
+          }
+        }
+        const badge = document.getElementById('fleetScopeBadge');
+        if (badge) {
+          if (isAdmin) {
+            badge.textContent = '🔓 Visualizando histórico de TODOS os usuários';
+            badge.style.background = 'rgba(34,197,94,0.15)';
+            badge.style.color = '#10b981';
+            badge.style.borderLeft = '3px solid #10b981';
+          } else {
+            badge.textContent = '🔒 Visualizando seu histórico pessoal';
+            badge.style.background = 'rgba(249,115,22,0.15)';
+            badge.style.color = '#f97316';
+            badge.style.borderLeft = '3px solid #f97316';
+          }
+        }
+
+        const res = await fetch(`${API_BASE_FLEET}/fleet/search?limit=200`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+          }
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(errorText || `Erro ${res.status}`);
+        }
+
+        const data = await res.json();
+        dadosOriginais = Array.isArray(data.results) ? data.results : [];
+        dadosFiltrados = dadosOriginais;
+        const totalDecoded = Number(data.total || dadosOriginais.length);
+        document.getElementById('fleetTotalDecoded').textContent = String(totalDecoded);
+        document.getElementById('fleetDisplayedCount').textContent = String(dadosOriginais.length);
+        renderizar(dadosOriginais);
+        atualizarContador(dadosOriginais);
+      } catch (err) {
+        console.error('[Filtros] Erro na requisição:', err);
+        if (contador) contador.textContent = '❌ Erro ao carregar dados: ' + (err.message || 'erro desconhecido');
+      }
+    }
+
+    function preencherSelect(id, valores) {
+      const select = document.getElementById(id);
+      if (!select) return;
+      while (select.options.length > 1) select.remove(1);
+
+      const lista = Array.isArray(valores) ? valores : [...valores];
+      lista
+        .filter(Boolean)
+        .map(v => String(v).trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+        .forEach(v => {
+          const opt = document.createElement('option');
+          opt.value = v;
+          opt.textContent = v;
+          select.appendChild(opt);
+        });
+    }
+
+    async function aplicarFiltro() {
+      const token = localStorage.getItem('dvb_token');
+      if (!token) {
+        const contador = document.getElementById('contadorResultados');
+        if (contador) contador.textContent = 'Faça login para aplicar filtros.';
+        return;
+      }
+
+      const params = new URLSearchParams();
+      const frota = document.getElementById('frota')?.value || '';
+      const montadora = document.getElementById('montadora')?.value || '';
+      const modelo = document.getElementById('modelo')?.value || '';
+      const submodelo = document.getElementById('submodelo')?.value || '';
+      const ano = document.getElementById('ano')?.value || '';
+
+      if (frota) params.set('fleet_name', frota);
+      if (montadora) params.set('montadora', montadora);
+      if (modelo) params.set('modelo', modelo);
+      if (submodelo) params.set('submodelo', submodelo);
+      if (ano) params.set('ano', ano);
+      params.set('limit', '200');
+
+      const contador = document.getElementById('contadorResultados');
+      if (contador) contador.textContent = 'Aplicando filtros...';
+
+      try {
+        const res = await fetch(`${API_BASE_FLEET}/fleet/search?${params.toString()}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+          }
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(errorText || `Erro ${res.status}`);
+        }
+
+        const data = await res.json();
+        const results = Array.isArray(data.results) ? data.results : [];
+        dadosFiltrados = results;
+        document.getElementById('fleetDisplayedCount').textContent = String(results.length);
+        renderizar(results);
+        atualizarContador(results);
+      } catch (err) {
+        console.error('[Filtros] Erro ao aplicar filtro:', err);
+        if (contador) contador.textContent = '❌ Erro ao aplicar filtro: ' + (err.message || 'erro desconhecido');
+      }
+    }
+
+    function limparFiltros() {
+      ['frota', 'montadora', 'modelo', 'submodelo', 'ano'].forEach(id => {
+        const elemento = document.getElementById(id);
+        if (elemento) elemento.value = '';
+      });
+      carregarDados();
+    }
+
+    function atualizarContador(lista) {
+      const contador = document.getElementById('contadorResultados');
+      if (!contador) {
+        return;
+      }
+      if (!Array.isArray(lista) || lista.length === 0) {
+        contador.textContent = '📊 0 veículo(s) exibido(s) • 0 frota(s)';
+        document.getElementById('fleetDisplayedCount').textContent = '0';
+        return;
+      }
+      const fletras = Array.from(new Set(lista.map(i => String(i.fleet_name || i.nome_da_frota || 'Sem frota').trim()))).filter(Boolean);
+      contador.textContent = `📊 ${lista.length} veículo(s) exibido(s) • ${fletras.length} frota(s) filtrada(s)`;
+      document.getElementById('fleetDisplayedCount').textContent = String(lista.length);
+    }
+
+    function renderizar(lista) {
+      const container = document.getElementById('resultado');
+      if (!container) {
+        console.error('[Filtros] ERRO: Elemento #resultado não encontrado no DOM!');
+        return;
+      }
+      container.innerHTML = '';
+
+      if (!Array.isArray(lista) || lista.length === 0) {
+        container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">Nenhum resultado encontrado.</p>';
+        return;
+      }
+
+      const grupos = lista.reduce((acc, item) => {
+        const frota = String(item.fleet_name || item.nome_da_frota || 'Sem frota').trim() || 'Sem frota';
+        if (!acc[frota]) acc[frota] = [];
+        acc[frota].push(item);
+        return acc;
+      }, {});
+
+      const extractUserName = (item) => {
+        const candidates = [
+          item.user_name,
+          item.nome,
+          item.auditBy,
+          item.audit_email,
+          item.auditEmail,
+          item.created_by,
+          item.createdBy,
+          item.user?.nome,
+          item.user?.name,
+          item.email,
+        ];
+        return candidates
+          .map(v => String(v || '').trim())
+          .filter(Boolean)[0] || '';
+      };
+
+      Object.keys(grupos).forEach((frota) => {
+        const group = grupos[frota];
+        const isCollapsed = !!fleetGroupCollapsedState[frota];
+        const groupBox = document.createElement('div');
+        groupBox.style.cssText = 'margin-bottom:18px;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--card);';
+
+        const titleRow = document.createElement('div');
+        titleRow.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:10px;';
+
+        const title = document.createElement('div');
+        title.style.cssText = 'font-size:15px;font-weight:700;color:var(--accent);';
+        const userName = (group.map(extractUserName).filter(Boolean)[0]) || 'Usuário desconhecido';
+        title.textContent = `${userName} • Frota: ${frota} (${group.length} veículo${group.length === 1 ? '' : 's'})`;
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.textContent = isCollapsed ? '▼' : '▲';
+        toggleBtn.ariaLabel = isCollapsed ? 'Expandir frota' : 'Diminuir frota';
+        toggleBtn.style.cssText = 'margin-left:auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;padding:0;border:none;border-radius:8px;background:rgba(255,255,255,0.05);color:var(--text);font-size:16px;cursor:pointer;transition:background .2s;';
+        toggleBtn.onmouseover = () => toggleBtn.style.background = 'rgba(255,255,255,0.1)';
+        toggleBtn.onmouseout = () => toggleBtn.style.background = 'rgba(255,255,255,0.05)';
+        toggleBtn.onclick = () => {
+          fleetGroupCollapsedState[frota] = !fleetGroupCollapsedState[frota];
+          renderizar(dadosFiltrados);
+        };
+
+        titleRow.appendChild(title);
+        titleRow.appendChild(toggleBtn);
+        groupBox.appendChild(titleRow);
+
+        if (isCollapsed) {
+          const collapsedInfo = document.createElement('div');
+          collapsedInfo.style.cssText = 'padding:14px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.1);color:var(--muted);font-size:13px;';
+          collapsedInfo.textContent = `${group.length} veículo${group.length === 1 ? '' : 's'} decodificado${group.length === 1 ? '' : 's'} nesta frota.`;
+          groupBox.appendChild(collapsedInfo);
+        } else {
+          const list = document.createElement('div');
+          list.style.cssText = 'display:grid;gap:10px;';
+
+          group.forEach((item) => {
+            const row = document.createElement('div');
+            row.style.cssText = 'padding:12px;border-radius:10px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.12);font-size:13px;color:var(--text);';
+            const descricao = [];
+            if (item.montadora) descricao.push('ORRA: ' + item.montadora);
+            if (item.modelo) descricao.push(item.modelo);
+            if (item.submodelo) descricao.push(item.submodelo);
+            if (item.ano) descricao.push(item.ano);
+            const linhas = [];
+            if (item.placa) linhas.push('Placa: ' + item.placa);
+            if (item.vin) linhas.push('VIN: ' + item.vin);
+            row.innerHTML = `
+              <div style="font-weight:600;">${descricao.filter(Boolean).join(' • ')}</div>
+              <div style="color:var(--muted);margin-top:4px;">${linhas.join(' • ')}</div>
+            `;
+            list.appendChild(row);
+          });
+
+          groupBox.appendChild(list);
+        }
+
+        container.appendChild(groupBox);
+      });
+    }
+
+    window.carregarDados = carregarDados;
+    window.aplicarFiltro = aplicarFiltro;
+    window.limparFiltros = limparFiltros;
+  </script>
   
   <script>
     document.getElementById('excelFileInput')?.addEventListener('change', function(e) {

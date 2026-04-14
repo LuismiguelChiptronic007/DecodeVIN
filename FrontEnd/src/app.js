@@ -700,19 +700,33 @@ function addGroupHistoryEntry(vins, plates, results = []) {
   if (token && typeof window.dvbHistoricoUsuarioPost === "function") {
     window.dvbHistoricoUsuarioPost("group", entry).then((r) => {
       if (r && r.ok) {
+        // Salva os veículos no banco após salvar no histórico
+        salvarFrotaNoBanco(fleetName, r.id || Date.now(), results);
         currentGroupHistoryPage = 1;
         renderHistory();
         if (fInput) fInput.value = "";
         return;
+      }
+      if (token) {
+        salvarFrotaNoBanco(fleetName, Date.now(), results);
+      }
+      pushLocalOnly();
+      if (fInput) fInput.value = "";
+    }).catch(() => {
+      if (token) {
+        salvarFrotaNoBanco(fleetName, Date.now(), results);
       }
       pushLocalOnly();
       if (fInput) fInput.value = "";
     });
     return;
   }
+
+  if (token) {
+    salvarFrotaNoBanco(fleetName, Date.now(), results);
+  }
   pushLocalOnly();
   if (fInput) fInput.value = "";
-  _historyDisplayCache.clear();
 }
 
 function renderHistory() {
@@ -756,7 +770,7 @@ function parseHistoricoPayload(raw) {
         item.auditEmail ||
         (item.userId != null ? String(item.userId) : "") ||
         (item.fromServer ? "self" : "local");
-      const body = String(item.vins || "").trim() + "|" + String(item.plates || "").trim() + "|" + String(item.fleetName || "").trim();
+      const body = String(item.vins || "").trim().slice(0, 60) + "|" + String(item.plates || "").trim().slice(0, 60) + "|" + String(item.ts || "");
       const k = userKey + "::" + body;
       const prev = map.get(k);
       if (!prev || item.ts >= prev.ts) map.set(k, item);
@@ -1094,415 +1108,87 @@ function normalizeHistoryMeta(item) {
 }
 
 async function renderGroupHistory() {
-  console.log("=== INICIANDO RENDER GROUP HISTORY ===");
-  console.log("[renderGroupHistory] Chamada da função - Início");
-  
-  // Wait for decoder to be ready to prevent race condition
-  if (!window.currentDecoder) {
-    console.log("[renderGroupHistory] Decoder não está pronto, aguardando...");
-    const waitForDecoder = setInterval(() => {
-      if (window.currentDecoder) { 
-        console.log("[renderGroupHistory] Decoder pronto, continuando execução");
-        clearInterval(waitForDecoder); 
-        renderGroupHistory(); 
-      }
-    }, 200);
-    return;
-  }
-  
-  console.log("[renderGroupHistory] Decoder está pronto, continuando execução");
-  
-  const key = "decodevin.groupHistory";
-  console.log("[renderGroupHistory] Buscando histórico no localStorage...");
-  let list = JSON.parse(localStorage.getItem(key) || "[]");
-  const sessUser = JSON.parse(localStorage.getItem("dvb_user") || "null");
-  const token = localStorage.getItem("dvb_token");
-  console.log("[renderGroupHistory] Buscando histórico no localStorage...");
-  console.log("[renderGroupHistory] Dados encontrados:", {
-    listLength: list.length,
-    hasToken: !!token,
-    hasUser: !!sessUser,
-    isAdmin: sessUser?.admin || false
-  });
-  groupHistoryFetchGen++;
-  const gen = groupHistoryFetchGen;
+  const h = el('groupHistory');
+  if (!h) return;
+  h.innerHTML = '';
 
-  if (token && sessUser && sessUser.admin && typeof window.dvbHistoricoAdminGet === "function") {
-    try {
-      const res = await window.dvbHistoricoAdminGet();
-      if (gen !== groupHistoryFetchGen) return;
-      if (res && res.ok && Array.isArray(res.entries)) {
-        list = res.entries
-          .filter(e => e.kind === "group")
-          .map(e => {
-            const p = parseHistoricoPayload(e.payload);
-            const vins = String(p.vins || "");
-            const plates = String(p.plates || "");
-            const hasLines = !!(vins.trim() || plates.trim());
-            return {
-              vins,
-              plates,
-              fleetName: String(p.fleetName || "").slice(0, 200),
-              ts: typeof p.ts === "number" ? p.ts : new Date(e.created_at || Date.now()).getTime(),
-              serverId: e.id,
-              userId: e.user_id,
-              auditBy: e.nome || "—",
-              auditEmail: e.email || "",
-              adminGlobal: true,
-              auditOnly: !hasLines,
-              meta: p.meta || null
-            };
-          })
-          .sort((a, b) => b.ts - a.ts)
-          .slice(0, 120);
-      }
-    } catch (_) {
-      if (gen !== groupHistoryFetchGen) return;
-    }
-  } else if (token && typeof window.dvbHistoricoUsuarioGet === "function") {
-    try {
-      const res = await window.dvbHistoricoUsuarioGet();
-      if (gen !== groupHistoryFetchGen) return;
-      if (res && res.ok && Array.isArray(res.group) && res.group.length > 0) {
-        const serverHistory = res.group.map(g => ({
-          vins: String(g.vins || ""),
-          plates: String(g.plates || ""),
-          fleetName: String(g.fleetName || ""),
-          ts: typeof g.ts === "number" ? g.ts : Date.now(),
-          serverId: g.id,
-          fromServer: true,
-          auditOnly: false,
-          meta: g.meta || null
-        }));
+  const token = localStorage.getItem('dvb_token');
+  const intro = document.createElement('div');
+  intro.style.cssText = 'font-size:13px;color:var(--muted);padding:16px;background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:16px;';
+  intro.innerHTML = token
+    ? 'Histórico de frotas carregado diretamente do banco <strong>fleet_vehicles</strong>. Use os filtros acima para refinar por frota, montadora, modelo, submodelo e ano.'
+    : 'Faça login para acessar o histórico de frotas gravado no banco <strong>fleet_vehicles</strong>.';
+  h.appendChild(intro);
 
-        // Preserve any local history items while favoring server results
-        list = [...list, ...serverHistory];
-      }
-    } catch (_) {
-      if (gen !== groupHistoryFetchGen) return;
-    }
-  }
+  if (!token) return;
 
-  // Debug: verificar lista antes de deduplicar
-  console.log("[renderGroupHistory] Debug - Lista ANTES de dedupe:", {
-    totalItems: list.length,
-    fleets: list.map(item => item.fleetName).filter(Boolean)
-  });
+  try {
+    const opts = await buscarOpcoesFrota();
+    const search = await buscarFrotaNoBanco({ limit: 50, offset: 0 });
+    const vehicles = Array.isArray(search?.results) ? search.results : [];
+    const total = Number(search?.total || vehicles.length);
+    const fleets = Array.isArray(opts?.frotas) ? opts.frotas : [];
 
-  list = dedupeGroupHistoryList(list);
+    const summary = document.createElement('div');
+    summary.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;padding:0 0 16px;';
+    summary.innerHTML = `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <strong>Total de veículos</strong>
+        <div style="font-size:28px;margin-top:8px;">${total}</div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <strong>Frotas cadastradas</strong>
+        <div style="font-size:28px;margin-top:8px;">${fleets.length}</div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <strong>Veículos exibidos</strong>
+        <div style="font-size:28px;margin-top:8px;">${vehicles.length}</div>
+      </div>
+    `;
+    h.appendChild(summary);
 
-  // Debug: verificar lista depois de deduplicar
-  console.log("[renderGroupHistory] Debug - Lista DEPOIS de dedupe:", {
-    totalItems: list.length,
-    fleets: list.map(item => item.fleetName).filter(Boolean)
-  });
+    const listContainer = document.createElement('div');
+    listContainer.style.cssText = 'display:grid;gap:10px;';
 
-  // Debug: verificar estado para usuários não-admin
-  console.log("[renderGroupHistory] Debug - Estado atual:", {
-    sessUser,
-    token: !!token,
-    listLength: list.length,
-    isAdmin: sessUser?.admin || false,
-    hasDvbHistoricoUsuarioGet: typeof window.dvbHistoricoUsuarioGet === "function"
-  });
-  
-  const h = el("groupHistory");
-  console.log("[renderGroupHistory] Verificando elemento groupHistory:", {
-    elementExists: !!h,
-    elementId: h ? h.id : 'not found',
-    elementClass: h ? h.className : 'not found'
-  });
-  
-  if (!h) {
-    console.log("[renderGroupHistory] ERRO: Elemento groupHistory não encontrado no DOM!");
-    return;
-  }
-  h.innerHTML = "";
-
-  if (token) {
-    const note = document.createElement("div");
-    note.style.cssText = "font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4;";
-    note.textContent =
-      "Lotes de todos os usuários; linhas sem chassis/placas no servidor são só registro (não reexecutam).";
-    h.appendChild(note);
-  }
-
-  const searchContainer = document.createElement("div");
-  searchContainer.style.cssText = "display:flex;flex-direction:column;gap:8px;margin-bottom:15px;";
-
-  // ── Linha de selects ──────────────────────────────────────────
-  const filterRow = document.createElement("div");
-  filterRow.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;";
-
-  const createHistorySelect = (id, defaultLabel) => {
-    const s = document.createElement("select");
-    s.id = id;
-    s.style.cssText = "flex:1;min-width:120px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:12px;outline:none;cursor:pointer;";
-    s.innerHTML = '<option value="">' + defaultLabel + '</option>';
-    return s;
-  };
-
-  const hFilterFleet    = createHistorySelect("historyFilterFleet",    "Frota (Todas)");
-  const hFilterBrand    = createHistorySelect("historyFilterBrand",    "Montadora (Todas)");
-  const hFilterModel    = createHistorySelect("historyFilterModel",    "Modelo (Todos)");
-  const hFilterSubModel = createHistorySelect("historyFilterSubModel", "Submodelo (Todos)");
-  const hFilterYear     = createHistorySelect("historyFilterYear",     "Ano (Todos)");
-
-  filterRow.appendChild(hFilterFleet);
-  filterRow.appendChild(hFilterBrand);
-  filterRow.appendChild(hFilterModel);
-  filterRow.appendChild(hFilterSubModel);
-  filterRow.appendChild(hFilterYear);
-  searchContainer.appendChild(filterRow);
-
-  // ── Linha de botões ───────────────────────────────────────────
-  const btnRowFrota = document.createElement("div");
-  btnRowFrota.style.cssText = "display:flex;justify-content:flex-end;gap:10px;margin-top:6px;";
-
-  const btnLimparFiltros = document.createElement("button");
-  btnLimparFiltros.className = "btn-page";
-  btnLimparFiltros.innerHTML = "🧹 Limpar Filtros";
-  btnLimparFiltros.style.cssText = "padding:9px 18px;background:var(--card);color:var(--text);font-weight:600;border:1px solid var(--border);border-radius:10px;cursor:pointer;font-size:13px;transition:all .2s;";
-
-  const btnPesquisarFrota = document.createElement("button");
-  btnPesquisarFrota.id = "btnPesquisarFrota";
-  btnPesquisarFrota.className = "btn-page";
-  btnPesquisarFrota.innerHTML = "🔍 Pesquisar Frota";
-  btnPesquisarFrota.style.cssText = "display:flex;align-items:center;gap:6px;padding:9px 18px;background:linear-gradient(135deg,var(--accent-2),var(--accent));color:#000;font-weight:700;border:none;border-radius:10px;cursor:pointer;font-size:13px;transition:opacity .2s;";
-  btnPesquisarFrota.onmouseenter = () => btnPesquisarFrota.style.opacity = ".85";
-  btnPesquisarFrota.onmouseleave = () => btnPesquisarFrota.style.opacity = "1";
-  btnPesquisarFrota.onclick = () => {
-    const filtros = {
-      montadora:  hFilterBrand.value    || "",
-      modelo:     hFilterModel.value    || "",
-      submodelo:  hFilterSubModel.value || "",
-      ano:        hFilterYear.value     || "",
-      fleet_name: hFilterFleet.value    || "",
-    };
-    const visibleIds = Array.from(document.querySelectorAll('#groupHistoryList .history-row'))
-      .map(r => r.getAttribute('data-id')).filter(Boolean);
-    if (visibleIds.length > 0) filtros.history_ids = visibleIds.join(',');
-    if (typeof window.abrirPesquisaFrota === 'function') window.abrirPesquisaFrota(filtros);
-  };
-
-  btnRowFrota.appendChild(btnLimparFiltros);
-  btnRowFrota.appendChild(btnPesquisarFrota);
-  searchContainer.appendChild(btnRowFrota);
-  h.appendChild(searchContainer);
-
-  // ── Decodifica cada linha de VIN igual ao que aparece nos cards ──
-  const decodificarLinha = (vinLine) => {
-    const vin = String(vinLine || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-    if (vin.length < 8 || !window.currentDecoder) return null;
-    try {
-      const res  = window.currentDecoder.decode(vin);
-      const tech = getTechnicalData({ result: res, fabricante: res.manufacturerName });
-      return {
-        brand:    tech.brand    || "",
-        model:    tech.model    || "",
-        submodel: tech.submodel || "",
-        year:     tech.year     || "",
-      };
-    } catch (_) { return null; }
-  };
-
-  // ── Extrai os valores que APARECEM nos cards de cada item do histórico ──
-  // Para cada item, varre linha a linha igual ao renderGroupHistoryItems faz.
-  const extrairValoresExibidos = (item) => {
-    const brands    = new Set();
-    const models    = new Set();
-    const submodels = new Set();
-    const years     = new Set();
-
-    const vinLines   = String(item.vins   || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    const plateLines = String(item.plates || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    const total      = Math.max(vinLines.length, plateLines.length);
-
-    for (let i = 0; i < total; i++) {
-      const vinLine   = (vinLines[i]   || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-      const plateLine = (plateLines[i] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-
-      // Mesma lógica de decodeVinDescription usada nos cards:
-      // 1. Resultados da sessão atual
-      const allResults = window.currentGroupResults || [];
-      const savedItem  = allResults.find(r => {
-        const rv = String(r.vin   || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-        const rp = String(r.placa || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-        return (vinLine && rv === vinLine) || (plateLine && rp === plateLine);
+    if (vehicles.length === 0) {
+      listContainer.innerHTML = '<div style="color:var(--muted);padding:18px;background:var(--card);border:1px solid var(--border);border-radius:12px;">Nenhum veículo salvo no banco ainda.</div>';
+    } else {
+      vehicles.forEach((item, index) => {
+        const card = document.createElement('div');
+        card.style.cssText = 'padding:14px;background:var(--card);border:1px solid var(--border);border-radius:12px;';
+        card.innerHTML = `
+          <div style="font-size:14px;font-weight:700;margin-bottom:6px;">${index + 1}. ${item.fleet_name || 'Sem frota'}</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">
+            👤 ${item.user_name && item.user_name !== 'Usuário desconhecido' ? item.user_name : (item.user_id ? 'ID: ' + item.user_id : 'Usuário desconhecido')}
+          </div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.5;">
+            ${item.montadora ? item.montadora + ' • ' : ''}
+            ${item.modelo || ''}
+            ${item.submodelo ? ' / ' + item.submodelo : ''}
+            ${item.ano ? ' • ' + item.ano : ''}
+            ${item.placa ? ' • Placa: ' + item.placa : ''}
+            ${item.vin ? ' • VIN: ' + item.vin : ''}
+          </div>
+        `;
+        listContainer.appendChild(card);
       });
-
-      if (savedItem && savedItem.apiResult) {
-        const api    = savedItem.apiResult;
-        const tech   = getTechnicalData({ apiResult: api, fabricante: api.marca });
-        if (tech.brand)    brands.add(normalizeBrand(tech.brand));
-        if (tech.model)    models.add(tech.model.trim().toUpperCase());
-        if (tech.submodel) submodels.add(tech.submodel.trim().toUpperCase());
-        if (tech.year)     years.add(tech.year);
-        continue;
-      }
-
-      // 2. Cache do banco (fleet_vehicles)
-      const cacheKey = vinLine || plateLine;
-      if (cacheKey && window._fleetDbCache && window._fleetDbCache[cacheKey]) {
-        const c = window._fleetDbCache[cacheKey];
-        if (c.brand)    brands.add(normalizeBrand(c.brand));
-        if (c.model)    models.add(String(c.model    || "").trim().toUpperCase());
-        if (c.submodel) submodels.add(String(c.submodel || "").trim().toUpperCase());
-        if (c.year)     years.add(c.year);
-        continue;
-      }
-
-      // 3. Decoder local pelo VIN (mesmo fallback dos cards)
-      if (vinLine) {
-        const d = decodificarLinha(vinLine);
-        if (d) {
-          if (d.brand)    brands.add(normalizeBrand(d.brand));
-          if (d.model)    models.add(d.model.trim().toUpperCase());
-          if (d.submodel) submodels.add(d.submodel.trim().toUpperCase());
-          if (d.year)     years.add(d.year);
-        }
-      }
     }
 
-    return {
-      brands:    Array.from(brands).filter(Boolean),
-      models:    Array.from(models).filter(Boolean),
-      submodels: Array.from(submodels).filter(Boolean),
-      years:     Array.from(years).filter(Boolean),
-    };
-  };
+    h.appendChild(listContainer);
 
-  // ── Cache por item para não redecodificar a cada mudança de filtro ──
-  const getDisplayMeta = (item) => {
-    // Key robusta: usa serverId (único do servidor) ou combina ts + fleetName + início dos vins
-    const key = item.serverId
-      ? String(item.serverId)
-      : String(item.ts || "") + "|" + String(item.fleetName || "") + "|" + String(item.vins || "").slice(0, 30);
-
-    if (!_historyDisplayCache.has(key)) {
-      _historyDisplayCache.set(key, extrairValoresExibidos(item));
-    }
-    return _historyDisplayCache.get(key);
-  };
-
-  // ── Popula os Sets com os valores reais dos cards ─────────────
-  const hFleets    = new Set();
-  const hBrands    = new Set();
-  const hModels    = new Set();
-  const hSubModels = new Set();
-  const hYears     = new Set();
-
-  list.forEach(item => {
-    if (item.fleetName) hFleets.add(item.fleetName);
-    const d = getDisplayMeta(item);
-    d.brands.forEach(b    => hBrands.add(b));
-    d.models.forEach(m    => hModels.add(m));
-    d.submodels.forEach(s => hSubModels.add(s));
-    d.years.forEach(y     => hYears.add(y));
-  });
-
-  // ── Reconstrói select preservando seleção atual ───────────────
-  const rebuildSelect = (sel, values, isYear = false) => {
-    if (!sel) return;
-    const currentVal = sel.value;
-    const options = new Map();
-
-    Array.from(values).forEach(v => {
-      if (!v) return;
-      const raw = String(v).trim();
-      if (!raw) return;
-      if (isYear) {
-        const lbl = getYearLabel(raw);
-        if (lbl && !options.has(lbl)) options.set(lbl, raw);
-      } else {
-        const normalized = String(v).trim().toUpperCase();
-        if (normalized && !options.has(normalized)) options.set(normalized, normalized);
-      }
-    });
-
-    const sorted = Array.from(options.keys()).sort((a, b) => {
-      if (isYear) {
-        const nA = parseInt(a, 10), nB = parseInt(b, 10);
-        if (!isNaN(nA) && !isNaN(nB)) return nB - nA;
-        return String(b).localeCompare(String(a));
-      }
-      return String(a).localeCompare(String(b));
-    });
-
-    const defaultText = sel.options[0]?.textContent || "";
-    sel.innerHTML = '<option value="">' + defaultText + "</option>";
-    sorted.forEach(label => {
-      const opt = document.createElement("option");
-      opt.value = options.get(label);
-      opt.textContent = label;
-      sel.appendChild(opt);
-    });
-    if (currentVal && Array.from(options.values()).includes(currentVal)) sel.value = currentVal;
-  };
-
-  rebuildSelect(hFilterFleet,    hFleets,    false);
-  rebuildSelect(hFilterBrand,    hBrands,    false);
-  rebuildSelect(hFilterModel,    hModels,    false);
-  rebuildSelect(hFilterSubModel, hSubModels, false);
-  rebuildSelect(hFilterYear,     hYears,     true);
-
-  // ── Aplica filtros comparando com os mesmos valores dos cards ──
-  const applyHistoryFilters = () => {
-    const fFleet    = (hFilterFleet.value    || "").trim().toUpperCase();
-    const fBrand    = (hFilterBrand.value    || "").trim().toUpperCase();
-    const fModel    = (hFilterModel.value    || "").trim().toUpperCase();
-    const fSubModel = (hFilterSubModel.value || "").trim().toUpperCase();
-    const fYear     = (hFilterYear.value     || "").trim();
-    const fYearLabel = fYear ? getYearLabel(fYear) : "";
-
-    const filtered = list.filter(item => {
-      if (fFleet && !(item.fleetName || "").toUpperCase().includes(fFleet)) return false;
-      const d = getDisplayMeta(item);
-      if (fBrand    && !d.brands.some(b    => normalizeBrand(b) === fBrand))                            return false;
-      if (fModel    && !d.models.some(m    => String(m).trim().toUpperCase() === fModel))               return false;
-      if (fSubModel && !d.submodels.some(s => String(s).trim().toUpperCase().includes(fSubModel)))      return false;
-      if (fYear     && !d.years.some(y     => getYearLabel(y) === fYearLabel))                          return false;
-      return true;
-    });
-
-    currentGroupHistoryPage = 1;
-    renderGroupHistoryItems(filtered, sessUser);
-  };
-
-  hFilterFleet.onchange    = applyHistoryFilters;
-  hFilterBrand.onchange    = applyHistoryFilters;
-  hFilterModel.onchange    = applyHistoryFilters;
-  hFilterSubModel.onchange = applyHistoryFilters;
-  hFilterYear.onchange     = applyHistoryFilters;
-
-  btnLimparFiltros.onclick = () => {
-    [hFilterFleet, hFilterBrand, hFilterModel, hFilterSubModel, hFilterYear].forEach(s => { s.value = ""; });
-    currentGroupHistoryPage = 1;
-    renderGroupHistoryItems(list, sessUser);
-  };
-
-  btnPesquisarFrota.onclick = () => {
-    const filtros = {
-      montadora:  hFilterBrand.value    || "",
-      modelo:     hFilterModel.value    || "",
-      submodelo:  hFilterSubModel.value || "",
-      ano:        hFilterYear.value     || "",
-      fleet_name: hFilterFleet.value    || "",
-    };
-    const visibleIds = Array.from(document.querySelectorAll("#groupHistoryList .history-row"))
-      .map(r => r.getAttribute("data-id")).filter(Boolean);
-    if (visibleIds.length > 0) filtros.history_ids = visibleIds.join(",");
-    if (typeof window.abrirPesquisaFrota === "function") window.abrirPesquisaFrota(filtros);
-  };
-
-  const listContainer = document.createElement("div");
-  listContainer.id = "groupHistoryList";
-  h.appendChild(listContainer);
-
-  renderGroupHistoryItems(list, sessUser);
+    const footer = document.createElement('div');
+    footer.style.cssText = 'margin-top:16px;font-size:12px;color:var(--muted);';
+    footer.textContent = 'Use o painel de filtros acima para carregar mais veículos e frotas do banco.';
+    h.appendChild(footer);
+  } catch (err) {
+    const errorEl = document.createElement('div');
+    errorEl.style.cssText = 'color:var(--danger);padding:16px;background:var(--card);border:1px solid var(--border);border-radius:12px;';
+    errorEl.textContent = 'Erro ao carregar histórico de frotas: ' + (err?.message || 'erro desconhecido');
+    h.appendChild(errorEl);
+  }
 }
 
-  // Gera os dados do relatório de um lote salvo no histórico sem reprocessar a tela.
+// Gera os dados do relatório de um lote salvo no histórico sem reprocessar a tela.
 async function montarRelatorioDoHistorico(historyItem, onProgress = null) {
   const vLines = String(historyItem?.vins || "").split("\n").map(l => l.trim()).filter(Boolean);
   const pLines = String(historyItem?.plates || "").split("\n").map(l => l.trim()).filter(Boolean);
@@ -1846,6 +1532,7 @@ function renderGroupHistoryItems(list, sessUser) {
                 year:     tech.year     || row.ano        || "",
               };
               window._fleetDbCache[cacheKey] = result;
+              
               renderGroupHistory();
             }
             window._fleetDbPending.delete(cacheKey);
@@ -2650,40 +2337,51 @@ function populateGroupFilters(results) {
 
     // Inicializa os filtros dependentes
     updateDependentFilters();
-
-    // Listener de cascata na montadora
+    
+    // FIX: Não clonar elementos - preserva listeners já registrados em main()
+    // Adiciona listeners de cascata sem duplicar (usando a mesma namespace)
+    
     const brandSel = el("filterBrand");
     if (brandSel) {
-      // Remove listener antigo para não duplicar
-      const newBrandSel = brandSel.cloneNode(true);
-      brandSel.parentNode.replaceChild(newBrandSel, brandSel);
-      newBrandSel.addEventListener("change", () => {
+      // Remove listener anterior de cascata (se existir) para evitar duplicação
+      if (brandSel._cascadeHandler) {
+        brandSel.removeEventListener('change', brandSel._cascadeHandler, true);
+      }
+      
+      // Cria e armazena novo handler de cascata
+      brandSel._cascadeHandler = () => {
         // Reseta modelo e submodelo ao trocar montadora
         const modelSel = el("filterModel");
         const subSel = el("filterSubModel");
         if (modelSel) modelSel.value = "";
         if (subSel) subSel.value = "";
         updateDependentFilters();
-        applyGroupFilters();
-      });
+        // applyGroupFilters será chamado pelo listener de main() em fase de bubbling
+      };
+      
+      // Adiciona em fase de captura para executar ANTES do applyGroupFilters (bubbling)
+      brandSel.addEventListener('change', brandSel._cascadeHandler, true);
     }
 
     // Listener de cascata no modelo
     const modelSel = el("filterModel");
     if (modelSel) {
-      const newModelSel = modelSel.cloneNode(true);
-      modelSel.parentNode.replaceChild(newModelSel, modelSel);
-      newModelSel.addEventListener("change", () => {
+      // Remove listener anterior de cascata (se existir)
+      if (modelSel._cascadeHandler) {
+        modelSel.removeEventListener('change', modelSel._cascadeHandler, true);
+      }
+      
+      // Cria e armazena novo handler de cascata
+      modelSel._cascadeHandler = () => {
         const subSel = el("filterSubModel");
         if (subSel) subSel.value = "";
         updateDependentFilters();
-        applyGroupFilters();
-      });
+        // applyGroupFilters será chamado pelo listener de main() em fase de bubbling
+      };
+      
+      // Adiciona em fase de captura para executar ANTES do applyGroupFilters (bubbling)
+      modelSel.addEventListener('change', modelSel._cascadeHandler, true);
     }
-
-    // Submodelo, ano e segmento já possuem listeners padrão em main(),
-    // então atualizamos apenas as opções sem substituir o elemento.
-    // Isso evita perder os listeners registrados via addEventListener.
   }
 
   function applyGroupFilters() {
@@ -3534,12 +3232,27 @@ async function main() {
     el("backFromPlacasCache").onclick = () => {
       showScreen(selectionScreen);
     };
-    el("btnGoToGroupHistory").onclick = () => {
-      if (typeof window.showScreen === "function" && window.historyScreen) {
-        window.showScreen(window.historyScreen);
+    // Configurar btnGoToGroupHistory com verificação de disponibilidade das funções globais
+    const setupGroupHistoryButton = () => {
+      const btn = el("btnGoToGroupHistory");
+      if (btn) {
+        btn.onclick = () => {
+          console.log("[Filtros] btnGoToGroupHistory clicado");
+          if (typeof window.showScreen === "function" && window.historyScreen) {
+            window.showScreen(window.historyScreen);
+          }
+          if (typeof window.carregarDados === "function") {
+            window.carregarDados();
+          } else {
+            console.warn("[Filtros] carregarDados ainda não disponível no clique");
+          }
+        };
+        console.log("[Filtros] Botão btnGoToGroupHistory configurado com sucesso");
+      } else {
+        setTimeout(setupGroupHistoryButton, 100);
       }
-      renderGroupHistory();
     };
+    setupGroupHistoryButton();
 
     const reportModal = el("reportModal");
     if (el("closeReportModal")) {
@@ -3737,6 +3450,20 @@ async function main() {
     // Atualiza o título dinâmico da frota enquanto o usuário digita
     const fleetInput = el("fleetName");
     const dynamicTitleDiv = el("dynamicFleetTitle");
+
+    const validateGroupForm = () => {
+      const fleetName = fleetInput?.value?.trim() || "";
+      const hasInput = (gInput?.value?.trim() || "") !== "" || (gPlateInput?.value?.trim() || "") !== "";
+      if (gBtn) {
+        gBtn.disabled = !fleetName || !hasInput;
+        if (gBtn.disabled) {
+          gBtn.title = fleetName ? "Preencha pelo menos um chassi ou placa para decodificar." : "Informe o nome do lote / frota antes de decodificar.";
+        } else {
+          gBtn.title = "Clique para decodificar o grupo.";
+        }
+      }
+    };
+
     if (fleetInput && dynamicTitleDiv) {
       fleetInput.addEventListener('input', (e) => {
         const val = e.target.value.trim();
@@ -3747,8 +3474,13 @@ async function main() {
         } else {
           dynamicTitleDiv.style.display = "none";
         }
+        validateGroupForm();
       });
     }
+    if (gInput) gInput.addEventListener('input', validateGroupForm);
+    if (gPlateInput) gPlateInput.addEventListener('input', validateGroupForm);
+    if (gBtn) gBtn.disabled = true;
+    window.validateGroupForm = validateGroupForm;
 
     const showReports = (mode, show) => {
       const id = mode === "single" ? "singleReportButtons" : "reportButtons";

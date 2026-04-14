@@ -97,25 +97,33 @@ export default {
 
     if (method === 'OPTIONS') return new Response(null, { headers: CORS });
 
-    try {
-      // ============================================================
-      // POST /register
-      // ============================================================
-      if (method === 'POST' && path === '/register') {
-      const { nome, email, senha, setor } = await request.json();
-      if (!nome || !email || !senha || !setor)
-        return json({ erro: 'Todos os campos são obrigatórios (nome, email, senha, setor)' }, 400);
+    // ============================================================
+    // GET /veiculos-da-frota  — retorna dados de teste (SEM AUTENTICAÇÃO)
+    // ============================================================
+    if (method === 'GET' && path === '/veiculos-da-frota') {
+      // Dados fictícios de teste - SEM autenticação obrigatória
+      const todosOsDados = [
+        { nome_da_frota: "Frota A", Orra: "SCANIA", modelo: "P340", submodelo: "6x2", ano: 2022 },
+        { nome_da_frota: "Frota A", Orra: "SCANIA", modelo: "P440", submodelo: "8x2", ano: 2023 },
+        { nome_da_frota: "Frota B", Orra: "VOLVO", modelo: "B360", submodelo: "4x2", ano: 2021 },
+        { nome_da_frota: "Frota B", Orra: "VOLVO", modelo: "B430", submodelo: "6x2", ano: 2022 },
+        { nome_da_frota: "Frota C", Orra: "MERCEDES", modelo: "O500", submodelo: "RSD", ano: 2023 },
+        { nome_da_frota: "Frota C", Orra: "MERCEDES", modelo: "O400", submodelo: "RSE", ano: 2020 },
+        { nome_da_frota: "Frota D", Orra: "IVECO", modelo: "S-Way", submodelo: "A", ano: 2024 },
+        { nome_da_frota: "Frota D", Orra: "IVECO", modelo: "S-Way", submodelo: "B", ano: 2024 },
+        { nome_da_frota: "Frota E", Orra: "SCANIA", modelo: "P360", submodelo: "6x2", ano: 2022 },
+        { nome_da_frota: "Frota E", Orra: "VOLVO", modelo: "B370", submodelo: "4x2", ano: 2021 },
+      ];
 
-      const existe = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
-      if (existe) return json({ erro: 'E-mail já cadastrado' }, 409);
+      const limit  = Math.min(parseInt(url.searchParams.get('limit')  || '200'), 1000);
+      const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0'));
+      
+      const total = todosOsDados.length;
+      const results = todosOsDados.slice(offset, offset + limit);
 
-      const salt      = randomSalt();
-      const senhaHash = await hashPassword(senha, salt);
-      await env.DB.prepare(
-        'INSERT INTO users (nome, email, senha_hash, salt, setor) VALUES (?, ?, ?, ?, ?)'
-      ).bind(nome, email, senhaHash, salt, setor).run();
+      console.log(`[Worker] /veiculos-da-frota chamado - retornando ${results.length} de ${total} registros`);
 
-      return json({ ok: true, mensagem: 'Cadastro realizado! Aguarde aprovação do administrador.' });
+      return json({ ok: true, total, limit, offset, results });
     }
 
     // ============================================================
@@ -825,12 +833,13 @@ if (method === 'GET' && path === '/fleet/search') {
 
     // Busca paginada
     const dataSQL = `
-      SELECT id, user_id, fleet_name, vin, placa, montadora, modelo, submodelo, ano,
-             carroceria, encarrocadora, segmento, fipe_codigo, fipe_modelo,
-             wmi, motor, posicao_motor, emissoes, combustivel, cor, municipio_uf, created_at
-      FROM fleet_vehicles
+      SELECT fv.id, fv.user_id, COALESCE(u.nome, '') as user_name, fv.fleet_name, fv.vin, fv.placa, fv.montadora, fv.modelo, fv.submodelo, fv.ano,
+             fv.carroceria, fv.encarrocadora, fv.segmento, fv.fipe_codigo, fv.fipe_modelo,
+             fv.wmi, fv.motor, fv.posicao_motor, fv.emissoes, fv.combustivel, fv.cor, fv.municipio_uf, fv.created_at
+      FROM fleet_vehicles fv
+      LEFT JOIN users u ON CAST(fv.user_id AS TEXT) = CAST(u.id AS TEXT)
       ${where}
-      ORDER BY created_at DESC
+      ORDER BY fv.created_at DESC
       LIMIT ? OFFSET ?
     `;
     const { results } = await env.DB.prepare(dataSQL)
@@ -965,11 +974,7 @@ if (method === 'GET' && path === '/fleet/options') {
     }
 
     return json({ erro: 'Rota não encontrada' }, 404);
-    } catch (err) {
-      // Garante CORS mesmo em erro 500 inesperado 
-      return json({ erro: 'Erro interno: ' + String(err) }, 500);
-    }
-  },
+  }
 };
 
 async function handleAdminPlacasCache(request, env) {
