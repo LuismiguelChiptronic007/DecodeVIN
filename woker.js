@@ -127,6 +127,26 @@ export default {
     }
 
     // ============================================================
+    // POST /register
+    // ============================================================
+    if (method === 'POST' && path === '/register') {
+      const { nome, email, senha, setor } = await request.json().catch(() => ({}));
+      if (!nome || !email || !senha || !setor)
+        return json({ erro: 'Todos os campos são obrigatórios (nome, email, senha, setor)' }, 400);
+
+      const existe = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
+      if (existe) return json({ erro: 'E-mail já cadastrado' }, 409);
+
+      const salt      = randomSalt();
+      const senhaHash = await hashPassword(senha, salt);
+      await env.DB.prepare(
+        'INSERT INTO users (nome, email, senha_hash, salt, setor) VALUES (?, ?, ?, ?, ?)'
+      ).bind(nome, email, senhaHash, salt, setor).run();
+
+      return json({ ok: true, mensagem: 'Cadastro realizado! Aguarde aprovação do administrador.' });
+    }
+
+    // ============================================================
     // POST /login
     // ============================================================
     if (method === 'POST' && path === '/login') {
