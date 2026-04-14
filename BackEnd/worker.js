@@ -819,11 +819,11 @@ if (method === 'GET' && path === '/fleet/search') {
       bindings.push(String(userId));
     }
 
-    if (montadora)  { whereClauses.push('montadora = ?');          bindings.push(montadora.toUpperCase()); }
-    if (modelo)     { whereClauses.push('modelo LIKE ?');           bindings.push('%' + modelo.toUpperCase() + '%'); }
-    if (submodelo)  { whereClauses.push('submodelo LIKE ?');        bindings.push('%' + submodelo.toUpperCase() + '%'); }
+    if (montadora)  { whereClauses.push('UPPER(montadora) = ?');    bindings.push(montadora.toUpperCase()); }
+    if (modelo)     { whereClauses.push('UPPER(modelo) LIKE ?');    bindings.push('%' + modelo.toUpperCase() + '%'); }
+    if (submodelo)  { whereClauses.push('UPPER(submodelo) LIKE ?'); bindings.push('%' + submodelo.toUpperCase() + '%'); }
     if (ano)        { whereClauses.push('ano LIKE ?');              bindings.push('%' + ano + '%'); }
-    if (segmento)   { whereClauses.push('segmento = ?');            bindings.push(segmento); }
+    if (segmento)   { whereClauses.push('UPPER(segmento) = ?');     bindings.push(segmento.toUpperCase()); }
     if (placa)      { whereClauses.push('placa LIKE ?');            bindings.push('%' + placa.toUpperCase() + '%'); }
     if (fleet_name) { whereClauses.push('fleet_name LIKE ?');       bindings.push('%' + fleet_name + '%'); }
     if (user_name)  { whereClauses.push('UPPER(COALESCE(u.nome, \'\')) LIKE ?'); bindings.push('%' + user_name.toUpperCase().trim() + '%'); }
@@ -868,7 +868,38 @@ if (method === 'GET' && path === '/fleet/search') {
       .bind(...bindings, limit, offset)
       .all();
 
-    return json({ ok: true, total, limit, offset, results: results || [] });
+    // ✅ Normaliza segmentos vazios baseado na montadora
+    const normalizedResults = (results || []).map(v => {
+      if (!v.segmento || v.segmento.trim() === '' || v.segmento === 'Outros') {
+        const marca = String(v.montadora || '').toUpperCase().trim();
+        const modelo = String(v.modelo || '').toUpperCase().trim();
+        const searchStr = (modelo + ' ' + marca).toUpperCase();
+        
+        // Detecta Ônibus por marca
+        if (marca.includes('VOLARE') || marca.includes('MARCOPOLO') || marca.includes('NEOBUS') || 
+            marca.includes('CAIO') || marca.includes('COMIL') || marca.includes('MASCARELLO') ||
+            marca.includes('IRIZAR') || marca.includes('BUSSCAR') || searchStr.includes('BUS') ||
+            searchStr.includes('ÔNIBUS') || searchStr.includes('ONIBUS') || searchStr.includes('MICRO')) {
+          v.segmento = 'Ônibus';
+        }
+        // Detecta Caminhão por marca
+        else if (marca.includes('SCANIA') || marca.includes('IVECO') || marca.includes('DAF') || 
+                 marca.includes('VOLVO') || marca.includes('MB') || marca.includes('MERCEDES') ||
+                 marca.includes('MAN') || marca.includes('RENAULT') || marca.includes('FORD') ||
+                 marca.includes('FIAT') || marca.includes('VOLKSWAGEN') || marca.includes('VW') ||
+                 searchStr.includes('TRUCK') || searchStr.includes('CAMINHAO') || searchStr.includes('CAMINHÃO') ||
+                 searchStr.includes('TRACTOR') || searchStr.includes('STRADALE') || searchStr.includes('STRALIS')) {
+          v.segmento = 'Caminhão';
+        }
+        // Mantém como Outros se não conseguir classificar
+        else {
+          v.segmento = v.segmento || 'Outros';
+        }
+      }
+      return v;
+    });
+
+    return json({ ok: true, total, limit, offset, results: normalizedResults });
   } catch (err) {
     return json({ erro: 'Erro interno: ' + String(err) }, 500);
   }
@@ -910,16 +941,26 @@ if (method === 'GET' && path === '/fleet/options') {
       return (results || []).map(r => r[col]).filter(Boolean);
     };
 
-    const [montadoras, modelos, submodelos, anos, segmentos, frotas] = await Promise.all([
+    const qUsers = async () => {
+      const sql = isAdmin
+        ? `SELECT DISTINCT COALESCE(u.nome, '') AS nome FROM fleet_vehicles fv LEFT JOIN users u ON CAST(fv.user_id AS TEXT) = CAST(u.id AS TEXT) WHERE COALESCE(u.nome, '') != '' ORDER BY nome`
+        : `SELECT DISTINCT COALESCE(u.nome, '') AS nome FROM fleet_vehicles fv LEFT JOIN users u ON CAST(fv.user_id AS TEXT) = CAST(u.id AS TEXT) WHERE fv.user_id = ? AND COALESCE(u.nome, '') != '' ORDER BY nome`;
+      const stmt = isAdmin ? env.DB.prepare(sql) : env.DB.prepare(sql).bind(String(userId));
+      const { results } = await stmt.all().catch(() => ({ results: [] }));
+      return (results || []).map(r => r.nome).filter(Boolean);
+    };
+
+    const [montadoras, modelos, submodelos, anos, segmentos, frotas, solicitantes] = await Promise.all([
       q('montadora'),
       q('modelo'),
       q('submodelo'),
       q('ano'),
       q('segmento'),
       q('fleet_name'),
+      qUsers(),
     ]);
 
-    return json({ ok: true, montadoras, modelos, submodelos, anos, segmentos, frotas });
+    return json({ ok: true, montadoras, modelos, submodelos, anos, segmentos, frotas, solicitantes });
   } catch (err) {
     return json({ erro: 'Erro interno: ' + String(err) }, 500);
   }
@@ -993,6 +1034,80 @@ if (method === 'GET' && path === '/fleet/options') {
       await env.DB.batch(batch);
 
       return json({ ok: true, atualizados: results.length, preview: results.slice(0, 5).map(r => r.modelo) });
+    }
+
+    // ============================================================
+    // POST /fleet/normalize-segments  — normaliza segmentos vazios
+    // ============================================================
+    if (method === 'POST' && path === '/fleet/normalize-segments') {
+      try {
+        const payload = await requireAuth(request, env);
+        if (!payload || !payload.admin) return json({ erro: 'Apenas administradores podem normalizar' }, 403);
+
+        // Busca todos os veículos com segmento vazio
+        const { results } = await env.DB.prepare(
+          `SELECT id, montadora, modelo, segmento FROM fleet_vehicles WHERE segmento = '' OR segmento IS NULL LIMIT 1000`
+        ).all();
+
+        if (!results || results.length === 0) {
+          return json({ ok: true, normalizados: 0, mensagem: 'Nenhum segmento vazio encontrado' });
+        }
+
+        // Atualiza em batch
+        const stmt = env.DB.prepare(
+          `UPDATE fleet_vehicles SET segmento = ? WHERE id = ?`
+        );
+
+        const batch = results.map(r => {
+          const marca = String(r.montadora || '').toUpperCase().trim();
+          const modelo = String(r.modelo || '').toUpperCase().trim();
+          const searchStr = (modelo + ' ' + marca).toUpperCase();
+          
+          let segmento = 'Outros';
+          
+          // Detecta Ônibus
+          if (marca.includes('VOLARE') || marca.includes('MARCOPOLO') || marca.includes('NEOBUS') || 
+              marca.includes('CAIO') || marca.includes('COMIL') || marca.includes('MASCARELLO') ||
+              marca.includes('IRIZAR') || marca.includes('BUSSCAR') || searchStr.includes('BUS') ||
+              searchStr.includes('ÔNIBUS') || searchStr.includes('ONIBUS') || searchStr.includes('MICRO')) {
+            segmento = 'Ônibus';
+          }
+          // Detecta Caminhão
+          else if (marca.includes('SCANIA') || marca.includes('IVECO') || marca.includes('DAF') || 
+                   marca.includes('VOLVO') || marca.includes('MB') || marca.includes('MERCEDES') ||
+                   marca.includes('MAN') || marca.includes('RENAULT') || marca.includes('FORD') ||
+                   marca.includes('FIAT') || marca.includes('VOLKSWAGEN') || marca.includes('VW') ||
+                   searchStr.includes('TRUCK') || searchStr.includes('CAMINHAO') || searchStr.includes('CAMINHÃO') ||
+                   searchStr.includes('TRACTOR') || searchStr.includes('STRADALE') || searchStr.includes('STRALIS')) {
+            segmento = 'Caminhão';
+          }
+          
+          return stmt.bind(segmento, r.id);
+        });
+
+        await env.DB.batch(batch);
+        return json({ ok: true, normalizados: results.length, mensagem: `${results.length} segmento(s) normalizado(s)` });
+      } catch (err) {
+        return json({ erro: 'Erro ao normalizar: ' + String(err) }, 500);
+      }
+    }
+
+    // ============================================================
+    // GET /admin/debug/segments  — debug, mostra contagem por segmento
+    // ============================================================
+    if (method === 'GET' && path === '/admin/debug/segments') {
+      try {
+        const payload = await requireAuth(request, env);
+        if (!payload || !payload.admin) return json({ erro: 'Apenas administradores' }, 403);
+
+        const { results } = await env.DB.prepare(
+          `SELECT segmento, COUNT(*) as count FROM fleet_vehicles GROUP BY segmento ORDER BY count DESC`
+        ).all();
+
+        return json({ ok: true, debug: true, segments: results || [] });
+      } catch (err) {
+        return json({ erro: 'Erro: ' + String(err) }, 500);
+      }
     }
 
     return json({ erro: 'Rota não encontrada' }, 404);

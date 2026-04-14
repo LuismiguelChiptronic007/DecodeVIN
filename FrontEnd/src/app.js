@@ -179,7 +179,7 @@ async function buscarFallbackKePlaca(placa) {
        ano:          String(ano), 
        carroceria:   carroceria, 
        encarrocadora: encarrocadora, 
-       segmento:     tech.segment  || '', 
+       segmento:     normalizeSegment(tech.segment) || 'Outros',
        fipe_codigo:   fipeCodigo, 
        fipe_modelo:   fipeModelo, 
        wmi:          wmi,
@@ -2098,6 +2098,25 @@ const splitModelSubmodel = (rawModel = "", rawSubmodel = "", brand = "") => {
   return { model, submodel };
 };
 
+// Normaliza segmentos para valores padronizados
+function normalizeSegment(value) {
+  if (!value) return "Outros";
+  const upValue = String(value).toUpperCase().trim();
+  
+  if (upValue.includes("ONIBUS") || upValue.includes("ÔNIBUS") || upValue.includes("BUS") || upValue.includes("MICRO")) {
+    return "Ônibus";
+  } else if (upValue.includes("CAMINHAO") || upValue.includes("CAMINHÃO") || upValue.includes("TRUCK") || upValue.includes("TRACTOR")) {
+    return "Caminhão";
+  } else if (upValue.includes("LEVE") || upValue.includes("CAR") || upValue.includes("PASSEIO")) {
+    return "Leves";
+  } else if (upValue.includes("AGRICOLA") || upValue.includes("AGRÍCOLA") || upValue.includes("AGRI")) {
+    return "Agrícola";
+  } else if (upValue.includes("FLORESTAL") || upValue.includes("FOREST")) {
+    return "Florestal";
+  }
+  return String(value).trim() || "Outros";
+}
+
 const getTechnicalData = (item) => { 
    let brand = normalizeBrand(item.fabricante); 
    let modFull = ""; 
@@ -2151,6 +2170,7 @@ const getTechnicalData = (item) => {
        : (anoFab || anoMod || ""); 
      if (!brand) brand = normalizeBrand(api.marca || api.fabricante || api.brand); 
  
+     // ✅ Usa normalizeSegment para padronizar valores da API
      const rawSegment = String(api.segmento || api.tipo_veiculo || api.tipo || api.category || "").trim(); 
      const apiType = rawSegment.toUpperCase(); 
      if (apiType.includes("ONIBUS") || apiType.includes("ÔNIBUS") || apiType.includes("BUS")) { 
@@ -2164,7 +2184,7 @@ const getTechnicalData = (item) => {
      } else if (apiType.includes("FLORESTAL")) { 
        type = "FOREST"; segment = "Florestal"; 
      } else { 
-       segment = rawSegment; 
+       segment = normalizeSegment(rawSegment);
      } 
  
    } else if (item.result && item.result.type !== "UNKNOWN") { 
@@ -2196,9 +2216,21 @@ const getTechnicalData = (item) => {
  
    if (!type) { 
      const searchString = (modFull + " " + brand).toUpperCase(); 
-     if (searchString.includes("BUS") || searchString.includes("ÔNIBUS") || searchString.includes("MICRO") || searchString.includes("VOLARE") || searchString.includes("MARCOPOLO") || searchString.includes("NEOBUS") || searchString.includes("CAIO") || searchString.includes("COMIL") || searchString.includes("MASCARELLO")) { 
+     // Marcas e modelos de ÔNIBUS
+     if (searchString.includes("BUS") || searchString.includes("ÔNIBUS") || searchString.includes("MICRO") || 
+         searchString.includes("VOLARE") || searchString.includes("MARCOPOLO") || searchString.includes("NEOBUS") || 
+         searchString.includes("CAIO") || searchString.includes("COMIL") || searchString.includes("MASCARELLO") ||
+         searchString.includes("IRIZAR") || searchString.includes("BUSSCAR") || searchString.includes("MONOBLOCO")) { 
        type = "BUS"; segment = "Ônibus"; 
-     } else if (searchString.includes("STRADALE") || searchString.includes("STRALIS") || searchString.includes("TRUCK") || searchString.includes("CAMINHAO") || searchString.includes("CAMINHÃO") || searchString.includes("TRACTOR") || searchString.includes("SCANIA") || searchString.includes("IVECO") || searchString.includes("DAF")) { 
+     } 
+     // Marcas e modelos de CAMINHÃO
+     else if (searchString.includes("STRADALE") || searchString.includes("STRALIS") || searchString.includes("TRUCK") || 
+              searchString.includes("CAMINHAO") || searchString.includes("CAMINHÃO") || searchString.includes("TRACTOR") || 
+              searchString.includes("SCANIA") || searchString.includes("IVECO") || searchString.includes("DAF") || 
+              searchString.includes("VOLVO") || searchString.includes("MB") || searchString.includes("MERCEDES") ||
+              searchString.includes("MAN") || searchString.includes("RENAULT") || searchString.includes("FORD") ||
+              searchString.includes("FIAT") || searchString.includes("VOLKSWAGEN") || searchString.includes("VW") ||
+              searchString.includes("ACTROS") || searchString.includes("ATEGO") || searchString.includes("ACCELO")) { 
        type = "TRUCK"; segment = "Caminhão"; 
      } 
    } 
@@ -2229,7 +2261,7 @@ function populateGroupFilters(results) {
 
     results.forEach(item => {
       const tech = getTechnicalData(item);
-      if (tech.segment && tech.segment !== "Outros") segments.add(tech.segment);
+      if (tech.segment) segments.add(tech.segment); // Incluir também "Outros"
       if (tech.brand && tech.brand !== "Desconhecido") brands.add(tech.brand);
     });
 
@@ -2406,7 +2438,7 @@ function populateGroupFilters(results) {
       // Normaliza para comparação case-insensitive
       const norm = (s) => String(s || "").trim().toUpperCase();
 
-      const matchSegment = !fSegment || tech.segment === fSegment;
+      const matchSegment = !fSegment || norm(tech.segment) === norm(fSegment);
       const matchPlate   = !fPlate   || plateVal.includes(fPlate);
       const matchBrand   = !fBrand   || norm(tech.brand) === norm(fBrand);
       
@@ -2604,8 +2636,26 @@ function renderGroupResults(filteredList = null) {
 
     const infoDiv = document.createElement("div");
     infoDiv.className = "info";
-    infoDiv.innerHTML = '<span>' + segmentInfo + displayBrand + modelInfo + yearInfo + encInfo + carrInfo + fleetHtml + '</span>' +
-      '<span class="status-msg">' + statusHtml + '</span>';
+    const fieldValues = {
+      montadora: displayBrand || '—',
+      modelo: modStr || '—',
+      ano: yearFull ? getYearLabel(yearFull) : '—',
+      placa: plate || '—',
+      chassi: vin || '—',
+      solicitante: (itemData.user_name || itemData.usuario || '—'),
+      frota: fleetInfo || '—'
+    };
+    infoDiv.innerHTML = `
+      <div class="info-grid">
+        <div class="field"><div class="field-label">Montadora</div><div class="field-value">${fieldValues.montadora}</div></div>
+        <div class="field"><div class="field-label">Modelo</div><div class="field-value">${fieldValues.modelo}</div></div>
+        <div class="field"><div class="field-label">Ano</div><div class="field-value">${fieldValues.ano}</div></div>
+        <div class="field"><div class="field-label">Placa</div><div class="field-value">${fieldValues.placa}</div></div>
+        <div class="field"><div class="field-label">Chassi</div><div class="field-value">${fieldValues.chassi}</div></div>
+        <div class="field"><div class="field-label">Solicitante</div><div class="field-value">${fieldValues.solicitante}</div></div>
+        <div class="field"><div class="field-label">Frota</div><div class="field-value">${fieldValues.frota}</div></div>
+      </div>
+      <div class="status-msg">${statusHtml}</div>`;
     item.appendChild(infoDiv);
     
     // Adiciona eventos para os botões de copiar
@@ -3401,6 +3451,24 @@ async function main() {
       if (e.key === 'Enter') el('btnPlacasCacheBuscar')?.click(); 
     }); 
     // Nota: agora o filtro usa o endpoint de veículos decodificados.
+
+    // Debug: mostrar contagem de segmentos
+    el('btnDebugSegments')?.addEventListener('click', async () => {
+      try {
+        const res = await fetch(`${API_BASE_FLEET}/admin/debug/segments`, {
+          headers: getAuthHeaders()
+        });
+        const data = await res.json();
+        if (data.segments) {
+          const msg = data.segments.map((s => `${s.segmento || '<vazio>'}: ${s.count}`)).join('\n');
+          alert('Segmentos no banco:\n\n' + msg);
+        } else {
+          alert('Erro: ' + (data.erro || 'Desconhecido'));
+        }
+      } catch (e) {
+        alert('Erro ao carregar: ' + e.message);
+      }
+    });
 
     window.abrirPlacasCache = () => {
       showScreen(placasCacheScreen);

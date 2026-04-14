@@ -251,45 +251,80 @@
           </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;">
-          <div>
-            <label for="frota" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Frota</label>
-            <select id="frota" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
-              <option value="">Todas Frotas</option>
-            </select>
-          </div>
+        <div style="margin-bottom:18px;">
+          <h3 style="margin:0 0 12px;color:var(--text);">🚗 Dados do veículo</h3>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;">
+            <div>
+              <label for="segmento" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Segmento</label>
+              <select id="segmento" onchange="aplicarFiltro()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
+                <option value="">Todos Segmentos</option>
+              </select>
+            </div>
 
-          <div>
-            <label for="montadora" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Montadora</label>
-            <select id="montadora" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
-              <option value="">Todas Montadoras</option>
-            </select>
-          </div>
+            <div>
+              <label for="placaFilter" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Placa</label>
+              <input id="placaFilter" type="text" placeholder="Buscar placa" oninput="aplicarFiltro()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;" />
+            </div>
 
-          <div>
-            <label for="modelo" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Modelo</label>
-            <select id="modelo" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
-              <option value="">Todos Modelos</option>
-            </select>
-          </div>
+            <div>
+              <label for="montadora" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Montadora</label>
+              <select id="montadora" onchange="aplicarFiltro()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
+                <option value="">Todas Montadoras</option>
+              </select>
+            </div>
 
-          <div>
-            <label for="submodelo" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Submodelo</label>
-            <select id="submodelo" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
-              <option value="">Todos Submodelos</option>
-            </select>
-          </div>
+            <div>
+              <label for="modelo" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Modelo</label>
+              <select id="modelo" onchange="aplicarFiltro()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
+                <option value="">Todos Modelos</option>
+              </select>
+            </div>
 
-          <div>
-            <label for="ano" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Ano</label>
-            <select id="ano" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
-              <option value="">Todos Anos</option>
-            </select>
-          </div>
+            <div>
+              <label for="submodelo" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Submodelo</label>
+              <select id="submodelo" onchange="aplicarFiltro()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
+                <option value="">Todos Submodelos</option>
+              </select>
+            </div>
 
-          <div style="grid-column: 1 / -1;">
-            <label for="searchQuery" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Pesquisar</label>
-            <input id="searchQuery" type="text" placeholder="Buscar placa, chassi (VIN), modelo, frota..." onkeydown="if(event.key === 'Enter'){ aplicarFiltro(); }" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;" />
+            <div>
+              <label for="ano" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Ano</label>
+              <select id="ano" onchange="aplicarFiltro()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
+                <option value="">Todos Anos</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="emissao" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Emissão</label>
+              <select id="emissao" onchange="aplicarFiltro()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
+                <option value="">Todas</option>
+                <option value="Euro 6">Euro 6</option>
+                <option value="Euro 5">Euro 5</option>
+              </select>
+            </div>
+
+          </div>
+        </div>
+
+        <div style="margin-bottom:18px;">
+          <h3 style="margin:0 0 12px;color:var(--text);">🚚 Dados das frotas</h3>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;">
+            <div>
+              <label for="frotaFilter" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Frota</label>
+              <select id="frotaFilter" onchange="aplicarFiltro()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
+                <option value="">Todas Frotas</option>
+              </select>
+            </div>
+            <div>
+              <label for="solicitante" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Solicitante</label>
+              <select id="solicitante" onchange="aplicarFiltro()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;cursor:pointer;">
+                <option value="">Todos Solicitantes</option>
+              </select>
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <label for="searchSolicitante" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Buscar solicitante / frota</label>
+              <input id="searchSolicitante" type="text" placeholder="Buscar solicitante ou frota..." oninput="aplicarFiltro()" onkeydown="if(event.key === 'Enter'){ aplicarFiltro(); }" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;" />
+            </div>
           </div>
         </div>
 
@@ -325,7 +360,11 @@
       <button id="btnPlacasCacheBuscar" class="btn" 
         style="background:var(--accent);color:#000;font-weight:700;padding:8px 18px;"> 
         Buscar 
-      </button> 
+      </button>
+      <button id="btnDebugSegments" class="btn" 
+        style="background:#ff6b6b;color:#fff;font-weight:700;padding:8px 18px;"> 
+        🔍 Debug Segmentos
+      </button>
     </div> 
   
     <!-- Tabela de resultados --> 
@@ -429,6 +468,16 @@
       return token ? { 'Authorization': 'Bearer ' + token } : {};
     }
 
+    function getYearLabel(anoFull) {
+      if (!anoFull) return '';
+      const anoStr = String(anoFull);
+      const anoBase = parseInt(anoStr.split('/')[0], 10);
+      if (isNaN(anoBase)) return anoStr;
+      if (anoBase >= 2023) return 'Euro 6';
+      if (anoBase >= 2012) return 'Euro 5';
+      return anoStr;
+    }
+
     async function carregarDados() {
       const contador = document.getElementById('contadorResultados');
       const container = document.getElementById('resultado');
@@ -452,6 +501,17 @@
           } catch (_) {}
         }
 
+        // ✅ Se for admin, normaliza segmentos vazios no banco preemptivamente
+        if (isAdmin) {
+          fetch(`${API_BASE_FLEET}/fleet/normalize-segments`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders()
+            }
+          }).catch(e => console.warn('[Normalização] Falha ao normalizar segmentos:', e));
+        }
+
         const optsRes = await fetch(`${API_BASE_FLEET}/fleet/options`, {
           method: 'GET',
           headers: {
@@ -466,7 +526,9 @@
         }
 
         const optsData = await optsRes.json();
-        preencherSelect('frota', optsData.frotas || []);
+        preencherSelect('frotaFilter', optsData.frotas || []);
+        preencherSelect('solicitante', optsData.solicitantes || []);
+        preencherSelect('segmento', optsData.segmentos || []);
         preencherSelect('montadora', optsData.montadoras || []);
         preencherSelect('modelo', optsData.modelos || []);
         preencherSelect('submodelo', optsData.submodelos || []);
@@ -547,7 +609,21 @@
         });
     }
 
+    let aplicarFiltroTimeout = null; // Debouncing para evitar muitas requisições
+
     async function aplicarFiltro() {
+      // Limpa timeout anterior para debouncing
+      if (aplicarFiltroTimeout) {
+        clearTimeout(aplicarFiltroTimeout);
+      }
+
+      // Define novo timeout para executar com 500ms de atraso
+      aplicarFiltroTimeout = setTimeout(async () => {
+        await executarFiltro();
+      }, 500);
+    }
+
+    async function executarFiltro() {
       const token = localStorage.getItem('dvb_token');
       if (!token) {
         const contador = document.getElementById('contadorResultados');
@@ -556,14 +632,22 @@
       }
 
       const params = new URLSearchParams();
-      const frota = document.getElementById('frota')?.value || '';
+      const frota = document.getElementById('frotaFilter')?.value || '';
+      const solicitante = document.getElementById('solicitante')?.value || '';
+      const segmento = document.getElementById('segmento')?.value || '';
+      const placa = document.getElementById('placaFilter')?.value || '';
       const montadora = document.getElementById('montadora')?.value || '';
       const modelo = document.getElementById('modelo')?.value || '';
       const submodelo = document.getElementById('submodelo')?.value || '';
       const ano = document.getElementById('ano')?.value || '';
-      const query = document.getElementById('searchQuery')?.value || '';
+      const emissao = document.getElementById('emissao')?.value || '';
+      const queryFleet = document.getElementById('searchSolicitante')?.value || '';
+      const query = queryFleet.trim();
 
       if (frota) params.set('fleet_name', frota);
+      if (solicitante) params.set('user_name', solicitante);
+      // ✅ Segmento é filtrado no cliente agora (veja abaixo)
+      if (placa) params.set('placa', placa);
       if (montadora) params.set('montadora', montadora);
       if (modelo) params.set('modelo', modelo);
       if (submodelo) params.set('submodelo', submodelo);
@@ -589,7 +673,23 @@
         }
 
         const data = await res.json();
-        const results = Array.isArray(data.results) ? data.results : [];
+        let results = Array.isArray(data.results) ? data.results : [];
+        if (emissao) {
+          results = results.filter(item => {
+            const anoValue = String(item.ano || '').trim();
+            if (!anoValue) return false;
+            const label = getYearLabel(anoValue);
+            return label === emissao;
+          });
+        }
+        // ✅ Filtro de segmento no cliente, sem problemas de acentos
+        if (segmento) {
+          results = results.filter(item => {
+            const seg = normalize(String(item.segmento || ''));
+            const sel = normalize(segmento);
+            return seg === sel;
+          });
+        }
         dadosFiltrados = results;
         document.getElementById('fleetDisplayedCount').textContent = String(results.length);
         renderizar(results);
@@ -601,7 +701,7 @@
     }
 
     function limparFiltros() {
-      ['frota', 'montadora', 'modelo', 'submodelo', 'ano', 'searchQuery'].forEach(id => {
+      ['frotaFilter', 'solicitante', 'segmento', 'placaFilter', 'montadora', 'modelo', 'submodelo', 'ano', 'emissao', 'searchSolicitante'].forEach(id => {
         const elemento = document.getElementById(id);
         if (elemento) elemento.value = '';
       });
@@ -663,7 +763,7 @@
 
       Object.keys(grupos).forEach((frota) => {
         const group = grupos[frota];
-        const isCollapsed = !!fleetGroupCollapsedState[frota];
+        const isCollapsed = fleetGroupCollapsedState[frota] !== false; // Por padrão, minimizado
         const groupBox = document.createElement('div');
         groupBox.style.cssText = 'margin-bottom:18px;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--card);';
 
@@ -677,11 +777,17 @@
 
         const toggleBtn = document.createElement('button');
         toggleBtn.type = 'button';
-        toggleBtn.textContent = isCollapsed ? '▼' : '▲';
-        toggleBtn.ariaLabel = isCollapsed ? 'Expandir frota' : 'Diminuir frota';
-        toggleBtn.style.cssText = 'margin-left:auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;padding:0;border:none;border-radius:8px;background:rgba(255,255,255,0.05);color:var(--text);font-size:16px;cursor:pointer;transition:background .2s;';
-        toggleBtn.onmouseover = () => toggleBtn.style.background = 'rgba(255,255,255,0.1)';
-        toggleBtn.onmouseout = () => toggleBtn.style.background = 'rgba(255,255,255,0.05)';
+        toggleBtn.textContent = isCollapsed ? '▶ Expandir' : '▼ Minimizar';
+        toggleBtn.ariaLabel = isCollapsed ? 'Expandir frota' : 'Minimizar frota';
+        toggleBtn.style.cssText = 'margin-left:auto;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--accent-2);cursor:pointer;font-size:12px;font-weight:600;transition:all .2s;';
+        toggleBtn.onmouseover = () => {
+          toggleBtn.style.background = 'rgba(56,189,248,0.15)';
+          toggleBtn.style.borderColor = 'rgba(56,189,248,0.3)';
+        };
+        toggleBtn.onmouseout = () => {
+          toggleBtn.style.background = 'var(--card)';
+          toggleBtn.style.borderColor = 'var(--border)';
+        };
         toggleBtn.onclick = () => {
           fleetGroupCollapsedState[frota] = !fleetGroupCollapsedState[frota];
           renderizar(dadosFiltrados);
@@ -702,18 +808,21 @@
 
           group.forEach((item) => {
             const row = document.createElement('div');
-            row.style.cssText = 'padding:12px;border-radius:10px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.12);font-size:13px;color:var(--text);';
-            const descricao = [];
-            if (item.montadora) descricao.push('ORRA: ' + item.montadora);
-            if (item.modelo) descricao.push(item.modelo);
-            if (item.submodelo) descricao.push(item.submodelo);
-            if (item.ano) descricao.push(item.ano);
-            const linhas = [];
-            if (item.placa) linhas.push('Placa: ' + item.placa);
-            if (item.vin) linhas.push('VIN: ' + item.vin);
+            row.style.cssText = 'padding:16px;border-radius:12px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.12);font-size:13px;color:var(--text);';
+            const solicitante = extractUserName(item) || '—';
+            const frotaNome = String(item.fleet_name || item.nome_da_frota || frota || '—').trim();
+            const pla = item.placa ? String(item.placa).trim() : '—';
+            const chassi = item.vin ? String(item.vin).trim() : '—';
             row.innerHTML = `
-              <div style="font-weight:600;">${descricao.filter(Boolean).join(' • ')}</div>
-              <div style="color:var(--muted);margin-top:4px;">${linhas.join(' • ')}</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;row-gap:10px;">
+                <div><div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.03em;text-transform:uppercase;">Montadora</div><div style="font-weight:600;">${item.montadora || '—'}</div></div>
+                <div><div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.03em;text-transform:uppercase;">Modelo</div><div style="font-weight:600;">${item.modelo || '—'}</div></div>
+                <div><div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.03em;text-transform:uppercase;">Ano</div><div style="font-weight:600;">${item.ano || '—'}</div></div>
+                <div><div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.03em;text-transform:uppercase;">Placa</div><div style="font-weight:600;">${pla}</div></div>
+                <div><div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.03em;text-transform:uppercase;">Chassi</div><div style="font-weight:600;">${chassi}</div></div>
+                <div><div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.03em;text-transform:uppercase;">Solicitante</div><div style="font-weight:600;">${solicitante}</div></div>
+                <div><div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.03em;text-transform:uppercase;">Frota</div><div style="font-weight:600;">${frotaNome}</div></div>
+              </div>
             `;
             list.appendChild(row);
           });
