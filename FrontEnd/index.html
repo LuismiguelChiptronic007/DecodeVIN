@@ -231,6 +231,17 @@
       <h1>Histórico <small style="font-size:14px;color:var(--muted);font-weight:normal">Lotes e Frotas</small></h1>
     </div>
 
+    <div id="historyDecodePanel" style="display:none; max-width:1200px; margin:0 auto 24px; padding:20px; border-radius:16px; border:1px solid rgba(56,189,248,0.18); background:rgba(56,189,248,0.04); box-shadow:0 20px 40px rgba(0,0,0,0.04);">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px;">
+        <div>
+          <div style="font-size:13px;color:var(--muted); text-transform:uppercase; letter-spacing:.08em;">Veículo selecionado</div>
+          <div id="historyDecodePanelTitle" style="font-size:18px; font-weight:700; color:var(--accent);">Aguardando clique no veículo...</div>
+        </div>
+        <button id="historyDecodePanelClose" style="border:none;background:rgba(255,255,255,0.12);color:var(--text);padding:8px 12px;border-radius:10px;cursor:pointer;">Fechar</button>
+      </div>
+      <div id="historyDecodePanelBody" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; font-size:13px; color:var(--text);"></div>
+    </div>
+
     <!-- Filtro de Frotas dentro do Histórico -->
     <div style="padding:24px; width:100%; max-width:100%; margin:0 auto; box-sizing:border-box;">
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;margin-bottom:24px;min-height:260px;width:100%;max-width:100%;box-sizing:border-box;">
@@ -360,10 +371,6 @@
       <button id="btnPlacasCacheBuscar" class="btn" 
         style="background:var(--accent);color:#000;font-weight:700;padding:8px 18px;"> 
         Buscar 
-      </button>
-      <button id="btnDebugSegments" class="btn" 
-        style="background:#ff6b6b;color:#fff;font-weight:700;padding:8px 18px;"> 
-        🔍 Debug Segmentos
       </button>
     </div> 
   
@@ -526,12 +533,13 @@
         }
 
         const optsData = await optsRes.json();
+        const normalizedOpts = normalizeFleetOptions(optsData);
         preencherSelect('frotaFilter', optsData.frotas || []);
         preencherSelect('solicitante', optsData.solicitantes || []);
         preencherSelect('segmento', optsData.segmentos || []);
         preencherSelect('montadora', optsData.montadoras || []);
-        preencherSelect('modelo', optsData.modelos || []);
-        preencherSelect('submodelo', optsData.submodelos || []);
+        preencherSelect('modelo', normalizedOpts.modelos);
+        preencherSelect('submodelo', normalizedOpts.submodelos);
         preencherSelect('ano', optsData.anos || []);
 
         const fleetsDecoded = Array.isArray(optsData.frotas) ? optsData.frotas.length : 0;
@@ -588,6 +596,57 @@
         console.error('[Filtros] Erro na requisição:', err);
         if (contador) contador.textContent = '❌ Erro ao carregar dados: ' + (err.message || 'erro desconhecido');
       }
+    }
+
+    function splitModelSubmodel(rawModel) {
+      const text = String(rawModel || '').trim().toUpperCase();
+      if (!text) return { model: '', submodel: '' };
+
+      const normalizedText = text.replace(/\?/g, ' ').replace(/\s+/g, ' ').trim();
+      if (normalizedText.includes('COMIL')) {
+        return { model: 'COMIL', submodel: '' };
+      }
+
+      if (normalizedText.includes(' - ')) {
+        const parts = normalizedText.split(' - ').map(p => p.trim()).filter(Boolean);
+        return { model: parts.shift() || '', submodel: parts.join(' - ') || '' };
+      }
+      if (normalizedText.includes(' / ')) {
+        const parts = normalizedText.split(' / ').map(p => p.trim()).filter(Boolean);
+        return { model: parts.shift() || '', submodel: parts.join(' / ') || '' };
+      }
+      if (normalizedText.includes(' ')) {
+        const parts = normalizedText.split(' ').filter(Boolean);
+        return { model: parts.shift() || '', submodel: parts.join(' ') || '' };
+      }
+
+      const match = normalizedText.match(/^([A-Za-z]+)([0-9].*)$/);
+      if (match) {
+        return { model: match[1], submodel: match[2] };
+      }
+
+      return { model: normalizedText, submodel: '' };
+    }
+
+    function normalizeFleetOptions(optsData) {
+      const modelos = new Set();
+      const submodelos = new Set();
+
+      (Array.isArray(optsData.submodelos) ? optsData.submodelos : []).forEach(raw => {
+        const value = String(raw || '').trim();
+        if (value) submodelos.add(value);
+      });
+
+      (Array.isArray(optsData.modelos) ? optsData.modelos : []).forEach(raw => {
+        const { model, submodel } = splitModelSubmodel(raw);
+        if (model) modelos.add(model);
+        if (submodel) submodelos.add(submodel);
+      });
+
+      return {
+        modelos: Array.from(modelos).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
+        submodelos: Array.from(submodelos).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+      };
     }
 
     function preencherSelect(id, valores) {
@@ -808,15 +867,42 @@
 
           group.forEach((item) => {
             const row = document.createElement('div');
-            row.style.cssText = 'padding:16px;border-radius:12px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.12);font-size:13px;color:var(--text);';
+            row.style.cssText = 'padding:16px;border-radius:12px;background:rgba(56,189,248,0.05);border:1px solid rgba(56,189,248,0.12);font-size:13px;color:var(--text);transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease;cursor:pointer;';
             const solicitante = extractUserName(item) || '—';
             const frotaNome = String(item.fleet_name || item.nome_da_frota || frota || '—').trim();
             const pla = item.placa ? String(item.placa).trim() : '—';
             const chassi = item.vin ? String(item.vin).trim() : '—';
+            const normalizedItem = splitModelSubmodel(item.modelo);
+            const displayModel = item.modelo ? (normalizedItem.model || item.modelo) : '—';
+            const displaySubmodel = item.submodelo || normalizedItem.submodel || '—';
+
+            row.onmouseover = () => {
+              row.style.transform = 'translateY(-2px)';
+              row.style.boxShadow = '0 14px 30px rgba(0,0,0,0.12)';
+              row.style.borderColor = 'rgba(56,189,248,0.35)';
+            };
+            row.onmouseout = () => {
+              row.style.transform = 'translateY(0)';
+              row.style.boxShadow = 'none';
+              row.style.borderColor = 'rgba(56,189,248,0.12)';
+            };
+            row.onclick = () => {
+              const vinLine = item.vin ? String(item.vin).trim() : '';
+              const plateLine = item.placa ? String(item.placa).trim() : '';
+              if (typeof window.openHistoryAndDecodeVehicle === 'function') {
+                window.openHistoryAndDecodeVehicle(vinLine, plateLine);
+              } else if (typeof window.renderHistoryDecodePanel === 'function') {
+                window.renderHistoryDecodePanel(vinLine, plateLine);
+              } else {
+                console.warn('Função de decodificação no histórico não disponível');
+              }
+            };
+
             row.innerHTML = `
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;row-gap:10px;">
                 <div><div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.03em;text-transform:uppercase;">Montadora</div><div style="font-weight:600;">${item.montadora || '—'}</div></div>
-                <div><div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.03em;text-transform:uppercase;">Modelo</div><div style="font-weight:600;">${item.modelo || '—'}</div></div>
+                <div><div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.03em;text-transform:uppercase;">Modelo</div><div style="font-weight:600;">${displayModel}</div></div>
+                <div><div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.03em;text-transform:uppercase;">Submodelo</div><div style="font-weight:600;">${displaySubmodel}</div></div>
                 <div><div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.03em;text-transform:uppercase;">Ano</div><div style="font-weight:600;">${item.ano || '—'}</div></div>
                 <div><div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.03em;text-transform:uppercase;">Placa</div><div style="font-weight:600;">${pla}</div></div>
                 <div><div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.03em;text-transform:uppercase;">Chassi</div><div style="font-weight:600;">${chassi}</div></div>

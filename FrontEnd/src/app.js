@@ -1574,8 +1574,14 @@ function renderGroupHistoryItems(list, sessUser) {
         window.showScreen(singleScreen);
       }
 
-      if (vInput) vInput.value = vinLine || "";
-      if (pInput) pInput.value = plateLine || "";
+      if (vInput) {
+        vInput.value = vinLine || "";
+        vInput.dispatchEvent(new Event("input"));
+      }
+      if (pInput) {
+        pInput.value = plateLine || "";
+        pInput.dispatchEvent(new Event("input"));
+      }
 
       if (plateLine && bPlate) {
         bPlate.disabled = false;
@@ -1585,6 +1591,7 @@ function renderGroupHistoryItems(list, sessUser) {
         bSingle.click();
       }
     };
+    window.decodeHistoryLine = decodeHistoryLine;
 
     if (totalLines === 0) {
       const emptyNote = document.createElement("div");
@@ -2025,19 +2032,20 @@ const getKnownModels = (brand) => {
 
 const normalizeBrand = (b) => {
   if (!b) return "";
-  const brand = String(b).trim().toUpperCase();
+  let brand = String(b).trim().toUpperCase().replace(/\?/g, " ");
+  brand = brand.replace(/\s+/g, " ").trim();
+  if (brand.includes("COMIL")) return "COMIL";
   if (brand.includes("SCANIA")) return "SCANIA";
   if (brand.includes("VOLVO")) return "VOLVO";
   if (brand.includes("IVECO")) return "IVECO";
-  if (brand.includes("MERCEDES") || brand.includes("M.BENZ") || brand.includes("MBENZ")) return "MERCEDES-BENZ";
-  if (brand.includes("VOLKSWAGEN") || brand.includes("VWCO") || brand.includes("VW") || brand.includes("MAN LATIN AMERICA") || brand === "MAN") return "VOLKSWAGEN";
+  if (brand.includes("MERCEDES") || brand.includes("M.BENZ") || brand.includes("MBENZ") || brand.includes("M BENZ")) return "MERCEDES-BENZ";
+  if (brand.includes("VOLKSWAGEN") || brand.includes("VWCO") || brand.includes("VW") || brand.includes("MAN LATIN AMERICA") || brand === "MAN" || brand.includes("VOKSWAGEN")) return "VOLKSWAGEN";
   if (brand.includes("AGRALE")) return "AGRALE";
   if (brand.includes("DAF")) return "DAF";
   if (brand.includes("MARCOPOLO")) return "MARCOPOLO";
   if (brand.includes("VOLARE")) return "VOLARE";
   if (brand.includes("NEOBUS")) return "NEOBUS";
   if (brand.includes("CAIO")) return "CAIO";
-  if (brand.includes("COMIL")) return "COMIL";
   if (brand.includes("MASCARELLO")) return "MASCARELLO";
   if (brand.includes("IRIZAR")) return "IRIZAR";
   if (brand.includes("FORD")) return "FORD";
@@ -3338,6 +3346,116 @@ async function main() {
       renderGroupHistory();
     };
 
+    window.renderHistoryDecodePanel = async (vinLine, plateLine) => {
+      const panel = el('historyDecodePanel');
+      const title = el('historyDecodePanelTitle');
+      const body = el('historyDecodePanelBody');
+      if (!panel || !title || !body) return;
+
+      const vinNorm = (vinLine || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const plateNorm = (plateLine || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      panel.style.display = 'block';
+      title.textContent = `Decodificando veículo...`;
+      body.innerHTML = '<div style="grid-column:1/-1;color:var(--muted);">Aguardando dados do veículo...</div>';
+
+      let decoded = { type: 'UNKNOWN', tokens: [], manufacturerName: 'Desconhecido' };
+      let result = { brand: '—', model: '—', submodel: '—', year: '—' };
+
+      if (vinNorm && window.currentDecoder && typeof window.currentDecoder.decode === 'function') {
+        try {
+          decoded = window.currentDecoder.decode(vinNorm);
+        } catch (_e) {
+          decoded = { type: 'UNKNOWN', tokens: [], manufacturerName: 'Desconhecido' };
+        }
+        const tech = getTechnicalData({ result: decoded, fabricante: decoded.manufacturerName });
+        result = {
+          brand: tech.brand || '—',
+          model: tech.model || '—',
+          submodel: tech.submodel || '—',
+          year: tech.year || '—'
+        };
+      } else if (plateNorm && window.currentGroupResults) {
+        const savedItem = window.currentGroupResults.find(r => {
+          return String(r.placa || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === plateNorm;
+        });
+        if (savedItem && savedItem.apiResult) {
+          const api = savedItem.apiResult;
+          const rawMod = api.modelo || api.model || api.texto_modelo || '';
+          const rawVer = api.versao || api.version || '';
+          let model = '—';
+          let submodel = '—';
+          if (rawVer) {
+            const base = String(rawMod).trim().toUpperCase().replace(new RegExp(rawVer.trim().toUpperCase() + '$'), '').trim();
+            model = base || '—';
+            submodel = [rawVer.trim().toUpperCase()].filter(Boolean).join(' ') || '—';
+          } else {
+            const split = splitModelSubmodel(String(rawMod).trim().toUpperCase());
+            model = split.model || '—';
+            submodel = split.submodel || '—';
+          }
+          result = {
+            brand: normalizeBrand(api.marca || savedItem.fabricante || '') || '—',
+            model,
+            submodel,
+            year: api.ano_modelo || api.ano || '—'
+          };
+        }
+      }
+
+      title.textContent = `Veículo: ${plateNorm || vinNorm || 'Sem identificação'}`;
+      body.innerHTML = `
+        <div><strong>Chassi:</strong> ${vinNorm || '—'}</div>
+        <div><strong>Placa:</strong> ${plateNorm || '—'}</div>
+        <div><strong>Montadora:</strong> ${result.brand}</div>
+        <div><strong>Modelo:</strong> ${result.model}</div>
+        <div><strong>Submodelo:</strong> ${result.submodel}</div>
+        <div><strong>Ano:</strong> ${result.year}</div>
+      `;
+    };
+
+    window.openHistoryAndDecodeVehicle = async (vinLine, plateLine) => {
+      if (typeof window.decodeHistoryLine === 'function') {
+        window.decodeHistoryLine(vinLine, plateLine);
+        return;
+      }
+
+      const singleDecoder = el('singleDecoder');
+      if (typeof window.showScreen === 'function' && singleDecoder) {
+        window.showScreen(singleDecoder);
+      }
+
+      const vInput = el('vinInputSingle');
+      const pInput = el('plateInputSingle');
+      const btnSingle = el('btnDecodeSingle');
+      const btnPlateSingle = el('btnPlateSingle');
+
+      if (vInput) {
+        vInput.value = vinLine || '';
+        vInput.dispatchEvent(new Event('input'));
+      }
+      if (pInput) {
+        pInput.value = plateLine || '';
+        pInput.dispatchEvent(new Event('input'));
+      }
+
+      if (plateLine && btnPlateSingle) {
+        btnPlateSingle.disabled = false;
+        btnPlateSingle.click();
+      } else if (vinLine && btnSingle) {
+        btnSingle.disabled = false;
+        btnSingle.click();
+      }
+    };
+
+    const historyDecodePanelClose = el('historyDecodePanelClose');
+    if (historyDecodePanelClose) {
+      historyDecodePanelClose.onclick = () => {
+        const panel = el('historyDecodePanel');
+        if (panel) panel.style.display = 'none';
+      };
+    }
+
+
     // ── Tela Placas Cache (admin aplicação) ────────────────────── 
     const placasCacheCursors = [null]; // índice 0 = primeira página 
     let   placasCachePage   = 0; 
@@ -3377,11 +3495,12 @@ async function main() {
       const allKeys = new Set(); 
       data.entries.forEach(row => Object.keys(row).forEach(k => allKeys.add(k))); 
       
-      const CAMPOS_PRIORITARIOS = ['id', 'user_id', 'user_name', 'fleet_name', 'vin', 'placa', 'montadora', 'modelo', 'submodelo', 'ano', 'segmento', 'carroceria', 'encarrocadora']; 
+      const FIELDS_TO_HIDE = new Set(['id', 'user_id', 'wmi', 'WMI']);
+      const CAMPOS_PRIORITARIOS = ['user_name', 'fleet_name', 'vin', 'placa', 'montadora', 'modelo', 'submodelo', 'ano', 'segmento', 'carroceria', 'encarrocadora']; 
       const outrosCampos = Array.from(allKeys) 
-        .filter(k => !CAMPOS_PRIORITARIOS.includes(k)) 
+        .filter(k => !CAMPOS_PRIORITARIOS.includes(k) && !FIELDS_TO_HIDE.has(k)) 
         .sort(); 
-      const COLUNAS = [...CAMPOS_PRIORITARIOS.filter(k => allKeys.has(k)), ...outrosCampos]; 
+      const COLUNAS = [...CAMPOS_PRIORITARIOS.filter(k => allKeys.has(k) && !FIELDS_TO_HIDE.has(k)), ...outrosCampos]; 
       
       const wrapper = document.createElement('div'); 
       wrapper.style.overflowX = 'auto'; 
@@ -3452,24 +3571,6 @@ async function main() {
     }); 
     // Nota: agora o filtro usa o endpoint de veículos decodificados.
 
-    // Debug: mostrar contagem de segmentos
-    el('btnDebugSegments')?.addEventListener('click', async () => {
-      try {
-        const res = await fetch(`${API_BASE_FLEET}/admin/debug/segments`, {
-          headers: getAuthHeaders()
-        });
-        const data = await res.json();
-        if (data.segments) {
-          const msg = data.segments.map((s => `${s.segmento || '<vazio>'}: ${s.count}`)).join('\n');
-          alert('Segmentos no banco:\n\n' + msg);
-        } else {
-          alert('Erro: ' + (data.erro || 'Desconhecido'));
-        }
-      } catch (e) {
-        alert('Erro ao carregar: ' + e.message);
-      }
-    });
-
     window.abrirPlacasCache = () => {
       showScreen(placasCacheScreen);
       carregarPlacasCache(null);
@@ -3481,14 +3582,39 @@ async function main() {
 
     const validateGroupForm = () => {
       const fleetName = fleetInput?.value?.trim() || "";
-      const hasInput = (gInput?.value?.trim() || "") !== "" || (gPlateInput?.value?.trim() || "") !== "";
-      if (gBtn) {
-        gBtn.disabled = !fleetName || !hasInput;
-        if (gBtn.disabled) {
-          gBtn.title = fleetName ? "Preencha pelo menos um chassi ou placa para decodificar." : "Informe o nome do lote / frota antes de decodificar.";
-        } else {
-          gBtn.title = "Clique para decodificar o grupo.";
+      const platesText = gPlateInput?.value?.trim() || "";
+      const chassisText = gInput?.value?.trim() || "";
+      const isCombined = combined?.checked || false;
+
+      const hasPlate = platesText !== "";
+      const hasChassis = chassisText !== "";
+      const plateLines = platesText.split('\n').filter(line => line.trim() !== "").length;
+      const chassisLines = chassisText.split('\n').filter(line => line.trim() !== "").length;
+
+      let canDecode = false;
+      let buttonTitle = "Informe o nome do lote / frota antes de decodificar.";
+
+      if (isCombined) {
+        canDecode = plateLines > 0 && chassisLines > 0 && plateLines === chassisLines;
+        if (!canDecode) {
+          if (plateLines === 0 || chassisLines === 0) {
+            buttonTitle = "Modo combinado requer placas e chassis preenchidos.";
+          } else {
+            buttonTitle = "Modo combinado requer a mesma quantidade de placas e chassis.";
+          }
         }
+      } else {
+        canDecode = hasPlate || hasChassis;
+        if (!canDecode) {
+          buttonTitle = "Preencha pelo menos um chassi ou placa para decodificar.";
+        } else if (!fleetName) {
+          buttonTitle = "Nome do lote não informado — será gerado automaticamente.";
+        }
+      }
+
+      if (gBtn) {
+        gBtn.disabled = !canDecode;
+        gBtn.title = gBtn.disabled ? buttonTitle : "Clique para decodificar o grupo.";
       }
     };
 
@@ -3507,6 +3633,7 @@ async function main() {
     }
     if (gInput) gInput.addEventListener('input', validateGroupForm);
     if (gPlateInput) gPlateInput.addEventListener('input', validateGroupForm);
+    if (combined) combined.addEventListener('change', validateGroupForm);
     if (gBtn) gBtn.disabled = true;
     window.validateGroupForm = validateGroupForm;
 
@@ -4095,7 +4222,7 @@ async function main() {
         console.log("[Group] Botão de decodificar grupo clicado!");
         
         // Get form values
-        const fleetName = fleetInput?.value?.trim() || "";
+        let fleetName = fleetInput?.value?.trim() || "";
         const vins = gInput?.value?.trim() || "";
         const plates = gPlateInput?.value?.trim() || "";
         const isCombined = combined?.checked || false;
@@ -4103,8 +4230,9 @@ async function main() {
         console.log("[Group] Dados do formulário:", { fleetName, vins, plates, isCombined });
         
         if (!fleetName) {
-          showToast("Por favor, informe o nome da frota.", "error");
-          return;
+          const defaultFleetName = "Lote_" + Date.now();
+          fleetName = defaultFleetName;
+          if (fleetInput) fleetInput.value = defaultFleetName;
         }
         
         if (!vins && !plates) {
