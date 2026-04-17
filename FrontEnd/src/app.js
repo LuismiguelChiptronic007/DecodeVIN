@@ -1046,7 +1046,12 @@ function renderSingleHistoryItems(list, sessUser) {
     btnPrev.textContent = "← Anterior";
     btnPrev.disabled = currentHistoryPage === 1;
     btnPrev.className = "btn-page";
-    btnPrev.onclick = () => { currentHistoryPage--; renderSingleHistory(); };
+    btnPrev.onclick = () => {
+      if (currentHistoryPage > 1) {
+        currentHistoryPage--;
+        renderSingleHistory();
+      }
+    };
 
     const pageInfo = document.createElement("span");
     pageInfo.textContent = "Página " + currentHistoryPage + " de " + totalPages;
@@ -1054,6 +1059,16 @@ function renderSingleHistoryItems(list, sessUser) {
     pageInfo.style.color = "var(--muted)";
 
     const btnNext = document.createElement("button");
+    btnNext.textContent = "Próximo →";
+    btnNext.disabled = currentHistoryPage === totalPages;
+    btnNext.className = "btn-page";
+    btnNext.onclick = () => {
+      if (currentHistoryPage < totalPages) {
+        currentHistoryPage++;
+        renderSingleHistory();
+      }
+    };
+
     pagination.appendChild(btnPrev);
     pagination.appendChild(pageInfo);
     pagination.appendChild(btnNext);
