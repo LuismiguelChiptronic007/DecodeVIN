@@ -2141,6 +2141,43 @@ function normalizeSegment(value) {
   return String(value).trim() || "Outros";
 }
 
+// Infere segmento a partir de múltiplos campos quando segmento é "Outros" ou vazio
+function inferSegment(item) {
+  const segmento = item.segmento || item.segment || "";
+  const normalized = normalizeSegment(segmento);
+  if (normalized !== "Outros") return normalized;
+
+  const upCarroceria = String(item.carroceria || item.ob_carroceria || "").toUpperCase().trim();
+  const upModelo = String(item.modelo || "").toUpperCase().trim();
+  const upEncarrocadora = String(item.encarrocadora || "").toUpperCase().trim();
+  const upMontadora = String(item.montadora || "").toUpperCase().trim();
+
+  // Inferência por carroceria
+  if (upCarroceria) {
+    if (upCarroceria.includes("ONIBUS") || upCarroceria.includes("ÔNIBUS") || upCarroceria.includes("MICRO")) return "Ônibus";
+    if (upCarroceria.includes("CAMINHAO") || upCarroceria.includes("CAMINHÃO") || upCarroceria.includes("TRUCK")) return "Caminhão";
+    if (upCarroceria.includes("LEVE") || upCarroceria.includes("SEDAN") || upCarroceria.includes("HATCH") || upCarroceria.includes("PERUA")) return "Leves";
+  }
+
+  // Inferência por encarrocadora (para ônibus)
+  if (upEncarrocadora && (upEncarrocadora.includes("ONIBUS") || upEncarrocadora.includes("ÔNIBUS"))) return "Ônibus";
+
+  // Inferência por montadora
+  const marcasOnibus = ["MARCOPOLO", "MASCARELLO", "BUSSCAR", "IRIZAR"];
+  if (marcasOnibus.some(m => upMontadora.includes(m))) return "Ônibus";
+
+  const marcasCaminhao = ["SCANIA", "VOLVO", "IVECO", "MB", "MERCEDES"];
+  if (marcasCaminhao.some(m => upMontadora.includes(m))) return "Caminhão";
+
+  // Inferência por modelo
+  if (upModelo) {
+    if (upModelo.includes("ONIBUS") || upModelo.includes("ÔNIBUS")) return "Ônibus";
+    if (upModelo.includes("CAMINHAO") || upModelo.includes("CAMINHÃO")) return "Caminhão";
+  }
+
+  return "Outros";
+}
+
 const getTechnicalData = (item) => { 
    let brand = normalizeBrand(item.fabricante); 
    let modFull = ""; 

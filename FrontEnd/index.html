@@ -677,6 +677,49 @@
       return brand;
     }
 
+    function normalizeSegment(value) {
+      if (!value) return "Outros";
+      const upValue = String(value).toUpperCase().trim();
+      if (upValue.includes("ONIBUS") || upValue.includes("ÔNIBUS") || upValue.includes("BUS") || upValue.includes("MICRO")) return "Ônibus";
+      if (upValue.includes("CAMINHAO") || upValue.includes("CAMINHÃO") || upValue.includes("TRUCK") || upValue.includes("TRACTOR")) return "Caminhão";
+      if (upValue.includes("LEVE") || upValue.includes("CAR") || upValue.includes("PASSEIO")) return "Leves";
+      if (upValue.includes("AGRICOLA") || upValue.includes("AGRÍCOLA") || upValue.includes("AGRI")) return "Agrícola";
+      if (upValue.includes("FLORESTAL") || upValue.includes("FOREST")) return "Florestal";
+      return String(value).trim() || "Outros";
+    }
+
+    function inferSegment(item) {
+      const segmento = item.segmento || item.segment || "";
+      const normalized = normalizeSegment(segmento);
+      if (normalized !== "Outros") return normalized;
+
+      const upCarroceria = String(item.carroceria || item.ob_carroceria || "").toUpperCase().trim();
+      const upModelo = String(item.modelo || "").toUpperCase().trim();
+      const upEncarrocadora = String(item.encarrocadora || "").toUpperCase().trim();
+      const upMontadora = String(item.montadora || "").toUpperCase().trim();
+
+      if (upCarroceria) {
+        if (upCarroceria.includes("ONIBUS") || upCarroceria.includes("ÔNIBUS") || upCarroceria.includes("MICRO")) return "Ônibus";
+        if (upCarroceria.includes("CAMINHAO") || upCarroceria.includes("CAMINHÃO") || upCarroceria.includes("TRUCK")) return "Caminhão";
+        if (upCarroceria.includes("LEVE") || upCarroceria.includes("SEDAN") || upCarroceria.includes("HATCH") || upCarroceria.includes("PERUA")) return "Leves";
+      }
+
+      if (upEncarrocadora && (upEncarrocadora.includes("ONIBUS") || upEncarrocadora.includes("ÔNIBUS"))) return "Ônibus";
+
+      const marcasOnibus = ["MARCOPOLO", "MASCARELLO", "BUSSCAR", "IRIZAR"];
+      if (marcasOnibus.some(m => upMontadora.includes(m))) return "Ônibus";
+
+      const marcasCaminhao = ["SCANIA", "VOLVO", "IVECO", "MB", "MERCEDES"];
+      if (marcasCaminhao.some(m => upMontadora.includes(m))) return "Caminhão";
+
+      if (upModelo) {
+        if (upModelo.includes("ONIBUS") || upModelo.includes("ÔNIBUS")) return "Ônibus";
+        if (upModelo.includes("CAMINHAO") || upModelo.includes("CAMINHÃO")) return "Caminhão";
+      }
+
+      return "Outros";
+    }
+
     function normalizeYearOption(rawYear) {
       const year = String(rawYear || '').trim();
       if (!year) return '';
@@ -744,8 +787,8 @@
           if (itemYear !== normalizedFilterYear) return false;
         }
         if (filters.segmento) {
-          const itemSegment = normalize(String(item.segmento || ''));
-          const filterSegment = normalize(filters.segmento);
+          const itemSegment = inferSegment(item);
+          const filterSegment = normalizeSegment(filters.segmento);
           if (itemSegment !== filterSegment) return false;
         }
         return true;
@@ -773,13 +816,17 @@
         user_name:  exclude === 'user_name'  ? '' : selectedRequester,
       });
 
-      const collect = (dataset, field) =>
-        new Set(dataset.map(i => {
+      const collect = (dataset, field) => {
+        if (field === 'segmento') {
+          return new Set(dataset.map(i => inferSegment(i)).filter(Boolean));
+        }
+        return new Set(dataset.map(i => {
           const v = String(i[field] || '').trim();
           return field === 'montadora' ? normalizeBrand(v) : v;
         }).filter(Boolean));
+      };
 
-      preencherSelect('segmento',     Array.from(collect(base('segmento'),   'segmento')));
+      preencherSelect('segmento',     Array.from(collect(base('segmento'),   'segmento')).filter(s => s !== 'Outros'));
       preencherSelect('montadora',    Array.from(collect(base('montadora'),  'montadora')));
       preencherSelect('modelo',       Array.from(collect(base('modelo'),     'modelo')));
       preencherSelect('submodelo',    Array.from(collect(base('submodelo'),  'submodelo')));
