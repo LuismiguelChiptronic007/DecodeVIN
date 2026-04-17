@@ -141,7 +141,8 @@
         <button class="back-btn" id="backFromGroup">←</button>
         <h1>DecodeVIN <small style="font-size:14px;color:var(--muted);font-weight:normal">Modo Grupo</small></h1>
       </div>
-      <button id="btnGoToGroupHistory" class="btn" style="background:var(--card); border:1px solid var(--border); color:var(--text); font-size:13px; padding:8px 16px; box-shadow:none;">🕒 Histórico de Lotes</button>
+      <button id="btnGoToGroupHistory" class="btn" style="background:var(--card); border:1px solid var(--border); color:var(--text); font-size:13px; padding:8px 16px; box-shadow:none;">🕒 Histórico de Frotas
+      </button>
     </div>
     
     <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px; background: var(--card); padding: 12px; border-radius: 10px; border: 1px solid var(--border);">
@@ -226,12 +227,12 @@
   </div>
 
   <div id="historyScreen" style="display:none; position:relative; width:100vw; max-width:100vw; left:50%; right:50%; margin-left:-50vw; margin-right:-50vw; padding:24px; box-sizing:border-box;">
-    <div class="header" style="max-width:1200px; margin:0 auto;">
+    <div class="header" style="width:100%; margin:0 0 16px 0; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
       <button class="back-btn" id="backFromHistory">←</button>
-      <h1>Histórico <small style="font-size:14px;color:var(--muted);font-weight:normal">Lotes e Frotas</small></h1>
+      <h1 style="margin:0;font-size:32px;line-height:1.05;">Histórico <small style="font-size:12px;color:var(--muted);font-weight:normal">Veiculos e Frotas</small></h1>
     </div>
 
-    <div id="historyDecodePanel" style="display:none; max-width:1200px; margin:0 auto 24px; padding:20px; border-radius:16px; border:1px solid rgba(56,189,248,0.18); background:rgba(56,189,248,0.04); box-shadow:0 20px 40px rgba(0,0,0,0.04);">
+    <div id="historyDecodePanel" style="display:none; width:100%; margin:0 0 24px 0; padding:20px; border-radius:16px; border:1px solid rgba(56,189,248,0.18); background:rgba(56,189,248,0.04); box-shadow:0 20px 40px rgba(0,0,0,0.04);">
       <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px;">
         <div>
           <div style="font-size:13px;color:var(--muted); text-transform:uppercase; letter-spacing:.08em;">Veículo selecionado</div>
@@ -243,8 +244,8 @@
     </div>
 
     <!-- Filtro de Frotas dentro do Histórico -->
-    <div style="padding:24px; width:100%; max-width:100%; margin:0 auto; box-sizing:border-box;">
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;margin-bottom:24px;min-height:260px;width:100%;max-width:100%;box-sizing:border-box;">
+    <div style="padding:0; width:100%; max-width:100%; margin:0; box-sizing:border-box;">
+      <div style="width:100%; padding:0; margin-bottom:24px; box-sizing:border-box;">
         <h3 style="margin-top:0;margin-bottom:20px;color:var(--text);">🚐 Filtrar Frotas</h3>
 
         <div id="fleetSummaryPanel" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:20px;">
@@ -587,6 +588,7 @@
         const data = await res.json();
         dadosOriginais = Array.isArray(data.results) ? data.results : [];
         dadosFiltrados = dadosOriginais;
+        refreshHistoryFilterOptions();
         const totalDecoded = Number(data.total || dadosOriginais.length);
         document.getElementById('fleetTotalDecoded').textContent = String(totalDecoded);
         document.getElementById('fleetDisplayedCount').textContent = String(dadosOriginais.length);
@@ -652,6 +654,7 @@
     function preencherSelect(id, valores) {
       const select = document.getElementById(id);
       if (!select) return;
+      const currentValue = select.value;
       while (select.options.length > 1) select.remove(1);
 
       const lista = Array.isArray(valores) ? valores : [...valores];
@@ -666,11 +669,150 @@
           opt.textContent = v;
           select.appendChild(opt);
         });
+
+      if (currentValue && Array.from(select.options).some(opt => opt.value === currentValue)) {
+        select.value = currentValue;
+      }
+    }
+
+    function getFilterValue(id) {
+      return String(document.getElementById(id)?.value || '').trim();
+    }
+
+    function matchesFilter(value, filterValue) {
+      if (!filterValue) return true;
+      return String(value || '').trim() === filterValue;
+    }
+
+    function filterFleetData(filters = {}) {
+      return (Array.isArray(dadosOriginais) ? dadosOriginais : []).filter(item => {
+        if (!matchesFilter(item.fleet_name || item.nome_da_frota, filters.fleet_name)) return false;
+        if (!matchesFilter(item.user_name || item.nome, filters.user_name)) return false;
+        if (!matchesFilter(item.montadora, filters.montadora)) return false;
+        if (!matchesFilter(item.modelo, filters.modelo)) return false;
+        if (!matchesFilter(item.submodelo, filters.submodelo)) return false;
+        if (!matchesFilter(item.ano, filters.ano)) return false;
+        if (filters.segmento) {
+          const itemSegment = normalize(String(item.segmento || ''));
+          const filterSegment = normalize(filters.segmento);
+          if (itemSegment !== filterSegment) return false;
+        }
+        return true;
+      });
+    }
+
+    function refreshHistoryFilterOptions() {
+      const selectedSegment = getFilterValue('segmento');
+      const selectedBrand = getFilterValue('montadora');
+      const selectedModel = getFilterValue('modelo');
+      const selectedSubmodel = getFilterValue('submodelo');
+      const selectedYear = getFilterValue('ano');
+
+      const segmentCandidates = new Set();
+      const brandCandidates = new Set();
+      const modelCandidates = new Set();
+      const submodelCandidates = new Set();
+      const yearCandidates = new Set();
+      const fleetCandidates = new Set();
+      const requesterCandidates = new Set();
+
+      const dataForSegment = filterFleetData({
+        montadora: selectedBrand,
+        modelo: selectedModel,
+        submodelo: selectedSubmodel,
+        ano: selectedYear,
+      });
+
+      const dataForBrand = filterFleetData({
+        segmento: selectedSegment,
+        modelo: selectedModel,
+        submodelo: selectedSubmodel,
+        ano: selectedYear,
+      });
+
+      const dataForModel = filterFleetData({
+        segmento: selectedSegment,
+        montadora: selectedBrand,
+        submodelo: selectedSubmodel,
+        ano: selectedYear,
+      });
+
+      const dataForSubmodel = filterFleetData({
+        segmento: selectedSegment,
+        montadora: selectedBrand,
+        modelo: selectedModel,
+        ano: selectedYear,
+      });
+
+      const dataForYear = filterFleetData({
+        segmento: selectedSegment,
+        montadora: selectedBrand,
+        modelo: selectedModel,
+        submodelo: selectedSubmodel,
+      });
+
+      const dataForFleetAndRequester = filterFleetData({
+        segmento: selectedSegment,
+        montadora: selectedBrand,
+        modelo: selectedModel,
+        submodelo: selectedSubmodel,
+        ano: selectedYear,
+      });
+
+      dataForSegment.forEach(item => {
+        const rawSegment = String(item.segmento || '').trim();
+        if (rawSegment) segmentCandidates.add(rawSegment);
+      });
+      dataForBrand.forEach(item => {
+        const rawBrand = String(item.montadora || '').trim();
+        if (rawBrand) brandCandidates.add(rawBrand);
+      });
+      dataForModel.forEach(item => {
+        const rawModel = String(item.modelo || '').trim();
+        if (rawModel) modelCandidates.add(rawModel);
+      });
+      dataForSubmodel.forEach(item => {
+        const rawSubmodel = String(item.submodelo || '').trim();
+        if (rawSubmodel) submodelCandidates.add(rawSubmodel);
+      });
+      dataForYear.forEach(item => {
+        const rawYear = String(item.ano || '').trim();
+        if (rawYear) yearCandidates.add(rawYear);
+      });
+      dataForFleetAndRequester.forEach(item => {
+        const rawFleet = String(item.fleet_name || item.nome_da_frota || '').trim();
+        if (rawFleet) fleetCandidates.add(rawFleet);
+        const rawRequester = String(item.user_name || item.nome || '').trim();
+        if (rawRequester) requesterCandidates.add(rawRequester);
+      });
+
+      preencherSelect('segmento', Array.from(segmentCandidates));
+      preencherSelect('montadora', Array.from(brandCandidates));
+      preencherSelect('modelo', Array.from(modelCandidates));
+      preencherSelect('submodelo', Array.from(submodelCandidates));
+      preencherSelect('ano', Array.from(yearCandidates));
+      preencherSelect('frotaFilter', Array.from(fleetCandidates));
+      preencherSelect('solicitante', Array.from(requesterCandidates));
+
+      const modeloSelect = document.getElementById('modelo');
+      if (modeloSelect && selectedModel && !Array.from(modeloSelect.options).some(o => o.value === selectedModel)) {
+        modeloSelect.value = '';
+      }
+      const submodeloSelect = document.getElementById('submodelo');
+      if (submodeloSelect && selectedSubmodel && !Array.from(submodeloSelect.options).some(o => o.value === selectedSubmodel)) {
+        submodeloSelect.value = '';
+      }
+      const anoSelect = document.getElementById('ano');
+      if (anoSelect && selectedYear && !Array.from(anoSelect.options).some(o => o.value === selectedYear)) {
+        anoSelect.value = '';
+      }
     }
 
     let aplicarFiltroTimeout = null; // Debouncing para evitar muitas requisições
 
     async function aplicarFiltro() {
+      refreshHistoryFilterOptions();
+
       // Limpa timeout anterior para debouncing
       if (aplicarFiltroTimeout) {
         clearTimeout(aplicarFiltroTimeout);
@@ -848,7 +990,7 @@
           toggleBtn.style.borderColor = 'var(--border)';
         };
         toggleBtn.onclick = () => {
-          fleetGroupCollapsedState[frota] = !fleetGroupCollapsedState[frota];
+          fleetGroupCollapsedState[frota] = !isCollapsed;
           renderizar(dadosFiltrados);
         };
 

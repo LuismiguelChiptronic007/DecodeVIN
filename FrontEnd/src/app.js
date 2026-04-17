@@ -3251,6 +3251,9 @@ async function main() {
     const gBtn = el("btnGroupDecode");
     const gResults = el("groupResults");
 
+    let activeScreen = null;
+    let lastScreenBeforeSingle = null;
+
     const showScreen = (screen) => {
       [selectionScreen, singleDecoder, groupDecoder, historyScreen, placasCacheScreen].forEach(s => {
         if (s) {
@@ -3266,6 +3269,7 @@ async function main() {
         void screen.offsetWidth;
         screen.classList.add("screen-fade-in");
       }
+      activeScreen = screen || null;
     };
     window.showScreen = showScreen;
 
@@ -3280,7 +3284,12 @@ async function main() {
       else if (gPlateInput) setTimeout(() => gPlateInput.focus(), 50);
     };
     el("backFromSingle").onclick = () => {
-      showScreen(selectionScreen);
+      if (lastScreenBeforeSingle && lastScreenBeforeSingle !== singleDecoder) {
+        showScreen(lastScreenBeforeSingle);
+      } else {
+        showScreen(selectionScreen);
+      }
+      lastScreenBeforeSingle = null;
       clearUI(false);
     };
     el("backFromGroup").onclick = () => {
@@ -3421,6 +3430,7 @@ async function main() {
 
       const singleDecoder = el('singleDecoder');
       if (typeof window.showScreen === 'function' && singleDecoder) {
+        lastScreenBeforeSingle = activeScreen || selectionScreen;
         window.showScreen(singleDecoder);
       }
 
