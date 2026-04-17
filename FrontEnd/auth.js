@@ -1169,6 +1169,27 @@ window.dvbGoToMenu = function() {
   if (window.clearUI) window.clearUI();
 };
 
+function formatBrazilianDateTime(value) {
+  if (!value) return '—';
+
+  const normalized = value.trim().replace(' ', 'T');
+  const isoString = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(normalized)
+    ? normalized
+    : `${normalized}Z`;
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+}
+
 window.dvbAdmin = async function() {
   const token = getToken();
   const res   = await fetch(`${AUTH_WORKER}/admin/users`, {
@@ -1198,7 +1219,7 @@ window.dvbAdmin = async function() {
       <td style="padding:8px; text-align:center;">
         <button onclick="dvbPromover(${u.id}, ${u.admin ? 0 : 1})" style="padding:4px 10px; border-radius:6px; border:none; cursor:pointer; background:#1e3a5f; color:#7dd3fc; font-size:12px;">${u.admin ? 'Remover admin' : 'Tornar admin'}</button>
       </td>
-      <td style="padding:8px; font-size:11px; color:#64748b;">${u.last_login || '—'}</td>
+      <td style="padding:8px; font-size:11px; color:#64748b;">${formatBrazilianDateTime(u.last_login)}</td>
       <td style="padding:8px; text-align:center;">
         <button onclick="dvbDeletar(event, ${u.id}, '${u.nome.replace(/'/g, "\\'")}')" style="padding:4px 10px; border-radius:6px; border:none; cursor:pointer; background:#3f0f0f; color:#fca5a5; font-size:12px;">🗑 Excluir</button>
       </td>

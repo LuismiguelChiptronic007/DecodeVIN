@@ -2049,6 +2049,7 @@ const normalizeBrand = (b) => {
   if (!b) return "";
   let brand = String(b).trim().toUpperCase().replace(/\?/g, " ");
   brand = brand.replace(/\s+/g, " ").trim();
+  if (!brand || brand === "DESCONHECIDO" || brand === "UNKNOWN" || brand === "N/A" || brand === "SEM MARCA") return "";
   if (brand.includes("COMIL")) return "COMIL";
   if (brand.includes("SCANIA")) return "SCANIA";
   if (brand.includes("VOLVO")) return "VOLVO";
@@ -2064,7 +2065,7 @@ const normalizeBrand = (b) => {
   if (brand.includes("MASCARELLO")) return "MASCARELLO";
   if (brand.includes("IRIZAR")) return "IRIZAR";
   if (brand.includes("FORD")) return "FORD";
-  if (brand.includes("CHEVROLET") || brand === "GM") return "CHEVROLET";
+  if (brand === "CHEV" || brand.includes("CHEVROLET") || brand === "GM") return "CHEVROLET";
   return brand; // Retorna sempre em caixa alta para evitar duplicidade por case
 };
 
@@ -2285,7 +2286,8 @@ function populateGroupFilters(results) {
     results.forEach(item => {
       const tech = getTechnicalData(item);
       if (tech.segment) segments.add(tech.segment); // Incluir também "Outros"
-      if (tech.brand && tech.brand !== "Desconhecido") brands.add(tech.brand);
+      const brandValue = normalizeBrand(String(tech.brand || "").trim());
+      if (brandValue && brandValue !== "DESCONHECIDO" && brandValue !== "UNKNOWN") brands.add(brandValue);
     });
 
     // Salva os resultados para uso na cascata
@@ -2307,6 +2309,11 @@ function populateGroupFilters(results) {
         if (isYearField) {
           const lbl = getYearLabel(raw);
           if (lbl && !options.has(lbl)) options.set(lbl, raw);
+        } else if (id === "filterBrand") {
+          const normalizedBrand = normalizeBrand(raw);
+          if (normalizedBrand && normalizedBrand !== "DESCONHECIDO" && normalizedBrand !== "UNKNOWN" && !options.has(normalizedBrand)) {
+            options.set(normalizedBrand, normalizedBrand);
+          }
         } else {
           const normalized = String(raw).trim();
           if (normalized && !options.has(normalized)) options.set(normalized, normalized);
@@ -2326,6 +2333,7 @@ function populateGroupFilters(results) {
       });
 
       sortedValues.forEach(label => {
+        if (id === "filterBrand" && String(label).trim().toUpperCase() === "DESCONHECIDO") return;
         const opt = document.createElement("option");
         opt.value = options.get(label);
         opt.textContent = label;
@@ -2337,6 +2345,18 @@ function populateGroupFilters(results) {
     // Popula segmento e montadora (sem cascata ainda)
     updateSelect("filterSegment", segments, "Segmento (Todos)");
     updateSelect("filterBrand", brands, "Montadora (Todas)");
+
+    const cleanupBrandOptions = () => {
+      const brandSel = el("filterBrand");
+      if (!brandSel) return;
+      Array.from(brandSel.options).forEach(opt => {
+        const value = String(opt.value || "").trim().toUpperCase();
+        if (value === "DESCONHECIDO" || value === "UNKNOWN" || value === "N/A") {
+          brandSel.removeChild(opt);
+        }
+      });
+    };
+    cleanupBrandOptions();
 
     // Função que atualiza modelo/submodelo/ano baseado na montadora selecionada
     const updateDependentFilters = () => {
@@ -2500,10 +2520,14 @@ function renderGroupResults(filteredList = null) {
     populateGroupFilters(window.currentGroupResults);
   }
 
-  // FIX 2: deduplica por vin+placa antes de renderizar
+  // FIX 2: exclui veículos com marca desconhecida e deduplica por vin+placa antes de renderizar
   const rawList = filteredList || window.currentGroupResults;
+  const filteredRawList = rawList.filter(itemData => {
+    const techBrand = normalizeBrand(getTechnicalData(itemData).brand || "");
+    return Boolean(techBrand);
+  });
   const seenKeys = new Set();
-  const displayList = rawList.filter(itemData => {
+  const displayList = filteredRawList.filter(itemData => {
     const vin = String(itemData.vin || "").trim().toUpperCase();
     const plate = String(itemData.placa || "").trim().toUpperCase();
     const key = vin + "|" + plate;

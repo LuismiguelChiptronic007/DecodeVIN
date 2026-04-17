@@ -87,29 +87,6 @@ function getUserId(payload) {
   return n;
 }
 
-function normalizeMontadora(value) {
-  if (!value) return "";
-  let brand = String(value).trim().toUpperCase().replace(/\?/g, " ");
-  brand = brand.replace(/\s+/g, " ").trim();
-  if (brand.includes("COMIL")) return "COMIL";
-  if (brand.includes("SCANIA")) return "SCANIA";
-  if (brand.includes("VOLVO")) return "VOLVO";
-  if (brand.includes("IVECO")) return "IVECO";
-  if (brand.includes("MERCEDES") || brand.includes("M.BENZ") || brand.includes("MBENZ") || brand.includes("M BENZ")) return "MERCEDES-BENZ";
-  if (brand.includes("VOLKSWAGEN") || brand.includes("VWCO") || brand.includes("VW") || brand.includes("MAN LATIN AMERICA") || brand === "MAN" || brand.includes("VOKSWAGEN")) return "VOLKSWAGEN";
-  if (brand.includes("AGRALE")) return "AGRALE";
-  if (brand.includes("DAF")) return "DAF";
-  if (brand.includes("MARCOPOLO")) return "MARCOPOLO";
-  if (brand.includes("VOLARE")) return "VOLARE";
-  if (brand.includes("NEOBUS")) return "NEOBUS";
-  if (brand.includes("CAIO")) return "CAIO";
-  if (brand.includes("MASCARELLO")) return "MASCARELLO";
-  if (brand.includes("IRIZAR")) return "IRIZAR";
-  if (brand.includes("FORD")) return "FORD";
-  if (brand.includes("CHEVROLET") || brand === "GM") return "CHEVROLET";
-  return brand;
-}
-
 const MAX_PAYLOAD = 450000;
 
 export default {
@@ -842,12 +819,9 @@ if (method === 'GET' && path === '/fleet/search') {
       bindings.push(String(userId));
     }
 
-    if (montadora)  { whereClauses.push('UPPER(montadora) LIKE ?');    bindings.push('%' + montadora.toUpperCase() + '%'); }
+    if (montadora)  { whereClauses.push('UPPER(montadora) = ?');    bindings.push(montadora.toUpperCase()); }
     if (modelo)     { whereClauses.push('UPPER(modelo) LIKE ?');    bindings.push('%' + modelo.toUpperCase() + '%'); }
-    if (submodelo)  {
-      whereClauses.push("(UPPER(submodelo) LIKE ? OR ((submodelo = '' OR submodelo IS NULL) AND UPPER(modelo) LIKE ?))");
-      bindings.push('%' + submodelo.toUpperCase() + '%', '%'+ submodelo.toUpperCase() + '%');
-    }
+    if (submodelo)  { whereClauses.push('UPPER(submodelo) LIKE ?'); bindings.push('%' + submodelo.toUpperCase() + '%'); }
     if (ano)        { whereClauses.push('ano LIKE ?');              bindings.push('%' + ano + '%'); }
     if (segmento)   { whereClauses.push('UPPER(segmento) = ?');     bindings.push(segmento.toUpperCase()); }
     if (placa)      { whereClauses.push('placa LIKE ?');            bindings.push('%' + placa.toUpperCase() + '%'); }
@@ -870,6 +844,18 @@ if (method === 'GET' && path === '/fleet/search') {
         fleet_name LIKE ? OR encarrocadora LIKE ? OR fipe_modelo LIKE ? OR COALESCE(u.nome, '') LIKE ?
       )`);
       bindings.push(qUp, qUp, qUp, qUp, qUp, qUp, qUp, qUp);
+    }
+
+    const data_inicio = url.searchParams.get('data_inicio') || '';
+    const data_fim    = url.searchParams.get('data_fim')    || '';
+
+    if (data_inicio) {
+      whereClauses.push('DATE(fv.created_at) >= ?');
+      bindings.push(data_inicio);
+    }
+    if (data_fim) {
+      whereClauses.push('DATE(fv.created_at) <= ?');
+      bindings.push(data_fim);
     }
 
     const where = whereClauses.length > 0 ? ('WHERE ' + whereClauses.join(' AND ')) : '';
@@ -896,7 +882,6 @@ if (method === 'GET' && path === '/fleet/search') {
 
     // ✅ Normaliza segmentos vazios baseado na montadora
     const normalizedResults = (results || []).map(v => {
-      v.montadora = normalizeMontadora(v.montadora);
       if (!v.segmento || v.segmento.trim() === '' || v.segmento === 'Outros') {
         const marca = String(v.montadora || '').toUpperCase().trim();
         const modelo = String(v.modelo || '').toUpperCase().trim();
@@ -977,7 +962,7 @@ if (method === 'GET' && path === '/fleet/options') {
       return (results || []).map(r => r.nome).filter(Boolean);
     };
 
-    const [montadorasRaw, modelosRaw, submodelosRaw, anos, segmentos, frotas, solicitantes] = await Promise.all([
+    const [montadoras, modelos, submodelos, anos, segmentos, frotas, solicitantes] = await Promise.all([
       q('montadora'),
       q('modelo'),
       q('submodelo'),
@@ -987,49 +972,7 @@ if (method === 'GET' && path === '/fleet/options') {
       qUsers(),
     ]);
 
-    const montadoras = new Set();
-    const modelos = new Set();
-    const submodelos = new Set();
-
-    (Array.isArray(montadorasRaw) ? montadorasRaw : []).forEach(raw => {
-      const value = normalizeMontadora(String(raw || '').trim());
-      if (value) montadoras.add(value);
-    });
-
-    (Array.isArray(submodelosRaw) ? submodelosRaw : []).forEach(raw => {
-      const value = String(raw || '').trim();
-      if (value) submodelos.add(value);
-    });
-
-    (Array.isArray(modelosRaw) ? modelosRaw : []).forEach(raw => {
-      const value = String(raw || '').trim();
-      if (!value) return;
-      let model = value;
-      let submodel = '';
-      if (value.includes(' - ')) {
-        const parts = value.split(' - ').map(p => p.trim()).filter(Boolean);
-        model = parts.shift() || '';
-        submodel = parts.join(' - ') || '';
-      } else if (value.includes(' / ')) {
-        const parts = value.split(' / ').map(p => p.trim()).filter(Boolean);
-        model = parts.shift() || '';
-        submodel = parts.join(' / ') || '';
-      } else if (value.includes(' ')) {
-        const parts = value.split(' ').filter(Boolean);
-        model = parts.shift() || '';
-        submodel = parts.join(' ') || '';
-      } else {
-        const match = value.match(/^([A-Za-z]+)([0-9].*)$/);
-        if (match) {
-          model = match[1];
-          submodel = match[2];
-        }
-      }
-      if (model) modelos.add(model);
-      if (submodel) submodelos.add(submodel);
-    });
-
-    return json({ ok: true, montadoras, modelos: Array.from(modelos).sort(), submodelos: Array.from(submodelos).sort(), anos, segmentos, frotas, solicitantes });
+    return json({ ok: true, montadoras, modelos, submodelos, anos, segmentos, frotas, solicitantes });
   } catch (err) {
     return json({ erro: 'Erro interno: ' + String(err) }, 500);
   }

@@ -295,7 +295,7 @@ function lerExcelEPopularGrupo(file, targetMode = "group") {
         if (respondeuWorker) return;
         finalizarWorker();
         importarNoMainThread();
-      }, 5000);
+      }, 20000);
 
       worker.onmessage = (ev) => {
         respondeuWorker = true;

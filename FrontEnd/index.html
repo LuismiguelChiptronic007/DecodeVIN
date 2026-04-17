@@ -340,6 +340,22 @@
           </div>
         </div>
 
+        <div style="margin-bottom:18px; margin-top:12px;">
+          <h3 style="margin:0 0 12px;color:var(--text);">📅 Filtrar por Data</h3>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
+            <div>
+              <label for="dataInicio" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Data início</label>
+              <input id="dataInicio" type="date" oninput="aplicarFiltro()"
+                style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;" />
+            </div>
+            <div>
+              <label for="dataFim" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600;">Data fim</label>
+              <input id="dataFim" type="date" oninput="aplicarFiltro()"
+                style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none;" />
+            </div>
+          </div>
+        </div>
+
         <div style="display:flex;gap:10px;justify-content:flex-end;">
           <button onclick="limparFiltros()" style="padding:10px 20px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:13px;font-weight:600;">🧹 Limpar</button>
           <button onclick="aplicarFiltro()" style="padding:10px 20px;background:var(--accent);border:none;border-radius:6px;color:#000;cursor:pointer;font-size:13px;font-weight:700;">🔍 Filtrar</button>
@@ -538,7 +554,8 @@
         preencherSelect('frotaFilter', optsData.frotas || []);
         preencherSelect('solicitante', optsData.solicitantes || []);
         preencherSelect('segmento', optsData.segmentos || []);
-        preencherSelect('montadora', optsData.montadoras || []);
+        const normalizedBrands = Array.from(new Set((optsData.montadoras || []).map(normalizeBrand).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        preencherSelect('montadora', normalizedBrands);
         preencherSelect('modelo', normalizedOpts.modelos);
         preencherSelect('submodelo', normalizedOpts.submodelos);
         preencherSelect('ano', (optsData.anos || []).map(normalizeYearOption));
@@ -651,6 +668,15 @@
       };
     }
 
+    function normalizeBrand(rawBrand) {
+      if (!rawBrand) return '';
+      let brand = String(rawBrand).trim().toUpperCase().replace(/\?/g, ' ');
+      brand = brand.replace(/\s+/g, ' ').trim();
+      if (!brand) return '';
+      if (brand === 'CHEV' || brand.includes('CHEVROLET') || brand === 'GM') return 'CHEVROLET';
+      return brand;
+    }
+
     function normalizeYearOption(rawYear) {
       const year = String(rawYear || '').trim();
       if (!year) return '';
@@ -706,10 +732,11 @@
 
     function filterFleetData(filters = {}) {
       const normalizedFilterYear = filters.ano ? normalizeYearOption(filters.ano) : '';
+      const normalizedFilterBrand = normalizeBrand(filters.montadora);
       return (Array.isArray(dadosOriginais) ? dadosOriginais : []).filter(item => {
         if (!matchesFilter(item.fleet_name || item.nome_da_frota, filters.fleet_name)) return false;
         if (!matchesFilter(item.user_name || item.nome, filters.user_name)) return false;
-        if (!matchesFilter(item.montadora, filters.montadora)) return false;
+        if (!matchesFilter(normalizeBrand(item.montadora), normalizedFilterBrand)) return false;
         if (!matchesFilter(item.modelo, filters.modelo)) return false;
         if (!matchesFilter(item.submodelo, filters.submodelo)) return false;
         if (normalizedFilterYear) {
@@ -726,110 +753,49 @@
     }
 
     function refreshHistoryFilterOptions() {
-      const selectedSegment = getFilterValue('segmento');
-      const selectedBrand = getFilterValue('montadora');
-      const selectedModel = getFilterValue('modelo');
-      const selectedSubmodel = getFilterValue('submodelo');
-      const selectedYear = getFilterValue('ano');
+      const selectedSegment   = getFilterValue('segmento');
+      const selectedBrand     = getFilterValue('montadora');
+      const selectedModel     = getFilterValue('modelo');
+      const selectedSubmodel  = getFilterValue('submodelo');
+      const selectedYear      = getFilterValue('ano');
+      const selectedFleet     = getFilterValue('frotaFilter');
+      const selectedRequester = getFilterValue('solicitante');
 
-      const segmentCandidates = new Set();
-      const brandCandidates = new Set();
-      const modelCandidates = new Set();
-      const submodelCandidates = new Set();
-      const yearCandidates = new Set();
-      const fleetCandidates = new Set();
-      const requesterCandidates = new Set();
-
-      const dataForSegment = filterFleetData({
-        montadora: selectedBrand,
-        modelo: selectedModel,
-        submodelo: selectedSubmodel,
-        ano: selectedYear,
-      });
-
-      const dataForBrand = filterFleetData({
-        segmento: selectedSegment,
-        modelo: selectedModel,
-        submodelo: selectedSubmodel,
-        ano: selectedYear,
+      // Cada select vê os dados filtrados por TODOS os outros selects,
+      // exceto ele mesmo — isso é o padrão correto de cascata bidirecional.
+      const base = (exclude) => filterFleetData({
+        segmento:   exclude === 'segmento'   ? '' : selectedSegment,
+        montadora:  exclude === 'montadora'  ? '' : selectedBrand,
+        modelo:     exclude === 'modelo'     ? '' : selectedModel,
+        submodelo:  exclude === 'submodelo'  ? '' : selectedSubmodel,
+        ano:        exclude === 'ano'        ? '' : selectedYear,
+        fleet_name: exclude === 'fleet_name' ? '' : selectedFleet,
+        user_name:  exclude === 'user_name'  ? '' : selectedRequester,
       });
 
-      const dataForModel = filterFleetData({
-        segmento: selectedSegment,
-        montadora: selectedBrand,
-        submodelo: selectedSubmodel,
-        ano: selectedYear,
-      });
+      const collect = (dataset, field) =>
+        new Set(dataset.map(i => {
+          const v = String(i[field] || '').trim();
+          return field === 'montadora' ? normalizeBrand(v) : v;
+        }).filter(Boolean));
 
-      const dataForSubmodel = filterFleetData({
-        segmento: selectedSegment,
-        montadora: selectedBrand,
-        modelo: selectedModel,
-        ano: selectedYear,
-      });
+      preencherSelect('segmento',     Array.from(collect(base('segmento'),   'segmento')));
+      preencherSelect('montadora',    Array.from(collect(base('montadora'),  'montadora')));
+      preencherSelect('modelo',       Array.from(collect(base('modelo'),     'modelo')));
+      preencherSelect('submodelo',    Array.from(collect(base('submodelo'),  'submodelo')));
+      preencherSelect('ano',          Array.from(collect(base('ano'),        'ano').values()).map(normalizeYearOption));
+      preencherSelect('frotaFilter',  Array.from(collect(base('fleet_name'), 'fleet_name')));
+      preencherSelect('solicitante',  Array.from(collect(base('user_name'),  'user_name')));
 
-      const dataForYear = filterFleetData({
-        segmento: selectedSegment,
-        montadora: selectedBrand,
-        modelo: selectedModel,
-        submodelo: selectedSubmodel,
-      });
-
-      const dataForFleetAndRequester = filterFleetData({
-        segmento: selectedSegment,
-        montadora: selectedBrand,
-        modelo: selectedModel,
-        submodelo: selectedSubmodel,
-        ano: selectedYear,
-      });
-
-      dataForSegment.forEach(item => {
-        const rawSegment = String(item.segmento || '').trim();
-        if (rawSegment) segmentCandidates.add(rawSegment);
-      });
-      dataForBrand.forEach(item => {
-        const rawBrand = String(item.montadora || '').trim();
-        if (rawBrand) brandCandidates.add(rawBrand);
-      });
-      dataForModel.forEach(item => {
-        const rawModel = String(item.modelo || '').trim();
-        if (rawModel) modelCandidates.add(rawModel);
-      });
-      dataForSubmodel.forEach(item => {
-        const rawSubmodel = String(item.submodelo || '').trim();
-        if (rawSubmodel) submodelCandidates.add(rawSubmodel);
-      });
-      dataForYear.forEach(item => {
-        const rawYear = normalizeYearOption(item.ano);
-        if (rawYear) yearCandidates.add(rawYear);
-      });
-      dataForFleetAndRequester.forEach(item => {
-        const rawFleet = String(item.fleet_name || item.nome_da_frota || '').trim();
-        if (rawFleet) fleetCandidates.add(rawFleet);
-        const rawRequester = String(item.user_name || item.nome || '').trim();
-        if (rawRequester) requesterCandidates.add(rawRequester);
-      });
-
-      preencherSelect('segmento', Array.from(segmentCandidates));
-      preencherSelect('montadora', Array.from(brandCandidates));
-      preencherSelect('modelo', Array.from(modelCandidates));
-      preencherSelect('submodelo', Array.from(submodelCandidates));
-      preencherSelect('ano', Array.from(yearCandidates));
-      preencherSelect('frotaFilter', Array.from(fleetCandidates));
-      preencherSelect('solicitante', Array.from(requesterCandidates));
-
-      const modeloSelect = document.getElementById('modelo');
-      if (modeloSelect && selectedModel && !Array.from(modeloSelect.options).some(o => o.value === selectedModel)) {
-        modeloSelect.value = '';
-      }
-      const submodeloSelect = document.getElementById('submodelo');
-      if (submodeloSelect && selectedSubmodel && !Array.from(submodeloSelect.options).some(o => o.value === selectedSubmodel)) {
-        submodeloSelect.value = '';
-      }
-      const anoSelect = document.getElementById('ano');
-      if (anoSelect && selectedYear && !Array.from(anoSelect.options).some(o => o.value === selectedYear)) {
-        anoSelect.value = '';
-      }
+      // Restaura os valores selecionados (preencherSelect reseta o select)
+      const restore = (id, val) => { const s = document.getElementById(id); if (s && val) s.value = val; };
+      restore('segmento',    selectedSegment);
+      restore('montadora',   selectedBrand);
+      restore('modelo',      selectedModel);
+      restore('submodelo',   selectedSubmodel);
+      restore('ano',         selectedYear);
+      restore('frotaFilter', selectedFleet);
+      restore('solicitante', selectedRequester);
     }
 
     let aplicarFiltroTimeout = null; // Debouncing para evitar muitas requisições
@@ -882,6 +848,11 @@
         params.set('ano', firstYear === secondYear ? firstYear : normalizedAno);
       }
       if (query) params.set('q', query);
+      const dataInicio = document.getElementById('dataInicio')?.value || '';
+      const dataFim    = document.getElementById('dataFim')?.value    || '';
+
+      if (dataInicio) params.set('data_inicio', dataInicio);
+      if (dataFim)    params.set('data_fim',    dataFim);
       params.set('limit', '10000');
 
       const contador = document.getElementById('contadorResultados');
@@ -930,7 +901,7 @@
     }
 
     function limparFiltros() {
-      ['frotaFilter', 'solicitante', 'segmento', 'placaFilter', 'montadora', 'modelo', 'submodelo', 'ano', 'emissao', 'searchSolicitante'].forEach(id => {
+      ['frotaFilter', 'solicitante', 'segmento', 'placaFilter', 'montadora', 'modelo', 'submodelo', 'ano', 'emissao', 'searchSolicitante', 'dataInicio', 'dataFim'].forEach(id => {
         const elemento = document.getElementById(id);
         if (elemento) elemento.value = '';
       });
@@ -1002,7 +973,33 @@
         const title = document.createElement('div');
         title.style.cssText = 'font-size:15px;font-weight:700;color:var(--accent);';
         const userName = (group.map(extractUserName).filter(Boolean)[0]) || 'Usuário desconhecido';
-        title.textContent = `${userName} • Frota: ${frota} (${group.length} veículo${group.length === 1 ? '' : 's'})`;
+        const parseCreatedAt = (value) => {
+          if (!value) return null;
+          const text = String(value).trim();
+          const match = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?(?:\.(\d+))?(Z|[+-]\d{2}:?\d{2})?$/);
+          if (match) {
+            const [, year, month, day, hour, minute, second = '00', ms = '000', tz] = match;
+            if (!tz) {
+              return new Date(Date.UTC(
+                Number(year), Number(month) - 1, Number(day),
+                Number(hour), Number(minute), Number(second), Number(ms.padEnd(3, '0'))
+              ));
+            }
+          }
+          return new Date(text);
+        };
+        const datas = group
+          .map(i => parseCreatedAt(i.created_at))
+          .filter(d => d instanceof Date && !Number.isNaN(d.getTime()))
+          .sort((a, b) => a - b);
+        const dataFormatada = datas.length > 0
+          ? datas[datas.length - 1].toLocaleString('pt-BR', {
+              day: '2-digit', month: '2-digit', year: 'numeric',
+              hour: '2-digit', minute: '2-digit'
+            })
+          : '—';
+
+        title.textContent = `${userName} • Frota: ${frota} (${group.length} veículo${group.length === 1 ? '' : 's'}) • ${dataFormatada}`;
 
         const toggleBtn = document.createElement('button');
         toggleBtn.type = 'button';
