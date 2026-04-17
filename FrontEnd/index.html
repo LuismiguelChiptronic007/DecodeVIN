@@ -541,7 +541,7 @@
         preencherSelect('montadora', optsData.montadoras || []);
         preencherSelect('modelo', normalizedOpts.modelos);
         preencherSelect('submodelo', normalizedOpts.submodelos);
-        preencherSelect('ano', optsData.anos || []);
+        preencherSelect('ano', (optsData.anos || []).map(normalizeYearOption));
 
         const fleetsDecoded = Array.isArray(optsData.frotas) ? optsData.frotas.length : 0;
         document.getElementById('fleetDecodedCount').textContent = String(fleetsDecoded);
@@ -651,6 +651,26 @@
       };
     }
 
+    function normalizeYearOption(rawYear) {
+      const year = String(rawYear || '').trim();
+      if (!year) return '';
+
+      const match = year.match(/^(\d{4})\s*[\/\-]\s*(\d{2,4})$/);
+      if (match) {
+        let second = match[2];
+        if (second.length === 2) {
+          second = match[1].slice(0, 2) + second;
+        }
+        return `${match[1]}/${second}`;
+      }
+
+      if (/^\d{4}$/.test(year)) {
+        return `${year}/${year}`;
+      }
+
+      return year;
+    }
+
     function preencherSelect(id, valores) {
       const select = document.getElementById(id);
       if (!select) return;
@@ -685,13 +705,17 @@
     }
 
     function filterFleetData(filters = {}) {
+      const normalizedFilterYear = filters.ano ? normalizeYearOption(filters.ano) : '';
       return (Array.isArray(dadosOriginais) ? dadosOriginais : []).filter(item => {
         if (!matchesFilter(item.fleet_name || item.nome_da_frota, filters.fleet_name)) return false;
         if (!matchesFilter(item.user_name || item.nome, filters.user_name)) return false;
         if (!matchesFilter(item.montadora, filters.montadora)) return false;
         if (!matchesFilter(item.modelo, filters.modelo)) return false;
         if (!matchesFilter(item.submodelo, filters.submodelo)) return false;
-        if (!matchesFilter(item.ano, filters.ano)) return false;
+        if (normalizedFilterYear) {
+          const itemYear = normalizeYearOption(item.ano);
+          if (itemYear !== normalizedFilterYear) return false;
+        }
         if (filters.segmento) {
           const itemSegment = normalize(String(item.segmento || ''));
           const filterSegment = normalize(filters.segmento);
@@ -776,7 +800,7 @@
         if (rawSubmodel) submodelCandidates.add(rawSubmodel);
       });
       dataForYear.forEach(item => {
-        const rawYear = String(item.ano || '').trim();
+        const rawYear = normalizeYearOption(item.ano);
         if (rawYear) yearCandidates.add(rawYear);
       });
       dataForFleetAndRequester.forEach(item => {
@@ -852,7 +876,11 @@
       if (montadora) params.set('montadora', montadora);
       if (modelo) params.set('modelo', modelo);
       if (submodelo) params.set('submodelo', submodelo);
-      if (ano) params.set('ano', ano);
+      if (ano) {
+        const normalizedAno = normalizeYearOption(ano);
+        const [firstYear, secondYear] = normalizedAno.split('/');
+        params.set('ano', firstYear === secondYear ? firstYear : normalizedAno);
+      }
       if (query) params.set('q', query);
       params.set('limit', '10000');
 
