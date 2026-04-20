@@ -2700,9 +2700,6 @@ function renderGroupResults(filteredList = null) {
       yearInfo = ' • <span class="model-val" style="color:var(--accent-2)">' + euroLabel + '</span>';
     }
 
-    const fleetInfo = (itemData.fleetName || "").trim();
-    const fleetHtml = fleetInfo ? (' • <span class="model-val" style="color:var(--muted)">📦 ' + fleetInfo + '</span>') : "";
-    
     const segmentInfo = tech.segment ? ('<span class="model-val" style="color:var(--accent); font-weight:700;">' + tech.segment.toUpperCase() + '</span> • ') : "";
     const displayBrand = tech.brand || "—";
 
@@ -2720,14 +2717,16 @@ function renderGroupResults(filteredList = null) {
 
     const infoDiv = document.createElement("div");
     infoDiv.className = "info";
+    const fipeCode = itemData.fipe_codigo || itemData.apiResult?.fipe_codigo || '—';
+    const fipeModel = itemData.fipe_modelo || itemData.apiResult?.fipe_modelo || '—';
     const fieldValues = {
       montadora: displayBrand || '—',
       modelo: modStr || '—',
       ano: yearFull ? getYearLabel(yearFull) : '—',
       placa: plate || '—',
       chassi: vin || '—',
-      solicitante: (itemData.user_name || itemData.usuario || '—'),
-      frota: fleetInfo || '—'
+      fipe_codigo: fipeCode,
+      fipe_modelo: fipeModel
     };
     infoDiv.innerHTML = `
       <div class="info-grid">
@@ -2736,8 +2735,8 @@ function renderGroupResults(filteredList = null) {
         <div class="field"><div class="field-label">Ano</div><div class="field-value">${fieldValues.ano}</div></div>
         <div class="field"><div class="field-label">Placa</div><div class="field-value">${fieldValues.placa}</div></div>
         <div class="field"><div class="field-label">Chassi</div><div class="field-value">${fieldValues.chassi}</div></div>
-        <div class="field"><div class="field-label">Solicitante</div><div class="field-value">${fieldValues.solicitante}</div></div>
-        <div class="field"><div class="field-label">Frota</div><div class="field-value">${fieldValues.frota}</div></div>
+        <div class="field"><div class="field-label">Cód. FIPE</div><div class="field-value">${fieldValues.fipe_codigo}</div></div>
+        <div class="field"><div class="field-label">Modelo FIPE</div><div class="field-value">${fieldValues.fipe_modelo}</div></div>
       </div>
       <div class="status-msg">${statusHtml}</div>`;
     item.appendChild(infoDiv);
@@ -3581,8 +3580,8 @@ async function main() {
       const allKeys = new Set(); 
       data.entries.forEach(row => Object.keys(row).forEach(k => allKeys.add(k))); 
       
-      const FIELDS_TO_HIDE = new Set(['id', 'user_id', 'wmi', 'WMI']);
-      const CAMPOS_PRIORITARIOS = ['user_name', 'fleet_name', 'vin', 'placa', 'montadora', 'modelo', 'submodelo', 'ano', 'segmento', 'carroceria', 'encarrocadora']; 
+      const FIELDS_TO_HIDE = new Set(['id', 'user_id', 'wmi', 'WMI', 'user_name', 'fleet_name']);
+      const CAMPOS_PRIORITARIOS = ['vin', 'placa', 'montadora', 'modelo', 'submodelo', 'ano', 'segmento', 'carroceria', 'encarrocadora', 'fipe_codigo']; 
       const outrosCampos = Array.from(allKeys) 
         .filter(k => !CAMPOS_PRIORITARIOS.includes(k) && !FIELDS_TO_HIDE.has(k)) 
         .sort(); 
@@ -3688,6 +3687,9 @@ async function main() {
           } else {
             buttonTitle = "Modo combinado requer a mesma quantidade de placas e chassis.";
           }
+        } else if (!fleetName) {
+          canDecode = false;
+          buttonTitle = "Informe o nome do lote / frota para decodificar placa e chassi.";
         }
       } else {
         canDecode = hasPlate || hasChassis;
@@ -4145,7 +4147,9 @@ async function main() {
           }
           
           window._dvbSkipVinAudit = true;
-          await runVIN(true); 
+          if (isBus) {
+            await runVIN(true);
+          }
           showReports("single", true);
 
           if (!window.currentSingleResult) {
@@ -4315,6 +4319,11 @@ async function main() {
         
         console.log("[Group] Dados do formulário:", { fleetName, vins, plates, isCombined });
         
+        if (!fleetName && vins && plates) {
+          showToast("Decodificação com placa e chassi exige o nome da frota.", "error");
+          return;
+        }
+
         if (!fleetName) {
           const defaultFleetName = "Lote_" + Date.now();
           fleetName = defaultFleetName;
@@ -4849,7 +4858,7 @@ main();
      const thead = document.createElement('thead'); 
      thead.innerHTML = ` 
        <tr style="background:var(--bg);border-bottom:2px solid var(--border);"> 
-         ${['Frota','VIN','Placa','Montadora','Modelo','Submodelo','Ano','Carroceria','Encarroçadora','Segmento','Cód. FIPE','Modelo FIPE','WMI','Motor','Pos. Motor','Emissões','Combustível','Cor','Cidade/UF'] 
+         ${['VIN','Placa','Montadora','Modelo','Submodelo','Ano','Carroceria','Encarroçadora','Segmento','Cód. FIPE','Modelo FIPE','WMI','Motor','Pos. Motor','Emissões','Combustível','Cor','Cidade/UF'] 
            .map(h => `<th style="padding:10px 12px;text-align:left;color:var(--muted);font-size:11px;font-weight:600;white-space:nowrap">${h}</th>`) 
            .join('')} 
        </tr> 
@@ -4875,7 +4884,6 @@ main();
        const displaySubmodel = tech.submodel || row.submodelo || '—';
 
        const cols = [ 
-         row.fleet_name   || '—', 
          row.vin          || '—', 
          row.placa        || '—', 
          row.montadora    || '—', 

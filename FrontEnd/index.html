@@ -136,13 +136,10 @@
     </div>
 
     <div id="groupDecoder" style="display:none">
-    <div class="header" style="justify-content: space-between;">
-      <div style="display:flex; align-items:center; gap:12px;">
-        <button class="back-btn" id="backFromGroup">←</button>
-        <h1>DecodeVIN <small style="font-size:14px;color:var(--muted);font-weight:normal">Modo Grupo</small></h1>
-      </div>
-      <button id="btnGoToGroupHistory" class="btn" style="background:var(--card); border:1px solid var(--border); color:var(--text); font-size:13px; padding:8px 16px; box-shadow:none;">🕒 Histórico de Frotas
-      </button>
+    <div class="header" style="display:flex; align-items:center; gap:12px;">
+      <button class="back-btn" id="backFromGroup">←</button>
+      <h1>DecodeVIN <small style="font-size:14px;color:var(--muted);font-weight:normal">Modo Grupo</small></h1>
+      <button id="btnGoToGroupHistory" class="btn" style="background:var(--card); border:1px solid var(--border); color:var(--text); font-size:13px; padding:8px 16px; box-shadow:none;">🕒 Histórico de Frotas</button>
     </div>
     
     <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px; background: var(--card); padding: 12px; border-radius: 10px; border: 1px solid var(--border);">
@@ -791,6 +788,11 @@
           const filterSegment = normalizeSegment(filters.segmento);
           if (itemSegment !== filterSegment) return false;
         }
+        // ✅ NOVO: emissão participa da cascata
+        if (filters.emissao) {
+          const itemLabel = getYearLabel(String(item.ano || '').trim());
+          if (itemLabel !== filters.emissao) return false;
+        }
         return true;
       });
     }
@@ -803,6 +805,7 @@
       const selectedYear      = getFilterValue('ano');
       const selectedFleet     = getFilterValue('frotaFilter');
       const selectedRequester = getFilterValue('solicitante');
+      const selectedEmissao   = getFilterValue('emissao');
 
       // Cada select vê os dados filtrados por TODOS os outros selects,
       // exceto ele mesmo — isso é o padrão correto de cascata bidirecional.
@@ -814,11 +817,15 @@
         ano:        exclude === 'ano'        ? '' : selectedYear,
         fleet_name: exclude === 'fleet_name' ? '' : selectedFleet,
         user_name:  exclude === 'user_name'  ? '' : selectedRequester,
+        emissao:    exclude === 'emissao'    ? '' : selectedEmissao,  // ✅ NOVO
       });
 
       const collect = (dataset, field) => {
         if (field === 'segmento') {
           return new Set(dataset.map(i => inferSegment(i)).filter(Boolean));
+        }
+        if (field === 'emissao') {
+          return new Set(dataset.map(i => getYearLabel(String(i.ano || '').trim())).filter(Boolean));
         }
         return new Set(dataset.map(i => {
           const v = String(i[field] || '').trim();
@@ -831,6 +838,7 @@
       preencherSelect('modelo',       Array.from(collect(base('modelo'),     'modelo')));
       preencherSelect('submodelo',    Array.from(collect(base('submodelo'),  'submodelo')));
       preencherSelect('ano',          Array.from(collect(base('ano'),        'ano').values()).map(normalizeYearOption));
+      preencherSelect('emissao',      Array.from(collect(base('emissao'),    'emissao')));
       preencherSelect('frotaFilter',  Array.from(collect(base('fleet_name'), 'fleet_name')));
       preencherSelect('solicitante',  Array.from(collect(base('user_name'),  'user_name')));
 
@@ -843,6 +851,7 @@
       restore('ano',         selectedYear);
       restore('frotaFilter', selectedFleet);
       restore('solicitante', selectedRequester);
+      restore('emissao',     selectedEmissao);
     }
 
     let aplicarFiltroTimeout = null; // Debouncing para evitar muitas requisições
