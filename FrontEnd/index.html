@@ -462,9 +462,37 @@
     </div>
   </div>
 
+  <!-- ===== MODAL FIPE ===== -->
+  <div id="modal-fipe-overlay" class="modal-fipe-overlay" style="display:none;">
+    <div class="modal-fipe-box">
+      <div class="modal-fipe-icon">📊</div>
+      <h2 class="modal-fipe-title">Comparar com planilha FIPE?</h2>
+      <p class="modal-fipe-desc">
+        Deseja cruzar os veículos decodificados com uma planilha FIPE para obter
+        os campos <strong>CÓDIGO</strong>, <strong>ESTUDO</strong> e <strong>TELC</strong>?<br><br>
+        <strong>Nota:</strong> A comparação FIPE só funciona para segmentos <strong>Caminhão</strong>, <strong>Ônibus</strong> e <strong>Utilitário</strong>. Para outros segmentos, a planilha não será carregada.
+      </p>
+      <div class="modal-fipe-actions">
+        <button id="btn-fipe-nao" class="btn-fipe btn-fipe-nao">✕ Não, apenas decodificar</button>
+        <button id="btn-fipe-sim" class="btn-fipe btn-fipe-sim">✓ Sim, carregar planilha FIPE</button>
+      </div>
+      <div id="fipe-upload-area" class="fipe-upload-area" style="display:none;">
+        <label class="fipe-upload-label">
+          <span id="fipe-upload-text">📂 Clique para selecionar a planilha FIPE (.xlsx ou .csv)</span>
+          <input type="file" id="fipe-file-input" accept=".xlsx,.xls,.csv" style="display:none">
+        </label>
+        <div id="fipe-file-info" class="fipe-file-info" style="display:none;"></div>
+        <button id="btn-fipe-confirmar" class="btn-fipe-confirmar" style="display:none;">
+          🚀 Confirmar e Decodificar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- SheetJS para importação de Excel -->
   <script src="auth.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="src/fipe-modal.js"></script>
   <script src="src/importar-excel.js"></script>
   <script src="src/decodevin-integracao.js?v=5"></script>
   <script type="module" src="./src/app.js"></script>

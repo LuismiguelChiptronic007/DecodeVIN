@@ -1884,8 +1884,9 @@ function exportCSV(data, name, includeFipe = true) {
     uniqueData.push(item);
   });
 
+  const showFipeColumns = FipeComparador.ativo();
   let columns = [];
-  
+
   if (includeFipe) {
     columns = [
       "MONTADORA",
@@ -1898,6 +1899,8 @@ function exportCSV(data, name, includeFipe = true) {
       "MODELO CHASSI",
       "CODIGO FIPE",
       "MODELO FIPE",
+      "ESTUDO",
+      "TELC",
       "COMBUSTIVEL",
       "COR",
       "CIDADE/UF"
@@ -1914,6 +1917,10 @@ function exportCSV(data, name, includeFipe = true) {
       "MODELO CHASSI",
       "CIDADE/UF"
     ];
+  }
+
+  if (showFipeColumns) {
+    columns = columns.concat(["CÓDIGO", "ESTUDO", "TELC"]);
   }
 
   let csv = "\ufeff" + columns.join(";") + "\n";
@@ -1983,6 +1990,9 @@ function exportCSV(data, name, includeFipe = true) {
       ? (api.fipe_modelo || item.fipe_modelo || fipeModFinal) 
       : fipeModFinal;
 
+    const fipeSheet = item.fipeSheetMatch || item.fipeSheet || {};
+    const finalFipeCode = fipeSheet.codigo || fipeSheet.code || fipeCodFinal || "—";
+
     let row = [];
     if (includeFipe) {
       row = [
@@ -1994,8 +2004,10 @@ function exportCSV(data, name, includeFipe = true) {
         ob.encarrocadeira || ob.encarrocadora || "—",
         findToken("Motor") || "—",
         ob.modelo_chassi || ob.chassi || api.modelo || findToken("Modelo") || "—",
-        fipeCodFinal,
+        finalFipeCode,
         finalFipeMod,
+        fipeSheet.estudo || "—",
+        fipeSheet.telc || "—",
         api.combustivel || "—",
         api.cor || "—",
         (api.municipio && api.uf) ? (api.municipio + " / " + api.uf) : (api.cidade || "—")
@@ -2012,6 +2024,14 @@ function exportCSV(data, name, includeFipe = true) {
         ob.modelo_chassi || ob.chassi || api.modelo || findToken("Modelo") || "—",
         (api.municipio && api.uf) ? (api.municipio + " / " + api.uf) : (api.cidade || "—")
       ];
+    }
+
+    if (showFipeColumns) {
+      row = row.concat([
+        item.fipeCodigo || "—",
+        item.fipeEstudo || "—",
+        item.fipeTelc || "—"
+      ]);
     }
 
     csv += row.map(val => {
@@ -2547,6 +2567,48 @@ function populateGroupFilters(results) {
     renderGroupResults(filtered);
   }
 
+function enriquecerComFipe(item) {
+  if (!FipeComparador.ativo()) return item;
+
+  const codigoFipe = String(
+    item.codigoFipe ||
+    item.codigo_fipe ||
+    item.fipe_codigo ||
+    item.apiResult?.fipe_codigo ||
+    item.apiResult?.codigo_fipe ||
+    item.apiResult?.CODIGO_FIPE ||
+    item.result?.fipe_codigo ||
+    item.result?.codigo_fipe ||
+    ''
+  ).trim();
+
+  const anoVeiculo = String(
+    item.apiResult?.ano ||
+    item.apiResult?.ano_fabricacao ||
+    item.apiResult?.model_year ||
+    item.apiResult?.ano_modelo ||
+    item.ano ||
+    item.year ||
+    item.result?.ano ||
+    item.result?.year ||
+    ''
+  ).trim();
+
+  const match = FipeComparador.buscar(codigoFipe, anoVeiculo);
+  if (match) {
+    item.fipeCodigo = match.codigo || '—';
+    item.fipeEstudo = match.estudo || '—';
+    item.fipeTelc = match.telc || '—';
+    item.temFipeMatch = true;
+  } else {
+    item.fipeCodigo = '—';
+    item.fipeEstudo = '—';
+    item.fipeTelc = '—';
+    item.temFipeMatch = false;
+  }
+  return item;
+}
+
 function renderGroupResults(filteredList = null) {
   const gResults = el("groupResults");
   if (!gResults || !window.currentGroupResults) return;
@@ -2719,6 +2781,8 @@ function renderGroupResults(filteredList = null) {
     infoDiv.className = "info";
     const fipeCode = itemData.fipe_codigo || itemData.apiResult?.fipe_codigo || '—';
     const fipeModel = itemData.fipe_modelo || itemData.apiResult?.fipe_modelo || '—';
+    const fipeEstudo = itemData.fipeEstudo || itemData.fipeSheetMatch?.estudo || '—';
+    const fipeTelc = itemData.fipeTelc || itemData.fipeSheetMatch?.telc || '—';
     const fieldValues = {
       montadora: displayBrand || '—',
       modelo: modStr || '—',
@@ -2726,7 +2790,9 @@ function renderGroupResults(filteredList = null) {
       placa: plate || '—',
       chassi: vin || '—',
       fipe_codigo: fipeCode,
-      fipe_modelo: fipeModel
+      fipe_modelo: fipeModel,
+      fipe_estudo: fipeEstudo,
+      fipe_telc: fipeTelc
     };
     infoDiv.innerHTML = `
       <div class="info-grid">
@@ -2737,6 +2803,8 @@ function renderGroupResults(filteredList = null) {
         <div class="field"><div class="field-label">Chassi</div><div class="field-value">${fieldValues.chassi}</div></div>
         <div class="field"><div class="field-label">Cód. FIPE</div><div class="field-value">${fieldValues.fipe_codigo}</div></div>
         <div class="field"><div class="field-label">Modelo FIPE</div><div class="field-value">${fieldValues.fipe_modelo}</div></div>
+        <div class="field"><div class="field-label">Estudo</div><div class="field-value">${fieldValues.fipe_estudo}</div></div>
+        <div class="field"><div class="field-label">TELC</div><div class="field-value">${fieldValues.fipe_telc}</div></div>
       </div>
       <div class="status-msg">${statusHtml}</div>`;
     item.appendChild(infoDiv);
@@ -3325,6 +3393,10 @@ async function main() {
     const combined = el("combinedMode");
     const gBtn = el("btnGroupDecode");
     const gResults = el("groupResults");
+
+    const normalizeFipeCode = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").trim();
+
+
 
     let activeScreen = null;
     let lastScreenBeforeSingle = null;
@@ -4306,82 +4378,81 @@ async function main() {
     if (vinInputSingle) vinInputSingle.addEventListener('keydown', e => e.key === "Enter" && runVIN());
     if (plateInputSingle) plateInputSingle.addEventListener('keydown', e => e.key === "Enter" && runPlate());
 
-    // Add event listener for group decode button
-    if (gBtn) {
-      gBtn.addEventListener('click', async () => {
-        console.log("[Group] Botão de decodificar grupo clicado!");
-        
-        // Get form values
-        let fleetName = fleetInput?.value?.trim() || "";
-        const vins = gInput?.value?.trim() || "";
-        const plates = gPlateInput?.value?.trim() || "";
-        const isCombined = combined?.checked || false;
-        
-        console.log("[Group] Dados do formulário:", { fleetName, vins, plates, isCombined });
-        
-        if (!fleetName && vins && plates) {
-          showToast("Decodificação com placa e chassi exige o nome da frota.", "error");
-          return;
-        }
+    // Add group decode function so the listener only opens the FIPE modal first
+    const decodificarGrupo = async () => {
+      console.log("[Group] Botão de decodificar grupo clicado!");
+          
+          // Get form values
+          let fleetName = fleetInput?.value?.trim() || "";
+          const vins = gInput?.value?.trim() || "";
+          const plates = gPlateInput?.value?.trim() || "";
+          const isCombined = combined?.checked || false;
+          
+          console.log("[Group] Dados do formulário:", { fleetName, vins, plates, isCombined });
+          
+          if (!fleetName && vins && plates) {
+            showToast("Decodificação com placa e chassi exige o nome da frota.", "error");
+            return;
+          }
 
-        if (!fleetName) {
-          const defaultFleetName = "Lote_" + Date.now();
-          fleetName = defaultFleetName;
-          if (fleetInput) fleetInput.value = defaultFleetName;
-        }
-        
-        if (!vins && !plates) {
-          showToast("Por favor, informe pelo menos um VIN ou placa.", "error");
-          return;
-        }
-        
-        // Disable button during processing
-        gBtn.disabled = true;
-        gBtn.textContent = "Processando...";
-        
-        const groupProgressText = el("groupProgress");
-        const groupProgressContainer = el("progressContainer");
-        const groupProgressBar = el("progressBar");
-        if (groupProgressText) {
-          groupProgressText.style.display = "block";
-        }
-        if (groupProgressContainer) {
-          groupProgressContainer.style.display = "block";
-        }
-        if (groupProgressBar) {
-          groupProgressBar.style.width = "0%";
-        }
+          if (!fleetName) {
+            const defaultFleetName = "Lote_" + Date.now();
+            fleetName = defaultFleetName;
+            if (fleetInput) fleetInput.value = defaultFleetName;
+          }
+          
+          if (!vins && !plates) {
+            showToast("Por favor, informe pelo menos um VIN ou placa.", "error");
+            return;
+          }
+          
+          // Disable button during processing
+          gBtn.disabled = true;
+          gBtn.textContent = "Processando...";
+          
+          const groupProgressText = el("groupProgress");
+          const groupProgressContainer = el("progressContainer");
+          const groupProgressBar = el("progressBar");
+          if (groupProgressText) {
+            groupProgressText.style.display = "block";
+          }
+          if (groupProgressContainer) {
+            groupProgressContainer.style.display = "block";
+          }
+          if (groupProgressBar) {
+            groupProgressBar.style.width = "0%";
+          }
 
-        const updateGroupProgress = (done, total) => {
-          if (!groupProgressText || !groupProgressBar) return;
-          const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-          groupProgressText.textContent = `Processando ${done} de ${total} itens • ${pct}%`;
-          groupProgressBar.style.width = `${pct}%`;
-        };
+          const updateGroupProgress = (done, total) => {
+            if (!groupProgressText || !groupProgressBar) return;
+            const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+            groupProgressText.textContent = `Processando ${done} de ${total} itens • ${pct}%`;
+            groupProgressBar.style.width = `${pct}%`;
+          };
 
-        // Clear previous results
-        if (gResults) gResults.innerHTML = "";
-        
-        // Show skeleton loading
-        showSkeletons(gResults, Math.min(8, Math.max(vins.split('\n').filter(Boolean).length, plates.split('\n').filter(Boolean).length)));
-        
-        let total = 0;
-        let hadGroupError = false;
-        const results = [];
-        try {
-          // Process VINs and plates
-          const vLines = vins.split("\n").map(l => l.trim()).filter(Boolean);
-          const pLines = plates.split("\n").map(l => l.trim()).filter(Boolean);
-          total = Math.max(vLines.length, pLines.length);
+          // Clear previous results
+          if (gResults) gResults.innerHTML = "";
+          
+          // Show skeleton loading
+          showSkeletons(gResults, Math.min(8, Math.max(vins.split('\n').filter(Boolean).length, plates.split('\n').filter(Boolean).length)));
+          
+          let total = 0;
+          let hadGroupError = false;
+          const results = [];
+          try {
+            // Process VINs and plates
+            const vLines = vins.split("\n").map(l => l.trim()).filter(Boolean);
+            const pLines = plates.split("\n").map(l => l.trim()).filter(Boolean);
+            total = Math.max(vLines.length, pLines.length);
 
-          console.log("[Group] Processando", total, "itens");
-          updateGroupProgress(0, total);
+            console.log("[Group] Processando", total, "itens");
+            updateGroupProgress(0, total);
 
-          for (let i = 0; i < total; i++) {
-            const vin = (vLines[i] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-            const plate = (pLines[i] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-            
-            let decoded = { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
+            for (let i = 0; i < total; i++) {
+              const vin = (vLines[i] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+              const plate = (pLines[i] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+              
+              let decoded = { type: "UNKNOWN", tokens: [], manufacturerName: "Desconhecido" };
             if (vin) {
               try {
                 const dec = window.currentDecoder;
@@ -4448,6 +4519,31 @@ async function main() {
               itemData.status = "orphan";
             }
 
+            if (FipeComparador.ativo() && itemData.apiResult) {
+              const candidateCode = normalizeFipeCode(
+                itemData.apiResult.fipe_codigo ||
+                itemData.apiResult.codigo_fipe ||
+                itemData.apiResult.CODIGO_FIPE ||
+                itemData.fipe_codigo ||
+                itemData.result?.fipe_codigo ||
+                itemData.result?.codigo_fipe ||
+                ''
+              );
+              if (candidateCode) {
+                const anoParaFipe = String(
+                  itemData.apiResult?.ano ||
+                  itemData.apiResult?.ano_fabricacao ||
+                  itemData.apiResult?.ano_modelo ||
+                  ''
+                ).trim();
+                const fipeMatch = FipeComparador.buscar(candidateCode, anoParaFipe);
+                if (fipeMatch) {
+                  itemData.fipeSheetMatch = fipeMatch;
+                }
+              }
+            }
+
+            enriquecerComFipe(itemData);
             results.push(itemData);
             updateGroupProgress(i + 1, total);
           }
@@ -4481,6 +4577,27 @@ async function main() {
             groupProgressBar.style.width = "100%";
           }
         }
+      };
+
+    if (gBtn) {
+      gBtn.addEventListener('click', () => {
+        const fleetName = fleetInput?.value?.trim() || "";
+        const vins = gInput?.value?.trim() || "";
+        const plates = gPlateInput?.value?.trim() || "";
+
+        if (!fleetName && vins && plates) {
+          showToast("Decodificação com placa e chassi exige o nome da frota.", "error");
+          return;
+        }
+
+        if (!vins && !plates) {
+          showToast("Por favor, informe pelo menos um VIN ou placa.", "error");
+          return;
+        }
+
+        abrirModalFipe(() => {
+          decodificarGrupo();
+        });
       });
     }
 
@@ -4856,11 +4973,15 @@ main();
      table.style.cssText = 'width:100%;border-collapse:collapse;font-size:13px;'; 
   
      const thead = document.createElement('thead'); 
+     const showFipeColumns = FipeComparador.ativo(); 
      thead.innerHTML = ` 
        <tr style="background:var(--bg);border-bottom:2px solid var(--border);"> 
          ${['VIN','Placa','Montadora','Modelo','Submodelo','Ano','Carroceria','Encarroçadora','Segmento','Cód. FIPE','Modelo FIPE','WMI','Motor','Pos. Motor','Emissões','Combustível','Cor','Cidade/UF'] 
            .map(h => `<th style="padding:10px 12px;text-align:left;color:var(--muted);font-size:11px;font-weight:600;white-space:nowrap">${h}</th>`) 
            .join('')} 
+         <th id="th-fipe-codigo" style="display:${showFipeColumns ? '' : 'none'};padding:10px 12px;text-align:left;color:var(--muted);font-size:11px;font-weight:600;white-space:nowrap">CÓDIGO</th> 
+         <th id="th-fipe-estudo" style="display:${showFipeColumns ? '' : 'none'};padding:10px 12px;text-align:left;color:var(--muted);font-size:11px;font-weight:600;white-space:nowrap">ESTUDO</th> 
+         <th id="th-fipe-telc" style="display:${showFipeColumns ? '' : 'none'};padding:10px 12px;text-align:left;color:var(--muted);font-size:11px;font-weight:600;white-space:nowrap">TELC</th> 
        </tr> 
      `; 
      table.appendChild(thead); 
@@ -4904,9 +5025,23 @@ main();
          row.municipio_uf || '—',
        ]; 
   
+       const fipeMatch = FipeComparador.ativo() 
+         ? FipeComparador.buscar(
+             String(row.fipe_codigo || row.codigo_fipe || row.CODIGO_FIPE || '').trim(),
+             String(row.ano || '').trim()
+           ) 
+         : null; 
+       const fipeCells = FipeComparador.ativo() 
+         ? `
+           <td class="fipe-data-cell">${fipeMatch?.codigo || '—'}</td>
+           <td class="fipe-data-cell">${fipeMatch?.estudo || '—'}</td>
+           <td class="fipe-data-cell">${fipeMatch?.telc || '—'}</td>
+         ` 
+         : ''; 
+  
        tr.innerHTML = cols.map(val => ` 
          <td style="padding:10px 12px;color:var(--text);white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${val}">${val}</td> 
-       `).join(''); 
+       `).join('') + fipeCells; 
   
        tr.onclick = () => {
          // Fecha o modal de pesquisa

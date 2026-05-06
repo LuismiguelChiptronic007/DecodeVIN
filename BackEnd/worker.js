@@ -38,6 +38,127 @@ function b64url(str) {
   return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
+async function scrapeTabelaFipe(placa, env) {
+  // 1. Checa cache no D1 (válido por 30 dias)
+  try {
+    const cached = await env.DB.prepare(
+      'SELECT dados, criado_em FROM fipe_cache WHERE placa = ?'
+    ).bind(placa).first();
+    if (cached) {
+      const idade = Date.now() - new Date(cached.criado_em).getTime();
+      if (idade < 30 * 24 * 60 * 60 * 1000) {
+        return new Response(cached.dados, {
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'X-Cache': 'HIT' }
+        });
+      }
+    }
+  } catch (_) {}
+
+  // Aguarda 1-3 segundos aleatórios para evitar bloqueio por excesso de requisições
+  await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 2000));
+
+  const userAgents = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
+  ];
+  const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
+
+  const targetUrl = `https://www.tabelafipebrasil.com/placa/${placa}`;
+  let html;
+
+  try {
+    const resp = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': ua,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': 'https://www.google.com.br/',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'cross-site',
+      },
+      redirect: 'follow',
+    });
+
+    if (!resp.ok) {
+      return jsonResponse({ encontrou: false, erro: `Site retornou ${resp.status}`, placa }, 502);
+    }
+
+    html = await resp.text();
+  } catch (err) {
+    return jsonResponse({ encontrou: false, erro: 'Falha de rede: ' + err.message, placa }, 502);
+  }
+
+  // 3. Parser — extrai todas as linhas da tabela fipe-desktop
+  const resultados = parsearTabelaFipe(html, placa);
+
+  const respObj = {
+    placa,
+    encontrou: resultados.length > 0,
+    total: resultados.length,
+    veiculos: resultados,
+    fonte: 'tabelafipebrasil.com'
+  };
+
+  // 4. Salva no D1
+  if (resultados.length > 0) {
+    try {
+      await env.DB.prepare(
+        'INSERT OR REPLACE INTO fipe_cache (placa, dados, criado_em) VALUES (?, ?, ?)'
+      ).bind(placa, JSON.stringify(respObj), new Date().toISOString()).run();
+    } catch (_) {
+      // não bloqueia se falhar o cache
+    }
+  }
+
+  return jsonResponse(respObj);
+}
+
+function parsearTabelaFipe(html, placa) {
+  const resultados = [];
+
+  const tabelaMatch = html.match(/<table[^>]*class="fipe-desktop"[^>]*>([\s\S]*?)<\/table>/i);
+  if (!tabelaMatch) return resultados;
+
+  const tabelaHtml = tabelaMatch[1];
+  const linhas = tabelaHtml.split(/<tr[^>]*>/i).slice(1);
+
+  for (const linha of linhas) {
+    if (linha.includes('fipeList')) continue;
+    if (linha.includes('Código FIPE')) continue;
+
+    const codMatch = linha.match(/<td[^>]*width="30px"[^>]*>[\s\S]*?href="[^"]*\/FIPE\/([^"]+)"[^>]*>([^<]+)<\/a>/i);
+    const modeloMatch = linha.match(/<td[^>]*width="250px"[^>]*>[\s\S]*?href="([^"]+)"[^>]*>([^<]+)<\/a>/i);
+    const valorMatch = linha.match(/<td[^>]*width="50px"[^>]*>\s*R\$\s*([\d\.,]+)\s*<\/td>/i);
+
+    if (codMatch || modeloMatch) {
+      resultados.push({
+        codigoFipe: codMatch ? codMatch[2].trim() : null,
+        linkFipe: codMatch ? `https://www.tabelafipebrasil.com/FIPE/${codMatch[1]}` : null,
+        modeloFipe: modeloMatch ? modeloMatch[2].trim() : null,
+        linkModelo: modeloMatch ? `https://www.tabelafipebrasil.com${modeloMatch[1]}` : null,
+        valor: valorMatch ? `R$ ${valorMatch[1]}` : null,
+      });
+    }
+  }
+
+  return resultados;
+}
+
+function jsonResponse(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    }
+  });
+}
+
 async function signJWT(payload, secret) {
   const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const body   = b64url(JSON.stringify(payload));
@@ -124,6 +245,34 @@ export default {
       console.log(`[Worker] /veiculos-da-frota chamado - retornando ${results.length} de ${total} registros`);
 
       return json({ ok: true, total, limit, offset, results });
+    }
+
+    // ============================================================
+    // GET /scrape-fipe/:placa
+    // ============================================================
+    if (method === 'GET' && path.startsWith('/scrape-fipe/')) {
+      const placa = path.split('/scrape-fipe/')[1].toUpperCase().trim();
+      return await scrapeTabelaFipe(placa, env);
+    }
+
+    // ============================================================
+    // ROTA DE DEBUG TEMPORÁRIA — retorne o HTML bruto do site
+    // ============================================================
+    if (method === 'GET' && path.startsWith('/debug-fipe/')) {
+      const placa = path.split('/debug-fipe/')[1].toUpperCase().trim();
+      const resp = await fetch(`https://www.tabelafipebrasil.com/placa/${placa}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'pt-BR,pt;q=0.9',
+          'Referer': 'https://www.tabelafipebrasil.com/',
+        },
+        redirect: 'follow',
+      });
+      const html = await resp.text();
+      return new Response(html, {
+        headers: { 'Content-Type': 'text/html', 'Access-Control-Allow-Origin': '*' }
+      });
     }
 
     // ============================================================
