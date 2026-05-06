@@ -60,11 +60,12 @@ window.FipeComparador = (function () {
             return (s === '\\N' || s === '' || s === 'NULL' || s === 'null') ? '—' : s;
           };
 
-          const idxFipe   = findColIdx(['codigo fipe', 'codigofipe', 'fipe', 'cod fipe', 'codfipe', 'codigo_fipe', 'fipe_codigo']);
-          const idxAno    = findColIdx(['ano', 'ano modelo', 'ano_modelo', 'modelo ano', 'year']);
-          const idxCodigo = findColIdx(['codigo', 'código', 'cod']);
-          const idxEstudo = findColIdx(['estudo']);
-          const idxTelc   = findColIdx(['telc', 'telc_telemetria', 'telctelemetria', 'telemetria']);
+          const idxFipe       = findColIdx(['codigo fipe', 'codigofipe', 'fipe', 'cod fipe', 'codfipe', 'codigo_fipe', 'fipe_codigo']);
+          const idxAno        = findColIdx(['ano', 'ano modelo', 'ano_modelo', 'modelo ano', 'year']);
+          const idxCodigo     = findColIdx(['codigo', 'código', 'cod']);
+          const idxEstudo     = findColIdx(['estudo']);
+          const idxTelc       = findColIdx(['telc', 'telc_telemetria', 'telctelemetria', 'telemetria']);
+          const idxIdentificador = findColIdx(['identificador', 'identificador fipe', 'ident_fipe', 'id fipe', 'id_fipe']);
 
           if (idxFipe === -1) {
             reject(`Coluna de Código FIPE não encontrada na planilha. Verifique os cabeçalhos: ${headerRow.join(', ')}`); return;
@@ -76,10 +77,11 @@ window.FipeComparador = (function () {
             if (!chave) return;
             const ano = idxAno >= 0 ? limpar(row[idxAno]) : '';
             const entry = {
-              codigo: idxCodigo >= 0 ? limpar(row[idxCodigo]) : '—',
-              estudo: idxEstudo >= 0 ? limpar(row[idxEstudo]) : '—',
-              telc:   idxTelc   >= 0 ? limpar(row[idxTelc])   : '—',
-              ano:    ano,
+              codigo:       idxCodigo       >= 0 ? limpar(row[idxCodigo])       : '—',
+              estudo:       idxEstudo       >= 0 ? limpar(row[idxEstudo])       : '—',
+              telc:         idxTelc         >= 0 ? limpar(row[idxTelc])         : '—',
+              identificador: idxIdentificador >= 0 ? limpar(row[idxIdentificador]) : '—',
+              ano:          ano,
             };
 
             if (!_fipeMap.has(chave)) {

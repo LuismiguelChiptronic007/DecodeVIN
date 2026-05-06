@@ -702,6 +702,197 @@
       return brand;
     }
 
+    function csvValue(value) {
+      const text = String(value || '').trim().replace(/[\r\n\t]+/g, ' ');
+      return text === '' || text === 'undefined' ? '—' : text.replace(/;/g, ',');
+    }
+
+    function getField(item, ...keys) {
+      for (const key of keys) {
+        let value;
+        if (typeof key === 'function') {
+          value = key(item);
+        } else {
+          value = item ? item[key] : undefined;
+        }
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+          const text = String(value).trim();
+          if (text !== '—') return text;
+        }
+      }
+      return '—';
+    }
+
+    function getFieldDeep(item, ...keys) {
+      const direct = getField(item, ...keys);
+      if (direct !== '—') return direct;
+
+      const candidateKeys = keys.filter(k => typeof k === 'string').map(k => String(k).toLowerCase());
+      const visited = new Set();
+
+      function search(obj) {
+        if (!obj || typeof obj !== 'object') return null;
+        if (visited.has(obj)) return null;
+        visited.add(obj);
+
+        if (Array.isArray(obj)) {
+          for (const element of obj) {
+            const result = search(element);
+            if (result !== null) return result;
+          }
+          return null;
+        }
+
+        for (const key of Object.keys(obj)) {
+          if (candidateKeys.includes(String(key).toLowerCase())) {
+            const value = obj[key];
+            if (value !== undefined && value !== null && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')) {
+              const text = String(value).trim();
+              if (text !== '' && text !== '—') return text;
+            }
+          }
+        }
+
+        for (const key of Object.keys(obj)) {
+          const result = search(obj[key]);
+          if (result !== null) return result;
+        }
+
+        return null;
+      }
+
+      const nested = search(item);
+      return nested !== null ? nested : '—';
+    }
+
+    function exportFleetGroupToCSV(group, frota) {
+      const headers = [
+        'MONTADORA',
+        'MODELO',
+        'VERSAO MODELO',
+        'ANO',
+        'EMISSAO',
+        'PLACA',
+        'CHASSI',
+        'CODIGO FIPE',
+        'MODELO FIPE',
+        'COMBUSTIVEL',
+        'TELC',
+        'ESTUDO',
+        'IDENTIFICADOR FIPE'
+      ];
+      const rows = [headers.join(';')];
+
+      group.forEach(item => {
+        const normalizedItem = splitModelSubmodel(item.modelo);
+        const model = getField(item, 'modelo', 'model') !== '—'
+          ? getField(item, 'modelo', 'model')
+          : (normalizedItem.model || '—');
+        const version = getField(item, 'submodelo', 'versao', 'version') !== '—'
+          ? getField(item, 'submodelo', 'versao', 'version')
+          : (normalizedItem.submodel || '—');
+        const ano = getField(item, 'ano', 'year', 'ano_modelo');
+        const emissao = getField(item, 'emissao', 'emissao_modelo', 'ano_emissao', 'emissao_veiculo');
+        const placa = getField(item, 'placa', 'plate');
+        const chassi = getField(item, 'vin', 'chassi', 'chassi_completo');
+        const codigoFipe = getFieldDeep(item,
+          'codigo_fipe',
+          'fipe_codigo',
+          'codigoFipe',
+          'fipeCode',
+          'fipeCodigo',
+          'fipeCodigo',
+          'codigoFipe',
+          i => i.fipeSheetMatch?.codigo,
+          i => i.fipeSheetMatch?.code,
+          i => i.fipeSheet?.codigo,
+          i => i.fipeSheet?.code,
+          i => i.apiResult?.fipe_codigo,
+          i => i.apiResult?.codigo_fipe
+        );
+        const modeloFipe = getFieldDeep(item,
+          'fipe_modelo',
+          'modelo_fipe',
+          'fipeModelo',
+          'fipe_modelo',
+          'modelo_fipe',
+          'fipeModelo',
+          'modeloFipe',
+          'fipe_modelo',
+          i => i.fipeSheetMatch?.modelo,
+          i => i.fipeSheetMatch?.modelo_fipe,
+          i => i.fipeSheet?.modelo,
+          i => i.fipeSheet?.modelo_fipe,
+          i => i.apiResult?.fipe_modelo
+        );
+        const combustivel = getField(item, 'combustivel', 'fuel', 'tipo_combustivel', i => i.apiResult?.combustivel);
+        const telc = getFieldDeep(item,
+          'telc',
+          'fipeTelc',
+          'fipe_telc',
+          'telc_telemetria',
+          'telctelemetria',
+          'telemetria',
+          'telc',
+          i => i.fipeSheetMatch?.telc,
+          i => i.fipeSheet?.telc,
+          i => i.apiResult?.telc,
+          i => i.apiResult?.fipe_telc
+        );
+        const estudo = getFieldDeep(item,
+          'estudo',
+          'fipeEstudo',
+          'fipe_estudo',
+          'estudo_fipe',
+          'estudo',
+          i => i.fipeSheetMatch?.estudo,
+          i => i.fipeSheet?.estudo,
+          i => i.apiResult?.estudo,
+          i => i.apiResult?.fipe_estudo
+        );
+        const identificador = getFieldDeep(item,
+          'identificador_fipe',
+          'identificador',
+          'identificadorFipe',
+          'fipeIdentificador',
+          'id_fipe',
+          'idFipe',
+          'identificador_fipe',
+          'identificador',
+          i => i.fipeSheetMatch?.identificador,
+          i => i.fipeSheet?.identificador,
+          i => i.apiResult?.identificador_fipe,
+          i => i.apiResult?.identificador
+        );
+
+        rows.push([
+          csvValue(getField(item, 'montadora', 'fabricante', 'brand')),
+          csvValue(model),
+          csvValue(version),
+          csvValue(ano),
+          csvValue(emissao),
+          csvValue(placa),
+          csvValue(chassi),
+          csvValue(codigoFipe),
+          csvValue(modeloFipe),
+          csvValue(combustivel),
+          csvValue(telc),
+          csvValue(estudo),
+          csvValue(identificador)
+        ].join(';'));
+      });
+
+      const csvText = '\ufeff' + rows.join('\n');
+      const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      const filename = 'Frota_' + String(frota || 'export').replace(/\s+/g, '_') + '_' + new Date().getTime() + '.csv';
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+
     function normalizeSegment(value) {
       if (!value) return "Outros";
       const upValue = String(value).toUpperCase().trim();
@@ -1104,6 +1295,27 @@
         };
 
         titleRow.appendChild(title);
+
+        const exportBtn = document.createElement('button');
+        exportBtn.type = 'button';
+        exportBtn.textContent = '📄 Exportar CSV';
+        exportBtn.title = 'Exportar esta frota em CSV';
+        exportBtn.style.cssText = 'padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);cursor:pointer;font-size:12px;font-weight:600;transition:all .2s;';
+        exportBtn.onmouseover = () => {
+          exportBtn.style.background = 'rgba(56,189,248,0.15)';
+          exportBtn.style.borderColor = 'rgba(56,189,248,0.3)';
+        };
+        exportBtn.onmouseout = () => {
+          exportBtn.style.background = 'var(--card)';
+          exportBtn.style.borderColor = 'var(--border)';
+        };
+        exportBtn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          exportFleetGroupToCSV(group, frota);
+        };
+
+        titleRow.appendChild(exportBtn);
         titleRow.appendChild(toggleBtn);
         groupBox.appendChild(titleRow);
 

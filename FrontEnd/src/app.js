@@ -1869,6 +1869,46 @@ window.autoDecodificarFrotaDoHistorico = async function(item) {
   console.log("[AutoDecode] Decodificação disparada para:", fleetNameValue);
 };
 
+function findNestedField(obj, keys) {
+  const normalizedKeys = keys.filter(k => typeof k === 'string').map(k => String(k).toLowerCase());
+  const visited = new Set();
+
+  function search(value) {
+    if (!value || typeof value !== 'object') return null;
+    if (visited.has(value)) return null;
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const result = search(item);
+        if (result !== null) return result;
+      }
+      return null;
+    }
+
+    for (const key of Object.keys(value)) {
+      if (normalizedKeys.includes(String(key).toLowerCase())) {
+        const candidate = value[key];
+        if (candidate !== undefined && candidate !== null && (typeof candidate === 'string' || typeof candidate === 'number' || typeof candidate === 'boolean')) {
+          const text = String(candidate).trim();
+          if (text !== '' && text !== '—') {
+            return text;
+          }
+        }
+      }
+    }
+
+    for (const key of Object.keys(value)) {
+      const result = search(value[key]);
+      if (result !== null) return result;
+    }
+
+    return null;
+  }
+
+  return search(obj);
+}
+
 function exportCSV(data, name, includeFipe = true) {
   const uniqueData = [];
   const seen = new Set();
@@ -1884,43 +1924,35 @@ function exportCSV(data, name, includeFipe = true) {
     uniqueData.push(item);
   });
 
-  const showFipeColumns = FipeComparador.ativo();
   let columns = [];
 
   if (includeFipe) {
     columns = [
       "MONTADORA",
-      "CHASSI",
-      "PLACA",
+      "MODELO",
+      "VERSAO MODELO",
       "ANO",
-      "CARROCERIA",
-      "ENCARROÇADEIRA",
-      "MOTOR",
-      "MODELO CHASSI",
+      "EMISSAO",
+      "PLACA",
+      "CHASSI",
       "CODIGO FIPE",
       "MODELO FIPE",
-      "ESTUDO",
-      "TELC",
       "COMBUSTIVEL",
-      "COR",
-      "CIDADE/UF"
+      "TELC",
+      "ESTUDO",
+      "IDENTIFICADOR FIPE"
     ];
   } else {
     columns = [
       "MONTADORA",
-      "CHASSI",
-      "PLACA",
+      "MODELO",
+      "VERSAO MODELO",
       "ANO",
-      "MOTOR",
-      "CARROCERIA",
-      "ENCARROÇADEIRA",
-      "MODELO CHASSI",
-      "CIDADE/UF"
+      "EMISSAO",
+      "PLACA",
+      "CHASSI",
+      "COMBUSTIVEL"
     ];
-  }
-
-  if (showFipeColumns) {
-    columns = columns.concat(["CÓDIGO", "ESTUDO", "TELC"]);
   }
 
   let csv = "\ufeff" + columns.join(";") + "\n";
@@ -1992,46 +2024,63 @@ function exportCSV(data, name, includeFipe = true) {
 
     const fipeSheet = item.fipeSheetMatch || item.fipeSheet || {};
     const finalFipeCode = fipeSheet.codigo || fipeSheet.code || fipeCodFinal || "—";
+    const modeloFinal = [
+      api.modelo,
+      item.result?.modelo,
+      item.result?.model,
+      findToken("Modelo"),
+      item.modelo
+    ].filter(s => s && String(s).trim() !== "" && String(s).trim() !== "—").map(s => String(s).trim())[0] || "—";
 
-    let row = [];
+    const versaoFinal = [
+      api.versao,
+      api.version,
+      findToken("Versao"),
+      findToken("Versão"),
+      item.result?.versao,
+      item.result?.version
+    ].filter(s => s && String(s).trim() !== "" && String(s).trim() !== "—").map(s => String(s).trim())[0] || "—";
+
+    const emissaoFinal = [
+      api.emissao,
+      api.emissao_modelo,
+      api.emissao_veiculo,
+      api.ano_emissao,
+      findToken("Emissao"),
+      findToken("Emissão")
+    ].filter(s => s && String(s).trim() !== "" && String(s).trim() !== "—").map(s => String(s).trim())[0] || "—";
+
+    const fipeTelcValue = item.fipeTelc || fipeSheet.telc || findNestedField(item, ['telc', 'fipeTelc', 'fipe_telc', 'telc_telemetria', 'telctelemetria', 'telemetria', 'fipe_telc', 'fipe']) || "—";
+    const fipeEstudoValue = item.fipeEstudo || fipeSheet.estudo || findNestedField(item, ['estudo', 'fipeEstudo', 'fipe_estudo', 'estudo_fipe', 'fipe_estudo', 'fipe']) || "—";
+    const fipeIdentificadorValue = item.fipeIdentificador || fipeSheet.identificador || findNestedField(item, ['identificador', 'identificadorFipe', 'fipeIdentificador', 'identificador_fipe', 'id_fipe', 'idFipe', 'fipe_identificador', 'fipe']) || "—";
+
     if (includeFipe) {
       row = [
         item.fabricante || api.marca || api.fabricante || findToken("Fabricante") || "—",
-        item.vin || api.chassi_completo || api.chassi || "—",
+        modeloFinal,
+        versaoFinal,
+        api.ano_modelo || api.ano || findToken("Ano Modelo") || findToken("Ano") || "—",
+        emissaoFinal,
         item.placa || api.placa || "—",
-        api.ano_modelo || api.ano || findToken("Ano Modelo") || "—",
-        ob.carroceria || "—",
-        ob.encarrocadeira || ob.encarrocadora || "—",
-        findToken("Motor") || "—",
-        ob.modelo_chassi || ob.chassi || api.modelo || findToken("Modelo") || "—",
+        item.vin || api.chassi_completo || api.chassi || "—",
         finalFipeCode,
         finalFipeMod,
-        fipeSheet.estudo || "—",
-        fipeSheet.telc || "—",
-        api.combustivel || "—",
-        api.cor || "—",
-        (api.municipio && api.uf) ? (api.municipio + " / " + api.uf) : (api.cidade || "—")
+        api.combustivel || findToken("Combustivel") || findToken("Combustível") || "—",
+        fipeTelcValue,
+        fipeEstudoValue,
+        fipeIdentificadorValue
       ];
     } else {
       row = [
         item.fabricante || api.marca || api.fabricante || findToken("Fabricante") || "—",
-        item.vin || api.chassi_completo || api.chassi || "—",
+        modeloFinal,
+        versaoFinal,
+        api.ano_modelo || api.ano || findToken("Ano Modelo") || findToken("Ano") || "—",
+        emissaoFinal,
         item.placa || api.placa || "—",
-        api.ano_modelo || api.ano || findToken("Ano Modelo") || "—",
-        findToken("Motor") || "—",
-        ob.carroceria || "—",
-        ob.encarrocadeira || ob.encarrocadora || "—",
-        ob.modelo_chassi || ob.chassi || api.modelo || findToken("Modelo") || "—",
-        (api.municipio && api.uf) ? (api.municipio + " / " + api.uf) : (api.cidade || "—")
+        item.vin || api.chassi_completo || api.chassi || "—",
+        api.combustivel || findToken("Combustivel") || findToken("Combustível") || "—"
       ];
-    }
-
-    if (showFipeColumns) {
-      row = row.concat([
-        item.fipeCodigo || "—",
-        item.fipeEstudo || "—",
-        item.fipeTelc || "—"
-      ]);
     }
 
     csv += row.map(val => {
@@ -2599,11 +2648,13 @@ function enriquecerComFipe(item) {
     item.fipeCodigo = match.codigo || '—';
     item.fipeEstudo = match.estudo || '—';
     item.fipeTelc = match.telc || '—';
+    item.fipeIdentificador = match.identificador || '—';
     item.temFipeMatch = true;
   } else {
     item.fipeCodigo = '—';
     item.fipeEstudo = '—';
     item.fipeTelc = '—';
+    item.fipeIdentificador = '—';
     item.temFipeMatch = false;
   }
   return item;
@@ -2783,6 +2834,7 @@ function renderGroupResults(filteredList = null) {
     const fipeModel = itemData.fipe_modelo || itemData.apiResult?.fipe_modelo || '—';
     const fipeEstudo = itemData.fipeEstudo || itemData.fipeSheetMatch?.estudo || '—';
     const fipeTelc = itemData.fipeTelc || itemData.fipeSheetMatch?.telc || '—';
+    const fipeIdentificador = itemData.fipeIdentificador || itemData.fipeSheetMatch?.identificador || '—';
     const fieldValues = {
       montadora: displayBrand || '—',
       modelo: modStr || '—',
@@ -2792,7 +2844,8 @@ function renderGroupResults(filteredList = null) {
       fipe_codigo: fipeCode,
       fipe_modelo: fipeModel,
       fipe_estudo: fipeEstudo,
-      fipe_telc: fipeTelc
+      fipe_telc: fipeTelc,
+      fipe_identificador: fipeIdentificador
     };
     infoDiv.innerHTML = `
       <div class="info-grid">
@@ -2805,6 +2858,7 @@ function renderGroupResults(filteredList = null) {
         <div class="field"><div class="field-label">Modelo FIPE</div><div class="field-value">${fieldValues.fipe_modelo}</div></div>
         <div class="field"><div class="field-label">Estudo</div><div class="field-value">${fieldValues.fipe_estudo}</div></div>
         <div class="field"><div class="field-label">TELC</div><div class="field-value">${fieldValues.fipe_telc}</div></div>
+        <div class="field"><div class="field-label">Identificador</div><div class="field-value">${fieldValues.fipe_identificador}</div></div>
       </div>
       <div class="status-msg">${statusHtml}</div>`;
     item.appendChild(infoDiv);
@@ -4551,6 +4605,9 @@ async function main() {
           // Store results and render
           window.currentGroupResults = results;
           renderGroupResults();
+          if (results.length > 0) {
+            showReports("group", true);
+          }
           
           // Add to history with results
           addGroupHistoryEntry(vins, plates, results);
@@ -4729,6 +4786,18 @@ async function main() {
     if (btnExportCSVSingle) {
       btnExportCSVSingle.onclick = () => {
         if (window.currentSingleResult) openReportOptions([window.currentSingleResult], "Relatorio_Veiculo_" + window.currentSingleResult.vin);
+      };
+    }
+
+    const btnExportCSV = el("btnExportCSV");
+    if (btnExportCSV) {
+      btnExportCSV.onclick = () => {
+        if (!window.currentGroupResults || window.currentGroupResults.length === 0) {
+          showToast("Não há relatório de frota pronto para exportar.", "error");
+          return;
+        }
+        const fleetName = el("fleetName")?.value?.trim() || "Frota";
+        openReportOptions(window.currentGroupResults, "Relatorio_Frota_" + fleetName.replace(/\s+/g, "_"));
       };
     }
 
